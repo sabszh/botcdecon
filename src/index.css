@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Lars-Regular';
+  src: url('/fonts/Lars-Regular.woff2') format('woff2'),
+    url('/fonts/Lars-Regular.woff') format('woff');
+  font-weight: 400;
+  style: normal;
+}
+
+body {
+  font-family: 'Lars-Regular', sans-serif;
+  background-color: #f5f5f5;
+}
