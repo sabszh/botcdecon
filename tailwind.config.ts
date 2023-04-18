@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       blur: {
-        DEFAULT: '0.44px'
+        DEFAULT: '0.02em'
       }
     },
   },

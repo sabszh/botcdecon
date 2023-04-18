@@ -11,6 +11,7 @@ function App() {
         <h1 className='text-2xl md:text-3xl'>
           Carte de Continuonus
         </h1>
+        <p className='map-label inline-block'>Label style</p>
       </header>
 
       <div className='w-full h-screen'>
