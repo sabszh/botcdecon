@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import MapCanvas from './MapCanvas'
+import MapCanvas from './map/Canvas'
 
 function App() {
   const [count, setCount] = useState(0)
@@ -11,7 +11,7 @@ function App() {
         <h1 className='text-2xl md:text-3xl'>
           Carte de Continuonus
         </h1>
-        <p className='map-label inline-block'>Label style</p>
+        <p className='map-label hidden'>Label style</p>
       </header>
 
       <div className='w-full h-screen'>

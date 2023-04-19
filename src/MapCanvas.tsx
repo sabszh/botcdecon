@@ -1,10 +1,10 @@
-import type { ThreeEvent, Vector3 } from '@react-three/fiber'
+import type { Vector3 } from '@react-three/fiber'
 
 import * as THREE from 'three'
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, Suspense } from 'react'
 import { Canvas, ThreeElements } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
-import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, Html, Stage, useGLTF } from '@react-three/drei'
 
 function TextureMesh (props: ThreeElements['mesh']) {
   const mesh = useRef<THREE.Mesh>(null!)
@@ -14,13 +14,13 @@ function TextureMesh (props: ThreeElements['mesh']) {
     return texture
   }
 
-  const texture = useTexture('/Carte_du_tendre.jpg') // 2400 x 1721
+  const texture = useTexture('/layers/Carte_du_tendre.jpg') // 2400 x 1721
   const geometry = useMemo(() => new THREE.PlaneGeometry(2400, 1721), [])
   const material = useMemo(() => new THREE.MeshStandardMaterial({ map: texture }), [texture])
 
-  const onWheel = (e: ThreeEvent<WheelEvent>) => {
-    console.log(e.distance)
-  }
+  // const onWheel = (e: ThreeEvent<WheelEvent>) => {
+  //   console.log(e.distance)
+  // }
 
   type Label = {
     name: string
@@ -54,7 +54,7 @@ function TextureMesh (props: ThreeElements['mesh']) {
       geometry={geometry}
       material={material}
       ref={mesh}
-      onWheel={onWheel}
+      // onWheel={onWheel}
       {...props}>
         {labels.map((label, index) => {
           return (<Html
@@ -71,25 +71,43 @@ function TextureMesh (props: ThreeElements['mesh']) {
   )
 }
 
+function HippoMesh () {
+  const { nodes } = useGLTF('/models/hippocampus.glb') as any
+
+  return (
+    <mesh
+      geometry={nodes.mesh_0.geometry}
+      material={nodes.mesh_0.material}
+      position={[0, 0, 900]}>
+    </mesh>
+  )
+}
+
 function MapCanvas () {
   return (
     <Canvas>
-      <ambientLight />
-      <TextureMesh position={[0, 0, 0]}/>
-      <PerspectiveCamera
-        makeDefault
-        position={[0, 0, 1900]}
-        near={10}
-        far={8000}
-        zoom={1} />
-      <OrbitControls
-        // enableRotate={true}
-        mouseButtons={{ LEFT: THREE.MOUSE.PAN }}
-        minDistance={450}
-        maxDistance={2800}
-        zoomSpeed={0.45} />
+      <Suspense fallback={null}>
+        {/* <Stage> */}
+        <HippoMesh/>
+        <ambientLight />
+        <TextureMesh position={[0, 0, 0]}/>
+        <PerspectiveCamera
+          makeDefault
+          position={[0, 0, 1900]}
+          near={1}
+          far={12000}
+          zoom={1} />
+        <OrbitControls
+          // enableRotate={true}
+          mouseButtons={{ LEFT: THREE.MOUSE.PAN }}
+          minDistance={450}
+          maxDistance={4800}
+          zoomSpeed={0.45} />
+      </Suspense>
     </Canvas>
   )
 }
+
+useGLTF.preload('/models/hippocampus.glb')
 
 export default MapCanvas

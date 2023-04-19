@@ -16,10 +16,12 @@ body {
 }
 
 .map-label {
-  @apply bg-white bg-opacity-10 whitespace-nowrap text-sm;
+  @apply bg-white bg-opacity-0 whitespace-nowrap text-sm;
   @apply px-3 py-1 rounded-full;
   @apply select-none tracking-wider;
-  @apply underline decoration-from-font underline-offset-4;
+  /* @apply underline decoration-from-font underline-offset-4; */
+  /* @apply blur; */
+  color: #351A04;
 
   font-family: Trattatello;
   /* font-family: 'BigCaslon-Medium'; */
