@@ -1,9 +1,6 @@
-import { useState } from 'react'
 import MapCanvas from './map/Canvas'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
     <div className='App'>
       <header className='absolute top-0 left-0 m-10 md:m-16 z-20 blur'>
