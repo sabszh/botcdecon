@@ -1,9 +1,10 @@
+import type { ThreeElements } from '@react-three/fiber'
 import { Mesh } from 'three'
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF, Bounds, Float } from '@react-three/drei'
 
-export default function () {
+export default function (props: ThreeElements['mesh']) {
   const { nodes } = useGLTF('/models/hippocampus.glb') as any
 
   const hippo = useRef<Mesh>(null!)
@@ -21,10 +22,9 @@ export default function () {
       <mesh ref={hippo}
         geometry={nodes.mesh_0.geometry}
         material={nodes.mesh_0.material}
-        position={[180, -370, 1600]}
+        position={[120, -320, 3600]}
         scale={15}
-        castShadow
-        receiveShadow>
+        {...props}>
       </mesh>
     </Float>
   )
