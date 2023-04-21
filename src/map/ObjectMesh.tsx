@@ -2,10 +2,14 @@ import type { ThreeElements } from '@react-three/fiber'
 import { Mesh } from 'three'
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF, Bounds, Float } from '@react-three/drei'
+import { useGLTF, Float } from '@react-three/drei'
 
 export default function (props: ThreeElements['mesh']) {
-  const { nodes } = useGLTF('/models/hippocampus.glb') as any
+  // const { nodes } = useGLTF('/models/hippocampus.glb') as any
+  // const { nodes } = useGLTF('/models/hippo-sm.gltf') as any
+  // const { nodes } = useGLTF('/models/hippo-xl.gltf') as any
+  // const { nodes } = useGLTF('/models/hippo-md.glb') as any
+  const { nodes } = useGLTF('/models/hippocampus-centered.glb') as any
 
   const hippo = useRef<Mesh>(null!)
 
@@ -16,14 +20,14 @@ export default function (props: ThreeElements['mesh']) {
 
   return (
     <Float
-      rotationIntensity={0.2}
-      floatIntensity={4}
-      speed={3}>
+      rotationIntensity={0}
+      floatIntensity={0}
+      speed={0}>
       <mesh ref={hippo}
-        geometry={nodes.mesh_0.geometry}
-        material={nodes.mesh_0.material}
-        position={[120, -320, 3600]}
-        scale={15}
+        geometry={nodes.Default.geometry}
+        material={nodes.Default.material}
+        position={[0, 0, 3600]}
+        scale={1650}
         {...props}>
       </mesh>
     </Float>
