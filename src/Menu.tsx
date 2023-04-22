@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { CSSTransition } from 'react-transition-group'
+import { Link } from 'react-router-dom'
 
 export default function () {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -10,7 +11,7 @@ export default function () {
 
   return (
     <div className='contents'>
-      <CSSTransition in={menuOpen} nodeRef={menuRef} classNames='fade-right' timeout={5000} unmountOnExit>
+      <CSSTransition in={menuOpen} nodeRef={menuRef} classNames='fade-right' timeout={300} unmountOnExit>
         <div ref={menuRef} className='fixed top-0 right-0 bottom-0 p-6 md:p-12 w-full max-w-lg z-20'>
           <div className='bg-white rounded-3xl px-10 py-8 min-h-full overflow-y-auto shadow-lg flex flex-col'>
             <ul className='mt-12 blur flex-auto'>
@@ -21,7 +22,7 @@ export default function () {
                 <a href='#' className='text-xl md:text-2xl'>Explore memories</a>
               </li>
               <li className='mb-4'>
-                <a href='#' className='text-xl md:text-2xl'>About the carte</a>
+                <Link to='about' className='text-xl md:text-2xl'>About the carte</Link>
               </li>
             </ul>
             <div className='text-sm mb-2'>

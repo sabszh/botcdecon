@@ -1,30 +1,24 @@
+import { Link, Outlet } from 'react-router-dom'
 import Menu from './Menu'
-import MapCanvas from './map/Canvas'
 
-function App() {
+export default function () {
   return (
     <div className='App'>
-      <div className='w-full h-screen'>
-        <MapCanvas />
-      </div>
-
       <header className='absolute top-0 left-0 m-10 md:m-16 z-10 blur'>
-        <p>
+        <p className='mb-0.5 mx-2'>
           <span className='text-bg'>Welcome to the</span>
         </p>
         <h1 className='text-2xl md:text-3xl'>
-          <span className='text-bg'>Carte de Continuonus</span>
+          <Link to="/" className='text-bg'>Carte de Continuonus</Link>
         </h1>
         <p className='map-label hidden'>Label style</p>
       </header>
 
-      {/* <div>
-        hlp
-      </div> */}
+      <main>
+        <Outlet/>
+      </main>
 
-      <Menu />
+      <Menu/>
     </div>
   )
 }
-
-export default App
