@@ -13,7 +13,7 @@ function CustomCamera () {
   const enforcePanLimits = (e?: OrbitControlsChangeEvent) => {
     if (!e?.target?.object) return
 
-    // e.target.object.position.clamp(minPan, maxPan)
+    e.target.object.position.clamp(minPan, maxPan)
   }
 
   return (
@@ -24,7 +24,7 @@ function CustomCamera () {
       near={4}
       far={12000}>
       <OrbitControls
-        onChange={enforcePanLimits}
+        // onChange={enforcePanLimits}
         // enableRotate={false}
         mouseButtons={{ LEFT: MOUSE.PAN }}
         minDistance={300}
@@ -35,7 +35,7 @@ function CustomCamera () {
         minAzimuthAngle={-Math.PI / 8}
         maxAzimuthAngle={Math.PI / 8}
         enableDamping={true}
-        dampingFactor={0.14}/>
+        dampingFactor={0.03}/>
     </PerspectiveCamera>
   )
 }
@@ -44,7 +44,6 @@ export default function () {
   return (
     <Canvas shadows>
       <CustomCamera/>
-      <color attach='background' args={[0x988C99]}/>
       <Background/>
       {/* <ambientLight /> */}
       <PlaneMesh receiveShadow/>
@@ -62,7 +61,7 @@ const Background = () => {
   const material = new MeshBasicMaterial({ color: 'white' })
 
   return (
-    <mesh material={material} position={[0, 0, 0]}>
+    <mesh material={material} position={[0, 0, -1]}>
       <planeGeometry args={[100000, 100000]} />
     </mesh>
   )
