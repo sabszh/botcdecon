@@ -32,21 +32,21 @@ export default function (props: ThreeElements['mesh'] & { onObjLoaded: () => voi
     if (nodes) {
       props.onObjLoaded()
     }
-  })
+  }, [])
 
   return (
-      <Float
-        rotationIntensity={0}
-        floatIntensity={0}
-        speed={0}>
-        <mesh ref={hippo}
-          geometry={nodes.Default.geometry}
-          material={nodes.Default.material}
-          position={[0, 0, 3600]}
-          scale={1650}
-          {...props}>
-        </mesh>
-      </Float>
+    <Float
+      rotationIntensity={0}
+      floatIntensity={0}
+      speed={0}>
+      <mesh ref={hippo}
+        geometry={nodes.Default.geometry}
+        material={nodes.Default.material}
+        position={[0, 0, 3600]}
+        scale={1650}
+        {...props}>
+      </mesh>
+    </Float>
   )
 }
 

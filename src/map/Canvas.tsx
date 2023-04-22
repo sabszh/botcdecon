@@ -46,7 +46,7 @@ function CustomCamera () {
   return (
     <PerspectiveCamera
       makeDefault
-      position={[0, 0, 6000]}
+      position={[0, 0, 5500]}
       fov={33}
       near={4}
       far={12000}>
@@ -56,7 +56,7 @@ function CustomCamera () {
         mouseButtons={{ LEFT: MOUSE.PAN }}
         minDistance={300}
         maxDistance={6000}
-        zoomSpeed={0.2}
+        zoomSpeed={0.53}
         minPolarAngle={Math.PI / 2.5}
         maxPolarAngle={Math.PI / 1.7}
         minAzimuthAngle={-Math.PI / 8}

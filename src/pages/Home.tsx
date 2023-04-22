@@ -1,33 +1,46 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useContext } from 'react'
 import MapCanvas from '../map/Canvas'
 import { TypeAnimation } from 'react-type-animation'
 import { CSSTransition } from 'react-transition-group'
+import { AppContext } from '../main'
+import AddEntry from '../AddEntry'
 
 export default function () {
   const [introStarted, setIntroStarted] = useState(false)
   const [introStep, setIntroStep] = useState(0)
-  const [doneIntro, setDoneIntro] = useState(false)
+
+  const { appState, setAppState } = useContext(AppContext)
 
   const introRef = useRef(null)
+  const entryRef = useRef(null)
   const intro = [
     'Welcome to Carte de Continuonus, a map of emotions that invites you to leave something behind for the ones who come after.',
     'What do you remember, that you want the future to remember?'
   ]
 
   async function doIntro () {
-    if (introStarted) return
+    console.log('do intro....')
+    if (appState.introSeen || introStarted) return
     setIntroStarted(true)
 
-    console.log('starting the intro')
     await sleep(1500)
     setIntroStep(1)
 
-    await sleep(4000)
+    await sleep(3000)
     setIntroStep(2)
 
     await sleep(4000)
-    setDoneIntro(true)
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, introSeen: true }))
+
+    await sleep(600)
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post' }))
   }
+
+  // useEffect(() => {
+  //   doIntro()
+  // }, [])
 
   return (
     <>
@@ -35,9 +48,9 @@ export default function () {
         <MapCanvas onObjLoaded={doIntro}/>
       </div>
 
-      <CSSTransition in={!doneIntro} nodeRef={introRef} classNames='fade' timeout={300} unmountOnExit>
+      <CSSTransition in={!appState.introSeen} nodeRef={introRef} classNames='fade' timeout={300} unmountOnExit>
         <div ref={introRef} className='absolute top-0 left-0 m-10 md:m-16 z-10 blur pt-32 md:pt-40'>
-          {introStep > 0 && (<div className='text-2xl md:text-3xl whitespace-pre-line mb-12 md:mb-16'>
+          {introStep > 0 && (<div className='text-2xl md:text-3xl whitespace-pre-line mb-8 md:mb-10'>
             <TypeAnimation
               sequence={[intro[0]]}
               repeat={0}
@@ -55,6 +68,12 @@ export default function () {
               wrapper='span'
               className='text-bg'/>
           </div>)}
+        </div>
+      </CSSTransition>
+
+      <CSSTransition in={appState.viewMode === 'post'} nodeRef={entryRef} classNames='fade' timeout={300} unmountOnExit>
+        <div ref={entryRef}>
+          <AddEntry/>
         </div>
       </CSSTransition>
     </>
