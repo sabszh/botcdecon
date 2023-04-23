@@ -57,6 +57,9 @@ export default function (props: ThreeElements['mesh']) {
     if (Object.getPrototypeOf(e.object)?.constructor.name !== 'Mesh') return
     if (appState.entryPoints.length >= 3) return
 
+    console.log('got past the checks', Object.getPrototypeOf(e.object))
+    console.log(appState.entryPoints)
+
     // @ts-ignore-line
     setAppState((state) => ({ ...state, entryPoints: [...state.entryPoints, e.point] }))
   }
