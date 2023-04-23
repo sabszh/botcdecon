@@ -65,7 +65,7 @@ export default function (props: ThreeElements['mesh']) {
   useFrame((state) => {
     if (!zooming) return
     state.camera?.lookAt(0, 0, 0)
-    state.camera?.position.lerp(vec.set(0, 0, 900), 0.1)
+    state.camera?.position.lerp(vec.set(0, 0, 900), 0.018)
     state.camera?.updateProjectionMatrix()
     if (state.camera?.position.z === 900) {
       setZooming(false)
