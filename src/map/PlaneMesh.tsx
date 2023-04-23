@@ -51,14 +51,14 @@ export default function (props: ThreeElements['mesh']) {
   }, [appState.viewMode])
 
   const mapClick = (e: any) => {
-    console.log('mapClick', e, appState.viewMode)
+    console.log('check viewmode', appState.viewMode)
     if (appState.viewMode !== 'pick') return
+    console.log('check delta', e.delta)
     if (e.delta > 2) return
+    console.log('check object name', Object.getPrototypeOf(e.object))
     if (Object.getPrototypeOf(e.object)?.constructor.name !== 'Mesh') return
+    console.log('check entrypoints length', appState.entryPoints.length)
     if (appState.entryPoints.length >= 3) return
-
-    console.log('got past the checks', Object.getPrototypeOf(e.object))
-    console.log(appState.entryPoints)
 
     // @ts-ignore-line
     setAppState((state) => ({ ...state, entryPoints: [...state.entryPoints, e.point] }))
