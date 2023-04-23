@@ -45,6 +45,7 @@ export default function () {
     }
   }
 
+  const picking = useMemo(() => appState.viewMode === 'pick', [appState.viewMode])
   function goExplore () {
     // @ts-ignore-line
     setAppState(state => ({ ...state, viewMode: 'explore', entryPoints: [] }))
@@ -83,7 +84,7 @@ export default function () {
         </div>
       </CSSTransition>
 
-      <CSSTransition in={appState.viewMode === 'pick' && !shownPickIntro} timeout={300} classNames='fade' unmountOnExit>
+      <CSSTransition in={picking && !shownPickIntro} timeout={300} classNames='fade' unmountOnExit>
         <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blur pt-32 md:pt-40 pointer-events-none'>
           <p className='text-2xl md:text-3xl whitespace-pre-line'>
             <TypeAnimation
@@ -100,7 +101,7 @@ export default function () {
         </div>
       </CSSTransition>
 
-      <CSSTransition in={showSave && !saved} classNames='fade' timeout={300} unmountOnExit>
+      <CSSTransition in={picking && showSave && !saved} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blur'>
           <form onSubmit={saveEntry} className='text-center'>
             <div className='mt-2 w-full'>
@@ -112,7 +113,7 @@ export default function () {
         </div>
       </CSSTransition>
 
-      <CSSTransition in={saved} classNames='fade' timeout={300} unmountOnExit>
+      <CSSTransition in={picking && saved} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blur'>
           <div className='text-center'>
             <div className='mt-2 w-full'>
@@ -126,7 +127,7 @@ export default function () {
             </div>
             <div className='mt-3.5'>
               <button onClick={goExplore} className='text-bg active:bg-opacity-50 text-2xl md:text-3xl inline-block'>
-                <span>Explore the memories</span>
+                <span>Explore memories</span>
               </button>
             </div>
           </div>

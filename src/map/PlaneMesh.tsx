@@ -1,4 +1,4 @@
-import { Mesh, PlaneGeometry, MeshStandardMaterial, Vector3 } from 'three'
+import { Mesh, PlaneGeometry, MeshStandardMaterial, MeshBasicMaterial, Vector3 } from 'three'
 import { useRef, useState, useEffect, useMemo, useContext } from 'react'
 import { ThreeElements, useFrame } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
@@ -51,13 +51,8 @@ export default function (props: ThreeElements['mesh']) {
   }, [appState.viewMode])
 
   const mapClick = (e: any) => {
-    console.log('check viewmode', appState.viewMode)
     if (appState.viewMode !== 'pick') return
-    console.log('check delta', e.delta)
     if (e.delta > 2) return
-    console.log('check object name', Object.getPrototypeOf(e.object))
-    if (Object.getPrototypeOf(e.object)?.constructor.name !== 'Mesh') return
-    console.log('check entrypoints length', appState.entryPoints.length)
     if (appState.entryPoints.length >= 3) return
 
     // @ts-ignore-line
@@ -78,44 +73,51 @@ export default function (props: ThreeElements['mesh']) {
     }
   })
 
+  const plane = new MeshBasicMaterial({ color: 0xffffff })
+
   return (
-    <mesh
-      geometry={geometry}
-      material={material}
-      ref={mesh}
-      position={[0, 0, 0]}
-      onClick={mapClick}
-      {...props}>
-      {showLabels && labels.map((label, index) => {
-        return (
-          <Text
-            key={index}
-            position={[Number(label.x), Number(label.y), Number(label.z)]}
-            font='/fonts/Trattatello.woff'
-            outlineBlur={0.8}
-            outlineColor={0xffffff}
-            outlineWidth={0.6}
-            fontSize={22}
-            fillOpacity={1}
-            color={0x433429}>
-            {label.title}
-          </Text>
-        )
-      })}
-      {appState.viewMode === 'pick' && points.map((point, index) => {
-        return (
-          <Text
-            key={index}
-            position={[point.x, point.y, 5]}
-            font='/fonts/Trattatello.woff'
-            outlineBlur={0.8}
-            outlineColor={0x0}
-            outlineWidth={0.6}
-            fontSize={64}
-            fillOpacity={1}
-            color={0xFFC800}>*</Text>
-        )
-      })}
-    </mesh>
+    <group>
+      <mesh material={plane} position={[0, 0, -1]} onClick={mapClick}>
+        <planeGeometry args={[100000, 100000]} />
+      </mesh>
+
+      <mesh
+        geometry={geometry}
+        material={material}
+        ref={mesh}
+        position={[0, 0, 0]}
+        {...props}>
+        {showLabels && labels.map((label, index) => {
+          return (
+            <Text
+              key={index}
+              position={[Number(label.x), Number(label.y), Number(label.z)]}
+              font='/fonts/Trattatello.woff'
+              outlineBlur={0.8}
+              outlineColor={0xffffff}
+              outlineWidth={0.6}
+              fontSize={22}
+              fillOpacity={1}
+              color={0x433429}>
+              {label.title}
+            </Text>
+          )
+        })}
+        {appState.viewMode === 'pick' && points.map((point, index) => {
+          return (
+            <Text
+              key={index}
+              position={[point.x, point.y, 5]}
+              font='/fonts/Trattatello.woff'
+              outlineBlur={0.8}
+              outlineColor={0x0}
+              outlineWidth={0.6}
+              fontSize={64}
+              fillOpacity={1}
+              color={0xFFC800}>*</Text>
+          )
+        })}
+      </mesh>
+    </group>
   )
 }

@@ -1,5 +1,5 @@
 import type { OrbitControlsChangeEvent } from '@react-three/drei'
-import { Vector3, MOUSE, MeshBasicMaterial } from 'three'
+import { Vector3, MOUSE } from 'three'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import { useContext, useMemo } from 'react'
@@ -12,7 +12,7 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
   return (
     <Canvas shadows='basic'>
       <CustomCamera/>
-      <Background/>
+      {/* <Background/> */}
       {/* <ambientLight /> */}
       <PlaneMesh receiveShadow/>
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
@@ -22,16 +22,6 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
       <fog attach='fog' args={[0x988C99, 700, 4400]}/>
       {/* <fogExp2 attach='fog' args={[0x988C99, 0.0005]}/> */}
     </Canvas>
-  )
-}
-
-const Background = () => {
-  const material = new MeshBasicMaterial({ color: 'white' })
-
-  return (
-    <mesh material={material} position={[0, 0, -1]}>
-      <planeGeometry args={[100000, 100000]} />
-    </mesh>
   )
 }
 
