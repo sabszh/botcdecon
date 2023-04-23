@@ -51,6 +51,7 @@ export default function (props: ThreeElements['mesh']) {
   }, [appState.viewMode])
 
   const mapClick = (e: any) => {
+    console.log('mapClick', e, appState.viewMode)
     if (appState.viewMode !== 'pick') return
     if (e.delta > 2) return
     if (Object.getPrototypeOf(e.object)?.constructor.name !== 'Mesh') return
