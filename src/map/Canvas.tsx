@@ -2,6 +2,8 @@ import type { OrbitControlsChangeEvent } from '@react-three/drei'
 import { Vector3, MOUSE, MeshBasicMaterial } from 'three'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
+import { useContext, useMemo } from 'react'
+import { AppContext } from '../main'
 
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'
@@ -34,14 +36,18 @@ const Background = () => {
 }
 
 function CustomCamera () {
-  const minPan = new Vector3(-333, -333, 300);
-  const maxPan = new Vector3(333, 333, 6000);
+  const { appState } = useContext(AppContext)
+  const canInteract = useMemo(() => {
+    return appState.viewMode === 'pick' || appState.viewMode === 'explore'
+  }, [appState.viewMode])
+  // const minPan = new Vector3(-333, -333, 300);
+  // const maxPan = new Vector3(333, 333, 6000);
 
-  const enforcePanLimits = (e?: OrbitControlsChangeEvent) => {
-    if (!e?.target?.object) return
+  // const enforcePanLimits = (e?: OrbitControlsChangeEvent) => {
+  //   if (!e?.target?.object) return
 
-    e.target.object.position.clamp(minPan, maxPan)
-  }
+  //   e.target.object.position.clamp(minPan, maxPan)
+  // }
 
   return (
     <PerspectiveCamera
@@ -53,6 +59,7 @@ function CustomCamera () {
       <OrbitControls
         // onChange={enforcePanLimits}
         // enableRotate={false}
+        enabled={canInteract}
         mouseButtons={{ LEFT: MOUSE.PAN }}
         minDistance={300}
         maxDistance={6000}

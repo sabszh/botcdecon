@@ -42,7 +42,7 @@ export default function (props: ThreeElements['mesh'] & { onObjLoaded: () => voi
       <mesh ref={hippo}
         geometry={nodes.Default.geometry}
         material={nodes.Default.material}
-        position={[0, 0, 3600]}
+        position={[0, 64, 3600]}
         scale={1650}
         {...props}>
       </mesh>

@@ -22,16 +22,21 @@ type Context = {
     menuOpen: boolean
     headerVisible: boolean
     emotions: Emotion[]
-    viewMode: 'post' | 'explore' | 'empty'
+    viewMode: 'empty' | 'post' | 'pick' | 'explore',
+    entryPoints: { x: number; y: number }[]
   }
   setAppState: (state: Context['appState']) => void
 }
 const State: Context['appState'] = {
+  // introSeen: true,
   introSeen: false,
   menuOpen: false,
   headerVisible: true,
+  // headerVisible: false,
   emotions: [],
-  viewMode: 'empty'
+  // viewMode: 'post',
+  viewMode: 'empty',
+  entryPoints: []
 }
 
 export const AppContext = React.createContext<Context>(null!)

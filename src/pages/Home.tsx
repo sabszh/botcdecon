@@ -12,7 +12,6 @@ export default function () {
   const { appState, setAppState } = useContext(AppContext)
 
   const introRef = useRef(null)
-  const entryRef = useRef(null)
   const intro = [
     'Welcome to Carte de Continuonus, a map of emotions that invites you to leave something behind for the ones who come after.',
     'What do you remember, that you want the future to remember?'
@@ -38,9 +37,9 @@ export default function () {
     setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post' }))
   }
 
-  // useEffect(() => {
-  //   doIntro()
-  // }, [])
+  useEffect(() => {
+    // doIntro()
+  }, [])
 
   return (
     <>
@@ -71,11 +70,7 @@ export default function () {
         </div>
       </CSSTransition>
 
-      <CSSTransition in={appState.viewMode === 'post'} nodeRef={entryRef} classNames='fade' timeout={300} unmountOnExit>
-        <div ref={entryRef}>
-          <AddEntry/>
-        </div>
-      </CSSTransition>
+      <AddEntry/>
     </>
   )
 }
