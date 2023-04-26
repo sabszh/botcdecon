@@ -1,4 +1,4 @@
-import { Mesh, PlaneGeometry, MeshStandardMaterial, MeshBasicMaterial, Vector3 } from 'three'
+import { Mesh, PlaneGeometry, MeshStandardMaterial, Vector3 } from 'three'
 import { useRef, useState, useEffect, useMemo, useContext } from 'react'
 import { ThreeElements, useFrame } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
@@ -77,13 +77,13 @@ export default function (props: ThreeElements['mesh']) {
     }
   })
 
-  const plane = new MeshBasicMaterial({ color: 0xffffff })
+  const bgtex = useTexture('/layers/white-px.jpg')
+  const bggeometry = useMemo(() => new PlaneGeometry(100_000, 100_000), [])
+  const bgmaterial = useMemo(() => new MeshStandardMaterial({ map: bgtex }), [bgtex])
 
   return (
     <group>
-      <mesh material={plane} position={[0, 0, -1]} onClick={mapClick}>
-        <planeGeometry args={[100000, 100000]} />
-      </mesh>
+      <mesh geometry={bggeometry} material={bgmaterial} position={[0, 0, -1]} onClick={mapClick}/>
       <mesh
         geometry={geometry}
         material={material}
