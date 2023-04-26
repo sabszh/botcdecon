@@ -10,6 +10,10 @@ export default function () {
   const [introStep, setIntroStep] = useState(0)
 
   const { appState, setAppState } = useContext(AppContext)
+  const stateRef = useRef(appState)
+  useEffect(() => {
+    stateRef.current = appState
+  }, [appState])
 
   const introRef = useRef(null)
   const intro = [
@@ -18,14 +22,13 @@ export default function () {
   ]
 
   async function doIntro () {
-    console.log('do intro....')
     if (appState.introSeen || introStarted) return
     setIntroStarted(true)
 
     await sleep(1500)
     setIntroStep(1)
 
-    await sleep(3000)
+    await sleep(6000)
     setIntroStep(2)
 
     await sleep(4000)
@@ -33,13 +36,16 @@ export default function () {
     setAppState((state) => ({ ...state, introSeen: true }))
 
     await sleep(600)
+    if (stateRef.current.viewMode !== 'empty') return
     // @ts-ignore-line
     setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post' }))
   }
 
   useEffect(() => {
-    // doIntro()
+    doIntro()
   }, [])
+
+  const typeSpeed = 65
 
   return (
     <>
@@ -54,7 +60,7 @@ export default function () {
               sequence={[intro[0]]}
               repeat={0}
               cursor={false}
-              speed={86}
+              speed={typeSpeed}
               wrapper='span'
               className='text-bg'/>
           </div>)}
@@ -63,7 +69,7 @@ export default function () {
               sequence={[intro[1]]}
               repeat={0}
               cursor={false}
-              speed={86}
+              speed={typeSpeed}
               wrapper='span'
               className='text-bg'/>
           </div>)}

@@ -17,8 +17,9 @@ export default function (props: ThreeElements['mesh']) {
   }
 
   // const texture = useTexture('/layers/Carte_du_tendre.jpg') // 2400 x 1721
-  const texture = useTexture('/layers/carte-extended.jpg') // 4032  ×  3264
-  const geometry = useMemo(() => new PlaneGeometry(2400, 1721), [])
+  // const texture = useTexture('/layers/carte-extended.jpg') // 4032  ×  3264
+  const texture = useTexture('/layers/carte-fade.jpg') // 6272 x 6400
+  const geometry = useMemo(() => new PlaneGeometry(6272 / 2, 6400 / 2), [])
   const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
 
   const labels = useMemo(() => {
@@ -37,19 +38,6 @@ export default function (props: ThreeElements['mesh']) {
     })
   }, [])
 
-  const [zooming, setZooming] = useState(false)
-  const [hasZoomed, setHasZoomed] = useState(false)
-
-  useEffect(() => {
-    if (!hasZoomed && appState.viewMode === 'pick') {
-      setZooming(true)
-      setTimeout(() => {
-        setZooming(false)
-        setHasZoomed(true)
-      }, 2300)
-    }
-  }, [appState.viewMode])
-
   const mapClick = (e: any) => {
     if (appState.viewMode !== 'pick') return
     if (e.delta > 2) return
@@ -61,15 +49,30 @@ export default function (props: ThreeElements['mesh']) {
 
   const points = useMemo(() => appState.entryPoints, [appState.entryPoints])
 
+  const [zooming, setZooming] = useState(false)
+  const doneZoom = () => {
+    setZooming(false)
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, zoomIn: false }))
+  }
+  useEffect(() => {
+    if (appState.zoomIn) {
+      setZooming(true)
+      setTimeout(() => {
+        doneZoom()
+      }, 2500)
+    }
+  }, [appState.zoomIn])
+
   const vec = new Vector3()
   useFrame((state) => {
     if (!zooming) return
-    state.camera?.lookAt(0, 0, 0)
+    // console.log('zooming', state.camera.position)
+    // state.camera?.lookAt(0, 0, 0)
     state.camera?.position.lerp(vec.set(0, 0, 900), 0.018)
     state.camera?.updateProjectionMatrix()
     if (state.camera?.position.z === 900) {
-      setZooming(false)
-      setHasZoomed(true)
+      doneZoom()
     }
   })
 
@@ -80,7 +83,6 @@ export default function (props: ThreeElements['mesh']) {
       <mesh material={plane} position={[0, 0, -1]} onClick={mapClick}>
         <planeGeometry args={[100000, 100000]} />
       </mesh>
-
       <mesh
         geometry={geometry}
         material={material}

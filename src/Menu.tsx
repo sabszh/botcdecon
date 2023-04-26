@@ -15,6 +15,15 @@ export default function () {
     setAppState(state => ({ ...state, menuOpen: false }))
   }
 
+  const toSave = () => {
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, viewMode: 'post', introSeen: true, headerVisible: false, zoomIn: true }))
+  }
+  const toExplore = () => {
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, viewMode: 'explore', introSeen: true, headerVisible: false, zoomIn: true }))
+  }
+
   const menuRef = useRef(null)
 
   return (
@@ -24,10 +33,10 @@ export default function () {
           <div className='bg-white rounded-3xl px-10 py-8 min-h-full overflow-y-auto shadow-lg flex flex-col'>
             <ul className='mt-12 blur flex-auto'>
               <li className='mb-4'>
-                <a href='#' className='text-xl md:text-2xl'>Save a memory</a>
+                <Link to='/' onClick={toSave} className='text-xl md:text-2xl'>Save a memory</Link>
               </li>
               <li className='mb-4'>
-                <a href='#' className='text-xl md:text-2xl'>Explore memories</a>
+                <Link to='/' onClick={toExplore} className='text-xl md:text-2xl'>Explore memories</Link>
               </li>
               <li className='mb-4'>
                 <Link to='about' className='text-xl md:text-2xl'>About the carte</Link>

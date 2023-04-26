@@ -61,7 +61,7 @@ export default function () {
                 sequence={['What do you want the future to remember?']}
                 repeat={0}
                 cursor={false}
-                speed={86}
+                speed={60}
                 wrapper='span'
                 className='text-bg'/>
             </p>
@@ -93,7 +93,7 @@ export default function () {
               }]}
               repeat={0}
               cursor={false}
-              speed={86}
+              speed={60}
               deletionSpeed={99}
               wrapper='span'
               className='text-bg'/>
@@ -121,7 +121,7 @@ export default function () {
                 sequence={['Your memory has been saved!']}
                 repeat={0}
                 cursor={false}
-                speed={86}
+                speed={60}
                 wrapper='span'
                 className='text-bg text-2xl md:text-3xl'/>
             </div>

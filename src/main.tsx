@@ -22,20 +22,19 @@ type Context = {
     menuOpen: boolean
     headerVisible: boolean
     emotions: Emotion[]
-    viewMode: 'empty' | 'post' | 'pick' | 'explore',
+    viewMode: 'empty' | 'post' | 'pick' | 'explore'
+    zoomIn: boolean
     entryPoints: { x: number; y: number }[]
   }
   setAppState: (state: Context['appState']) => void
 }
 const State: Context['appState'] = {
-  // introSeen: true,
   introSeen: false,
   menuOpen: false,
   headerVisible: true,
-  // headerVisible: false,
   emotions: [],
-  // viewMode: 'post',
   viewMode: 'empty',
+  zoomIn: false,
   entryPoints: []
 }
 

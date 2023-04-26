@@ -7,14 +7,15 @@ import { AppContext } from '../main'
 
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'
+import Memories from './Memories'
 
 export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
   return (
     <Canvas shadows='basic'>
       <CustomCamera/>
-      {/* <Background/> */}
       {/* <ambientLight /> */}
       <PlaneMesh receiveShadow/>
+      <Memories/>
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
 
       <pointLight position={[-600, -500, 5000]} color={0xffffff}/>
@@ -28,8 +29,9 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 function CustomCamera () {
   const { appState } = useContext(AppContext)
   const canInteract = useMemo(() => {
-    return appState.viewMode === 'pick' || appState.viewMode === 'explore'
-  }, [appState.viewMode])
+    return (appState.viewMode === 'pick' || appState.viewMode === 'explore')
+      && !appState.zoomIn
+  }, [appState.viewMode, appState.zoomIn])
   // const minPan = new Vector3(-333, -333, 300);
   // const maxPan = new Vector3(333, 333, 6000);
 
@@ -48,7 +50,7 @@ function CustomCamera () {
       far={12000}>
       <OrbitControls
         // onChange={enforcePanLimits}
-        // enableRotate={false}
+        enableRotate={false}
         enabled={canInteract}
         mouseButtons={{ LEFT: MOUSE.PAN }}
         minDistance={300}
