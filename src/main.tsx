@@ -15,6 +15,20 @@ export type Emotion = {
   y: number
   z: number
 }
+export type Entry = {
+  slug: string
+  name: string
+  location: string
+  text: string
+  date: string
+  points: {
+    id: number
+    x: number
+    y: number
+    emotion: string
+    distance: number
+  }[]
+}
 
 type Context = {
   appState: {
@@ -22,6 +36,8 @@ type Context = {
     menuOpen: boolean
     headerVisible: boolean
     emotions: Emotion[]
+    entries: Entry[]
+    currentEntry: Entry | null
     viewMode: 'empty' | 'post' | 'pick' | 'explore'
     zoomIn: boolean
     entryPoints: { x: number; y: number }[]
@@ -33,6 +49,8 @@ const State: Context['appState'] = {
   menuOpen: false,
   headerVisible: true,
   emotions: [],
+  entries: [],
+  currentEntry: null,
   viewMode: 'empty',
   zoomIn: false,
   entryPoints: []

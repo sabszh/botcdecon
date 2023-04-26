@@ -18,7 +18,8 @@ export default function (props: ThreeElements['mesh']) {
 
   // const texture = useTexture('/layers/Carte_du_tendre.jpg') // 2400 x 1721
   // const texture = useTexture('/layers/carte-extended.jpg') // 4032  ×  3264
-  const texture = useTexture('/layers/carte-fade.jpg') // 6272 x 6400
+  // const texture = useTexture('/layers/carte-fade.jpg') // 6272 x 6400
+  const texture = useTexture('/layers/carte-dall-e-edits-color.jpg') // 6272 x 6400
   const geometry = useMemo(() => new PlaneGeometry(6272 / 2, 6400 / 2), [])
   const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
 

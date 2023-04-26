@@ -4,17 +4,10 @@ import { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF, Float } from '@react-three/drei'
 
-// const gltfSrc = '/models/hippocampus.glb')
-// const gltfSrc = '/models/hippo-sm.gltf')
-// const gltfSrc = '/models/hippo-xl.gltf')
-// const gltfSrc = '/models/hippo-md.glb')
-// const gltfSrc = '/models/hippocampus-centered.glb'
-// const gltfSrc = '/models/v002_4_test_less_MB.gltf'
 const gltfSrc = '/models/hippocampus.gltf'
 
 export default function (props: ThreeElements['mesh'] & { onObjLoaded: () => void }) {
   const { nodes, materials } = useGLTF(gltfSrc) as any
-  console.log(nodes, materials)
   const hippo = useRef<Mesh>(null!)
 
   const matKey = 'Mat.2' // 'Mat'

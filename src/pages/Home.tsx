@@ -4,6 +4,7 @@ import { TypeAnimation } from 'react-type-animation'
 import { CSSTransition } from 'react-transition-group'
 import { AppContext } from '../main'
 import AddEntry from '../AddEntry'
+import ViewEntry from '../ViewEntry'
 
 export default function () {
   const [introStarted, setIntroStarted] = useState(false)
@@ -77,6 +78,7 @@ export default function () {
       </CSSTransition>
 
       <AddEntry/>
+      <ViewEntry/>
     </>
   )
 }

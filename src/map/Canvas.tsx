@@ -13,12 +13,12 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
   return (
     <Canvas shadows='basic'>
       <CustomCamera/>
-      {/* <ambientLight /> */}
+      <ambientLight intensity={0.6}/>
       <PlaneMesh receiveShadow/>
       <Memories/>
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
 
-      <pointLight position={[-600, -500, 5000]} color={0xffffff}/>
+      {/* <pointLight position={[-600, -500, 5000]} color={0xffffff}/> */}
       {/* <fog attach='fog' args={[0xefd1b5, 0, 4400]}/> */}
       <fog attach='fog' args={[0x988C99, 700, 4400]}/>
       {/* <fogExp2 attach='fog' args={[0x988C99, 0.0005]}/> */}

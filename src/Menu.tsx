@@ -29,8 +29,8 @@ export default function () {
   return (
     <div className='contents'>
       <CSSTransition in={appState.menuOpen} nodeRef={menuRef} classNames='fade-right' timeout={300} unmountOnExit>
-        <div ref={menuRef} onClick={close} className='fixed top-0 right-0 bottom-0 p-6 md:p-12 w-full max-w-lg z-20'>
-          <div className='bg-white rounded-3xl px-10 py-8 min-h-full overflow-y-auto shadow-lg flex flex-col'>
+        <div ref={menuRef} onClick={close} className='fixed top-0 right-0 bottom-0 p-4 md:p-12 w-full max-w-lg z-20'>
+          <div className='bg-white rounded-2xl md:rounded-3xl px-10 py-8 min-h-full overflow-y-auto shadow-lg flex flex-col'>
             <ul className='mt-12 blur flex-auto'>
               <li className='mb-4'>
                 <Link to='/' onClick={toSave} className='text-xl md:text-2xl'>Save a memory</Link>
@@ -56,7 +56,7 @@ export default function () {
         </div>
       </CSSTransition>
 
-      <div className='fixed top-0 right-0 m-10 md:m-16 z-30 blur'>
+      <div className='fixed top-0 right-0 m-6 md:m-16 z-30 blur'>
         <button onClick={menuBtnClick} className='text-bg text-3xl'>
           <span className='sr-only'>Menu</span>
           <img src={appState.menuOpen ? '/x.svg' : '/bars.svg'} alt='Menu' className='' style={{ width:'28px', height:'15px' }}/>

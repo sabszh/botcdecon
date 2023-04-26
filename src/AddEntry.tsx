@@ -2,7 +2,6 @@ import { TypeAnimation } from 'react-type-animation'
 import { CSSTransition } from 'react-transition-group'
 import { useState, useContext, useMemo } from 'react'
 import { AppContext } from './main'
-
 import knot from './assets/knot-1.png'
 
 const api = import.meta.env.VITE_DATA_ENDPOINT || ''
