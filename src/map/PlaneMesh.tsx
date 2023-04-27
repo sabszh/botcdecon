@@ -16,9 +16,6 @@ export default function (props: ThreeElements['mesh']) {
     return texture
   }
 
-  // const texture = useTexture('/layers/Carte_du_tendre.jpg') // 2400 x 1721
-  // const texture = useTexture('/layers/carte-extended.jpg') // 4032  ×  3264
-  // const texture = useTexture('/layers/carte-fade.jpg') // 6272 x 6400
   const texture = useTexture('/layers/carte-dall-e-edits-color.jpg') // 6272 x 6400
   const geometry = useMemo(() => new PlaneGeometry(6272 / 2, 6400 / 2), [])
   const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
@@ -81,6 +78,11 @@ export default function (props: ThreeElements['mesh']) {
   const bggeometry = useMemo(() => new PlaneGeometry(100_000, 100_000), [])
   const bgmaterial = useMemo(() => new MeshStandardMaterial({ map: bgtex }), [bgtex])
 
+  const rmPin = (idx: number) => {
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, entryPoints: state.entryPoints.filter((_, i) => i !== idx) }))
+  }
+
   return (
     <group>
       <mesh geometry={bggeometry} material={bgmaterial} position={[0, 0, -1]} onClick={mapClick}/>
@@ -109,6 +111,10 @@ export default function (props: ThreeElements['mesh']) {
         {appState.viewMode === 'pick' && points.map((point, index) => {
           return (
             <Text
+              onClick={(e) => {
+                e.stopPropagation()
+                rmPin(index)
+              }}
               key={index}
               position={[point.x, point.y, 5]}
               font='/fonts/Trattatello.woff'

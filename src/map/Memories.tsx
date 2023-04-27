@@ -9,37 +9,6 @@ const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
 export default function Memories () {
   const { appState, setAppState } = useContext(AppContext)
 
-  const icons = [
-    { url: '/markers/marker-1.png', scale: [66, 150, 0] },
-    { url: '/markers/marker-2.png', scale: [50, 153, 0] },
-    { url: '/markers/marker-3.png', scale: [98, 138, 0] },
-    { url: '/markers/marker-4.png', scale: [88, 120, 0] },
-    { url: '/markers/marker-5.png', scale: [43, 158, 0] },
-    { url: '/markers/marker-6.png', scale: [49, 155, 0] }
-  ]
-  const urls = [
-    '/markers/marker-1.png',
-    '/markers/marker-2.png',
-    '/markers/marker-3.png',
-    '/markers/marker-4.png',
-    '/markers/marker-5.png',
-    '/markers/marker-5.png'
-  ]
-  const pick = () => {
-    return urls[Math.floor(Math.random() * urls.length)]
-  }
-
-  const pins = [
-    {
-      position: [100, 100, 2],
-      imageUrl: urls[1]
-    },
-    {
-      position: [-100, -60, 2],
-      imageUrl: urls[2]
-    }
-  ]
-
   const entries = useMemo(() => {
     return appState.entries.filter((entry) => entry.points.length > 0)
   }, [appState.entries])
