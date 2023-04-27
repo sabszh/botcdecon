@@ -18,8 +18,8 @@ export default function () {
 
   const introRef = useRef(null)
   const intro = [
-    'Welcome to Carte de Continuonus, a map of emotions that invites you to leave something behind for the ones who come after.',
-    'What do you remember, that you want the future to remember?'
+    'Welcome to Carte de Continuonus, an emotional map in which you are invited to leave behind a memory for the future.',
+    'What do you remember that you want the future to remember?'
   ]
 
   async function doIntro () {
@@ -42,9 +42,9 @@ export default function () {
     setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post' }))
   }
 
-  useEffect(() => {
-    doIntro()
-  }, [])
+  // useEffect(() => {
+  //   doIntro()
+  // }, [])
 
   const typeSpeed = 65
 

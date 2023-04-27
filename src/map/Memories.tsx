@@ -50,7 +50,7 @@ type Icon = {
 }
 // @ts-ignore-line
 function Pin ({ entry, points, idx, opacity }) {
-  const { setAppState } = useContext(AppContext)
+  const { appState, setAppState } = useContext(AppContext)
 
   const d = 2
   const icons: Icon[] = [
@@ -71,13 +71,23 @@ function Pin ({ entry, points, idx, opacity }) {
     document.body.style.cursor = hover ? 'pointer' : 'auto'
   }, [hover])
 
+  const onHover = () => {
+    if (appState.viewMode !== 'explore') return
+    setHover(true)
+  }
+  const onLeave = () => {
+    if (appState.viewMode !== 'explore') return
+    setHover(false)
+  }
+
   const onClick = () => {
+    if (appState.viewMode !== 'explore') return
     // @ts-ignore-line
     setAppState((state) => ({ ...state, currentEntry: entry }))
   }
 
   return (
-    <sprite onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} onClick={onClick} position={[pin.x, pin.y, 2]} scale={pick.scale}>
+    <sprite onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[pin.x, pin.y, 2]} scale={pick.scale}>
       <animated.spriteMaterial attach="material" map={texture} opacity={opacity}/>
     </sprite>
   )

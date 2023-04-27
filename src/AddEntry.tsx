@@ -26,7 +26,7 @@ export default function () {
     if (text.length < 10) return
 
     // @ts-ignore-line
-    setAppState(state => ({ ...state, viewMode: 'pick', entryPoints: [] }))
+    setAppState(state => ({ ...state, viewMode: 'pick', zoomIn: true, entryPoints: [] }))
   }
 
   async function saveEntry (e: any) {
@@ -39,6 +39,9 @@ export default function () {
         body: JSON.stringify({ text, name, location, points })
       })
       setSaved(true)
+      setText('')
+      setName('')
+      setLocation('')
     } catch (err) {
       console.error(err)
     }
