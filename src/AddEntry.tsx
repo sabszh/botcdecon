@@ -42,15 +42,31 @@ export default function () {
       setText('')
       setName('')
       setLocation('')
+      // TODO: save the response in state?
+      setSaving(false)
+       // @ts-ignore-line
+      setAppState(state => ({ ...state, viewMode: 'saved' }))
+      console.log(await res.json())
     } catch (err) {
       console.error(err)
     }
   }
 
-  const picking = useMemo(() => appState.viewMode === 'pick', [appState.viewMode])
+  const picking = useMemo(() => {
+    return appState.viewMode === 'pick' || appState.viewMode === 'saved'
+  }, [appState.viewMode])
+
   function goExplore () {
     // @ts-ignore-line
     setAppState(state => ({ ...state, viewMode: 'explore', entryPoints: [] }))
+    reset()
+  }
+  function reset () {
+    setSaved(false)
+    setText('')
+    setName('')
+    setLocation('')
+    setSaving(false)
   }
 
   return (

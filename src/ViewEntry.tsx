@@ -24,6 +24,11 @@ export default function () {
       <CSSTransition in={showEntry} classNames='fade' timeout={300} unmountOnExit>
         <div className='fixed inset-0 p-4 md:p-16 z-10 blur overflow-auto'>
           <div className='w-full max-w-4xl mx-auto bg-white rounded-3xl px-8 py-6 text-xl md:text-2xl mt-32 md:mt-40 relative'>
+            <ul className='flex flex-wrap -mx-2'>
+              {entry?.points?.map((point: any, i: number) => (
+                <EntryPoint key={i} point={point}/>
+              ))}
+            </ul>
             <div className='whitespace-pre-line'>
               <p>{entry?.text}</p>
             </div>
@@ -38,7 +43,7 @@ export default function () {
             )}
 
             <div className='absolute bottom-full left-0'>
-              <button onClick={close} className='text-bg text-3xl'>
+              <button onClick={close} className='text-bg bg-white text-3xl'>
                 <span className='sr-only'>Close</span>
                 <img src='/x.svg' alt='Close' className='' style={{ width:'28px', height:'15px' }}/>
               </button>
@@ -47,6 +52,24 @@ export default function () {
         </div>
       </CSSTransition>
     </>
+  )
+}
+
+type Point = {
+  x: number
+  y: number
+  emotion: string
+  distance: number
+}
+
+function EntryPoint ({ point }: { point: Point }) {
+  return (
+    <li className='mx-2'>
+      <p className=''>
+        <span>{point.emotion} </span>
+        <span className='text-gray-300 text-xs'>{Number(point.distance).toFixed(2)}</span>
+      </p>
+    </li>
   )
 }
 

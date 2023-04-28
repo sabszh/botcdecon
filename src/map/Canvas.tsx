@@ -27,7 +27,8 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 function CustomCamera () {
   const { appState } = useContext(AppContext)
   const canInteract = useMemo(() => {
-    return (appState.viewMode === 'pick' || appState.viewMode === 'explore')
+    const list = ['explore', 'pick', 'saved']
+    return list.includes(appState.viewMode)
       && !appState.zoomIn
   }, [appState.viewMode, appState.zoomIn])
   // const minPan = new Vector3(-333, -333, 300);

@@ -88,6 +88,7 @@ function Pin ({ entry, points, idx, opacity }) {
 
   return (
     <sprite onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[pin.x, pin.y, 2]} scale={pick.scale}>
+      {/* @ts-ignore-line */}
       <animated.spriteMaterial attach="material" map={texture} opacity={opacity}/>
     </sprite>
   )

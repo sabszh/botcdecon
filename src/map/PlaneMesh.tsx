@@ -24,7 +24,8 @@ export default function (props: ThreeElements['mesh']) {
     return appState.emotions
   }, [appState.emotions])
   const showLabels = useMemo(() => {
-    return appState.viewMode === 'pick' || appState.viewMode === 'explore'
+    const list = ['explore', 'pick', 'saved']
+    return list.includes(appState.viewMode)
   }, [appState.viewMode])
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export default function (props: ThreeElements['mesh']) {
   const mapClick = (e: any) => {
     if (appState.viewMode !== 'pick') return
     if (e.delta > 2) return
-    if (appState.entryPoints.length >= 3) return
+    if (appState.entryPoints.length >= 4) return
 
     // @ts-ignore-line
     setAppState((state) => ({ ...state, entryPoints: [...state.entryPoints, e.point] }))
@@ -78,6 +79,10 @@ export default function (props: ThreeElements['mesh']) {
   const bggeometry = useMemo(() => new PlaneGeometry(100_000, 100_000), [])
   const bgmaterial = useMemo(() => new MeshStandardMaterial({ map: bgtex }), [bgtex])
 
+  const picking = useMemo(() => {
+    return appState.viewMode === 'pick' || appState.viewMode === 'saved'
+  }, [appState.viewMode])
+
   const rmPin = (idx: number) => {
     // @ts-ignore-line
     setAppState((state) => ({ ...state, entryPoints: state.entryPoints.filter((_, i) => i !== idx) }))
@@ -108,7 +113,7 @@ export default function (props: ThreeElements['mesh']) {
             </Text>
           )
         })}
-        {appState.viewMode === 'pick' && points.map((point, index) => {
+        {picking && points.map((point, index) => {
           return (
             <Text
               onClick={(e) => {

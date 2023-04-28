@@ -38,7 +38,7 @@ type Context = {
     emotions: Emotion[]
     entries: Entry[]
     currentEntry: Entry | null
-    viewMode: 'empty' | 'post' | 'pick' | 'explore'
+    viewMode: 'empty' | 'post' | 'pick' | 'saved' | 'explore'
     zoomIn: boolean
     entryPoints: { x: number; y: number }[]
   }
