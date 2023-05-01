@@ -1,6 +1,30 @@
-import { useContext, useMemo, useState } from 'react'
-import { AppContext } from './main'
+import type { Point } from './main'
+import { useContext, useMemo, useState, useEffect } from 'react'
+import { AppContext, Entry } from './main'
 import { CSSTransition } from 'react-transition-group'
+
+function euclideanDistance (point1: Point, point2: Point) {
+  const dx = point1.x - point2.x
+  const dy = point1.y - point2.y
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function calculateDistance (referencePoint: Point, objectsArray: Entry[]) {
+  return objectsArray.map(obj => {
+    const pointsDistances = obj.points.map(point => euclideanDistance(referencePoint, point))
+    const minDistance = Math.min(...pointsDistances)
+    return {
+      ...obj,
+      minDistance
+    }
+  })
+}
+
+function sortByProximity(objectsArray: (Entry & { minDistance: number })[]) {
+  return objectsArray.sort((a, b) => a.minDistance - b.minDistance);
+}
+
+type EntryWithDistance = Entry & { minDistance: number }
 
 export default function () {
   const { appState, setAppState } = useContext(AppContext)
@@ -8,6 +32,17 @@ export default function () {
   const entry = useMemo(() => appState.currentEntry, [appState.currentEntry])
   const [closing, setClosing] = useState(false)
   const showEntry = useMemo(() => (entry !== null && !closing), [entry, closing])
+
+  const [sortedEntries, setSortedEntries] = useState<EntryWithDistance[]>([])
+
+  useEffect(() => {
+    const refPoint = appState.currentMarker
+    if (!refPoint) return
+
+    const objectsWithDistances = calculateDistance(refPoint, appState.entries)
+    const sortedObjects = sortByProximity(objectsWithDistances)
+    setSortedEntries(sortedObjects)
+  }, [appState.currentMarker])
 
   const close = async () => {
     setClosing(true)
@@ -20,12 +55,22 @@ export default function () {
   }
 
   const nextEntry = () => {
+    const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
+    if (current === -1) return
+
+    const next = sortedEntries[(current + 1) % sortedEntries.length]
+
     // @ts-ignore-line
-    setAppState(state => ({ ...state, currentEntry: null }))
+    setAppState(state => ({ ...state, currentEntry: next }))
   }
   const prevEntry = () => {
+    const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
+    if (current === -1) return
+
+    const prev = sortedEntries[(current - 1 + sortedEntries.length) % sortedEntries.length]
+
     // @ts-ignore-line
-    setAppState(state => ({ ...state, currentEntry: null }))
+    setAppState(state => ({ ...state, currentEntry: prev }))
   }
 
   return (
@@ -72,14 +117,6 @@ export default function () {
       </CSSTransition>
     </>
   )
-}
-
-type Point = {
-  x: number
-  y: number
-  emotion: string
-  distance: number
-  angle: number
 }
 
 function EntryPoint ({ point }: { point: Point }) {

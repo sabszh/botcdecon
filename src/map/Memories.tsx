@@ -82,8 +82,10 @@ function Pin ({ entry, points, idx, opacity }) {
 
   const onClick = () => {
     if (appState.viewMode !== 'explore') return
+    // TODO: which point was clicked?
+    const point = points[0]
     // @ts-ignore-line
-    setAppState((state) => ({ ...state, currentEntry: entry }))
+    setAppState((state) => ({ ...state, currentEntry: entry, currentMarker: point }))
   }
 
   return (
