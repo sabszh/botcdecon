@@ -3,11 +3,12 @@ import { Vector3, MOUSE } from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import { useContext, useMemo, useEffect, useState, useRef } from 'react'
-import { AppContext } from '../main'
+import { AppContext, Emotion } from '../main'
 
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'
 import Memories from './Memories'
+import Emotions from './Emotions'
 
 export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
   return (
@@ -16,6 +17,8 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
       {/* <ambientLight intensity={0.6}/> */}
       <PlaneMesh receiveShadow/>
       <Memories/>
+      <Emotions/>
+
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
 
       <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={0.6}/>
@@ -26,8 +29,9 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 
 function CustomCamera () {
   const { appState, setAppState } = useContext(AppContext)
+
   const canInteract = useMemo(() => {
-    const list = ['explore', 'pick', 'saved']
+    const list = ['explore', 'pick', 'saved', 'filtered']
     return list.includes(appState.viewMode)
       && !appState.zoomIn
   }, [appState.viewMode, appState.zoomIn])
@@ -38,6 +42,8 @@ function CustomCamera () {
     setZooming(false)
     // @ts-ignore-line
     setAppState((state) => ({ ...state, zoomIn: false }))
+    setx(0)
+    sety(0)
   }
   useEffect(() => {
     if (appState.zoomIn) {
@@ -48,21 +54,38 @@ function CustomCamera () {
     }
   }, [appState.zoomIn])
 
+  const [x, setx] = useState(0)
+  const [y, sety] = useState(0)
+
   const vec = new Vector3()
   useFrame((state) => {
     if (!state.camera) return
     if (!zooming) return
 
-    state.camera.position.lerp(vec.set(0, 0, 900), 0.018)
+    // console.log('go to', x, y)
+
+    state.camera.position.lerp(vec.set(x, y, 900), 0.018)
     state.camera.updateProjectionMatrix()
 
     if (controls?.current) {
-      controls.current.target.lerp(vec.set(0, 0, 0), 0.018)
+      controls.current.target.lerp(vec.set(x, y, 0), 0.018)
     }
     if (state.camera.position.z === 900) {
       doneZoom()
     }
   })
+
+  const mvCam = (focus: Emotion) => {
+    setx(focus.x)
+    sety(focus.y)
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, zoomIn: true }))
+  }
+
+  useEffect(() => {
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, mvCam }))
+  }, [])
 
   return (
     <PerspectiveCamera

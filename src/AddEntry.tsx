@@ -46,7 +46,12 @@ export default function () {
       setSaving(false)
        // @ts-ignore-line
       setAppState(state => ({ ...state, viewMode: 'saved' }))
-      console.log(await res.json())
+
+      const entry = await res.json()
+
+      const myEntries = JSON.parse(localStorage?.getItem('entries') || '[]')
+      myEntries.push(entry)
+      localStorage?.setItem('entries', JSON.stringify(myEntries))
     } catch (err) {
       console.error(err)
     }
@@ -84,7 +89,7 @@ export default function () {
                 className='text-bg'/>
             </p>
             <div className='w-full flex flex-wrap'>
-              <textarea autoFocus={true} value={text} onChange={e => setText(e.target.value)} name="text" placeholder='Type your message here' rows={5} className='w-full mt-2 px-4 py-3 text-xl bg-white bg-opacity-95 rounded-t-3xl' required/>
+              <textarea autoFocus={true} value={text} onChange={e => setText(e.target.value)} name="text" placeholder='Type your message here' rows={5} className='w-full mt-2 px-4 py-3 text-xl bg-white bg-opacity-95 rounded-t-3xl' required minLength={10}/>
               <div className='w-1/2 pr-0.5 mt-0.5'>
                 <input value={name} onChange={e => setName(e.target.value)} name="name" placeholder='Your name (optional)' className='w-full px-4 py-3 text-xl bg-white bg-opacity-95 rounded-bl-3xl'/>
               </div>

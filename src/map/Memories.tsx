@@ -1,8 +1,7 @@
-import { useEffect, useContext, useMemo, useState } from 'react'
-import type { Texture } from 'three'
-import { useTexture } from '@react-three/drei'
+import { useEffect, useContext, useMemo } from 'react'
 import { AppContext } from '../main'
-import { useSpring, animated, config } from '@react-spring/three'
+import { useSpring, config } from '@react-spring/three'
+import Pin from './Pin'
 
 const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
 
@@ -37,62 +36,10 @@ export default function Memories () {
             idx={index}
             opacity={opacity}
             points={entry.points}
+            mult={1}
           />
         ))}
       </group>
     </>
-  )
-}
-
-type Icon = {
-  url: string
-  scale: [number, number, number]
-}
-// @ts-ignore-line
-function Pin ({ entry, points, idx, opacity }) {
-  const { appState, setAppState } = useContext(AppContext)
-
-  const d = 2
-  const icons: Icon[] = [
-    { url: '/markers/marker-1.png', scale: [66 / d, 150 / d, 0] },
-    { url: '/markers/marker-2.png', scale: [50 / d, 153 / d, 0] },
-    { url: '/markers/marker-3.png', scale: [98 / 3, 138 / 3, 0] },
-    { url: '/markers/marker-4.png', scale: [88 / 3, 120 / 3, 0] },
-    { url: '/markers/marker-5.png', scale: [43 / d, 158 / d, 0] },
-    { url: '/markers/marker-6.png', scale: [49 / d, 155 / d, 0] }
-  ]
-  const pick = icons[idx % icons.length]
-  const texture = useTexture(pick.url) as Texture
-
-  const pin = points[0]
-
-  const [hover, setHover] = useState(false)
-  useEffect(() => {
-    document.body.style.cursor = hover ? 'pointer' : 'auto'
-  }, [hover])
-
-  const onHover = () => {
-    if (appState.viewMode !== 'explore') return
-    setHover(true)
-  }
-  const onLeave = () => {
-    if (appState.viewMode !== 'explore') return
-    setHover(false)
-  }
-
-  const onClick = () => {
-    if (appState.viewMode !== 'explore') return
-    // TODO: which point was clicked?
-    const point = points[0]
-    // @ts-ignore-line
-    setAppState((state) => ({ ...state, currentEntry: entry, currentMarker: point }))
-  }
-
-  // return (<></>)
-  return (
-    <sprite onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[pin.x, pin.y, 2]} scale={pick.scale}>
-      {/* @ts-ignore-line */}
-      <animated.spriteMaterial attach="material" map={texture} opacity={opacity}/>
-    </sprite>
   )
 }

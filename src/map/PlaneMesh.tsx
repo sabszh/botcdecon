@@ -4,6 +4,7 @@ import { ThreeElements } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
 import { Text } from '@react-three/drei'
 import { AppContext } from '../main'
+import Pin from './Pin'
 
 const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
 
@@ -16,9 +17,7 @@ export default function (props: ThreeElements['mesh']) {
     return texture
   }
 
-  // const texture = useTexture('/layers/carte-dall-e-edits-color.jpg') // 6272 x 6400
   const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
-  // const geometry = useMemo(() => new PlaneGeometry(6272 / 2, 6400 / 2), [])
   const geometry = useMemo(() => new PlaneGeometry(7936 / 2, 8000 / 2), [])
   const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
 
@@ -26,7 +25,7 @@ export default function (props: ThreeElements['mesh']) {
     return appState.emotions
   }, [appState.emotions])
   const showLabels = useMemo(() => {
-    const list = ['explore', 'pick', 'saved']
+    const list = ['explore', 'pick', 'saved', 'filtered']
     return list.includes(appState.viewMode)
   }, [appState.viewMode])
 
@@ -94,24 +93,20 @@ export default function (props: ThreeElements['mesh']) {
             </Text>
           )
         })}
-        {picking && points.map((point, index) => {
-          return (
-            <Text
-              onClick={(e) => {
-                e.stopPropagation()
-                rmPin(index)
-              }}
-              key={index}
-              position={[point.x, point.y, 5]}
-              font='/fonts/Trattatello.woff'
-              outlineBlur={0.8}
-              outlineColor={0x0}
-              outlineWidth={0.6}
-              fontSize={64}
-              fillOpacity={1}
-              color={0xFFC800}>*</Text>
-          )
-        })}
+        <group>
+          {picking && points.map((point, index) => {
+            return (
+              <Pin
+                rmPin={rmPin}
+                key={index}
+                idx={index}
+                opacity={1}
+                position={point}
+                mult={0.8}
+              />
+            )
+          })}
+        </group>
       </mesh>
     </group>
   )

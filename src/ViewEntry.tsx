@@ -2,6 +2,7 @@ import type { Point } from './main'
 import { useContext, useMemo, useState, useEffect } from 'react'
 import { AppContext, Entry } from './main'
 import { CSSTransition } from 'react-transition-group'
+import { Link } from 'react-router-dom'
 
 function euclideanDistance (point1: Point, point2: Point) {
   const dx = point1.x - point2.x
@@ -39,7 +40,9 @@ export default function () {
     const refPoint = appState.currentMarker
     if (!refPoint) return
 
-    const objectsWithDistances = calculateDistance(refPoint, appState.entries)
+    const list = appState.viewMode === 'filtered' ? appState.filteredEntries : appState.entries
+
+    const objectsWithDistances = calculateDistance(refPoint, list)
     const sortedObjects = sortByProximity(objectsWithDistances)
     setSortedEntries(sortedObjects)
   }, [appState.currentMarker])
@@ -132,10 +135,12 @@ function EntryPoint ({ point }: { point: Point }) {
     return pc
   }
 
+  const link = `?emotion=${point.emotion}`
+
   return (
     <li className='mx-2'>
       <p style={{ opacity: opacity() }}>
-        <span>{point.emotion} </span>
+        <Link to={link}>{point.emotion}</Link>
         {/* {rotate && (
           <>
             <span style={{ transform: rotate() }} className='inline-block align-middle'>&rarr;</span>

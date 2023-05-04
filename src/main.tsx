@@ -39,11 +39,13 @@ type Context = {
     headerVisible: boolean
     emotions: Emotion[]
     entries: Entry[]
+    filteredEntries: Entry[]
     currentEntry: Entry | null
     currentMarker: Point | null
-    viewMode: 'empty' | 'post' | 'pick' | 'saved' | 'explore'
+    viewMode: 'empty' | 'post' | 'pick' | 'saved' | 'explore' | 'filtered'
     zoomIn: boolean
-    entryPoints: { x: number; y: number }[]
+    entryPoints: { x: number; y: number }[],
+    mvCam: any
   }
   setAppState: (state: Context['appState']) => void
 }
@@ -53,11 +55,13 @@ const State: Context['appState'] = {
   headerVisible: true,
   emotions: [],
   entries: [],
+  filteredEntries: [],
   currentEntry: null,
   currentMarker: null,
   viewMode: 'empty',
   zoomIn: false,
-  entryPoints: []
+  entryPoints: [],
+  mvCam: null
 }
 
 export const AppContext = React.createContext<Context>(null!)
