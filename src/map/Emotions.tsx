@@ -13,7 +13,7 @@ const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
 export default function Emotions () {
   const { appState, setAppState } = useContext(AppContext)
 
-  const query = useQuery();
+  const query = useQuery()
   const [filter, setFilter] = useState<string | null>(null)
 
   useEffect(() => {

@@ -2,9 +2,11 @@ import { useRef, useContext } from 'react'
 import { CSSTransition } from 'react-transition-group'
 import { Link } from 'react-router-dom'
 import { AppContext } from './main'
+import { useNavigate } from 'react-router-dom'
 
 export default function () {
   const { appState, setAppState } = useContext(AppContext)
+  const navigate = useNavigate()
 
   const menuBtnClick = () => {
     // @ts-ignore-line
@@ -21,7 +23,15 @@ export default function () {
   }
   const toExplore = () => {
     // @ts-ignore-line
-    setAppState(state => ({ ...state, viewMode: 'explore', introSeen: true, headerVisible: false, zoomIn: true }))
+    setAppState(state => ({
+      ...state,
+      viewMode: 'explore',
+      introSeen: true,
+      headerVisible: false,
+      zoomIn: true,
+      currentEntry: null
+    }))
+    navigate('/')
   }
 
   const menuRef = useRef(null)
@@ -53,6 +63,15 @@ export default function () {
               <div className='text-xs'>&copy; 2023 Studio Olafur Eliason GmbH</div>
             </div>
           </div>
+        </div>
+      </CSSTransition>
+
+      <CSSTransition in={appState.viewMode === 'filtered'} nodeRef={menuRef} classNames='fade' timeout={300} unmountOnExit>
+        <div className='fixed top-0 right-20 m-6 md:m-16 z-10 blur'>
+          <button onClick={toExplore} className='text-bg bg-white text-3xl'>
+            <span className='sr-only'>Close</span>
+            <img src='/x.svg' alt='Close' className='' style={{ width:'28px', height:'15px' }}/>
+          </button>
         </div>
       </CSSTransition>
 
