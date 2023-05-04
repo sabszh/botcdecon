@@ -1,6 +1,6 @@
-import { Mesh, PlaneGeometry, MeshStandardMaterial, Vector3 } from 'three'
-import { useRef, useState, useEffect, useMemo, useContext } from 'react'
-import { ThreeElements, useFrame } from '@react-three/fiber'
+import { Mesh, PlaneGeometry, MeshStandardMaterial } from 'three'
+import { useRef, useEffect, useMemo, useContext } from 'react'
+import { ThreeElements } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
 import { Text } from '@react-three/drei'
 import { AppContext } from '../main'
@@ -16,8 +16,10 @@ export default function (props: ThreeElements['mesh']) {
     return texture
   }
 
-  const texture = useTexture('/layers/carte-dall-e-edits-color.jpg') // 6272 x 6400
-  const geometry = useMemo(() => new PlaneGeometry(6272 / 2, 6400 / 2), [])
+  // const texture = useTexture('/layers/carte-dall-e-edits-color.jpg') // 6272 x 6400
+  const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
+  // const geometry = useMemo(() => new PlaneGeometry(6272 / 2, 6400 / 2), [])
+  const geometry = useMemo(() => new PlaneGeometry(7936 / 2, 8000 / 2), [])
   const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
 
   const labels = useMemo(() => {
@@ -38,6 +40,7 @@ export default function (props: ThreeElements['mesh']) {
   }, [])
 
   const mapClick = (e: any) => {
+    // console.log(e.point)
     if (appState.viewMode !== 'pick') return
     if (e.delta > 2) return
     if (appState.entryPoints.length >= 4) return
@@ -47,33 +50,6 @@ export default function (props: ThreeElements['mesh']) {
   }
 
   const points = useMemo(() => appState.entryPoints, [appState.entryPoints])
-
-  const [zooming, setZooming] = useState(false)
-  const doneZoom = () => {
-    setZooming(false)
-    // @ts-ignore-line
-    setAppState((state) => ({ ...state, zoomIn: false }))
-  }
-  useEffect(() => {
-    if (appState.zoomIn) {
-      setZooming(true)
-      setTimeout(() => {
-        doneZoom()
-      }, 2500)
-    }
-  }, [appState.zoomIn])
-
-  const vec = new Vector3()
-  useFrame((state) => {
-    if (!zooming) return
-    // console.log('zooming', state.camera.position)
-    // state.camera?.lookAt(0, 0, 0)
-    state.camera?.position.lerp(vec.set(0, 0, 900), 0.018)
-    state.camera?.updateProjectionMatrix()
-    if (state.camera?.position.z === 900) {
-      doneZoom()
-    }
-  })
 
   const bgtex = useTexture('/layers/white-px.jpg')
   const bggeometry = useMemo(() => new PlaneGeometry(100_000, 100_000), [])
@@ -90,7 +66,12 @@ export default function (props: ThreeElements['mesh']) {
 
   return (
     <group>
-      <mesh geometry={bggeometry} material={bgmaterial} position={[0, 0, -1]} onClick={mapClick}/>
+      <mesh
+        geometry={bggeometry}
+        material={bgmaterial}
+        position={[0, 0, -1]}
+        // onPointerDown={doneZoom}
+        onClick={mapClick}/>
       <mesh
         geometry={geometry}
         material={material}

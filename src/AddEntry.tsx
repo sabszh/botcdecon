@@ -84,12 +84,12 @@ export default function () {
                 className='text-bg'/>
             </p>
             <div className='w-full flex flex-wrap'>
-              <textarea autoFocus={true} value={text} onChange={e => setText(e.target.value)} name="text" placeholder='Type your message here' rows={5} className='w-full mt-2 px-4 py-3 text-xl bg-white bg-opacity-95 rounded-3xl' required/>
-              <div className='w-1/2 pr-2'>
-                <input value={name} onChange={e => setName(e.target.value)} name="name" placeholder='Your name (optional)' className='w-full mt-2 px-4 py-3 text-xl bg-white bg-opacity-95 rounded-3xl'/>
+              <textarea autoFocus={true} value={text} onChange={e => setText(e.target.value)} name="text" placeholder='Type your message here' rows={5} className='w-full mt-2 px-4 py-3 text-xl bg-white bg-opacity-95 rounded-t-3xl' required/>
+              <div className='w-1/2 pr-0.5 mt-0.5'>
+                <input value={name} onChange={e => setName(e.target.value)} name="name" placeholder='Your name (optional)' className='w-full px-4 py-3 text-xl bg-white bg-opacity-95 rounded-bl-3xl'/>
               </div>
-              <div className='w-1/2'>
-                <input value={location} onChange={e => setLocation(e.target.value)} name="location" placeholder='Location (optional)' className='w-full mt-2 px-4 py-3 text-xl bg-white bg-opacity-95 rounded-3xl'/>
+              <div className='w-1/2 mt-0.5'>
+                <input value={location} onChange={e => setLocation(e.target.value)} name="location" placeholder='Location (optional)' className='w-full px-4 py-3 text-xl bg-white bg-opacity-95 rounded-br-3xl'/>
               </div>
               <div className='mt-2 w-full'>
                 <button type='submit' className='text-bg active:bg-opacity-50 text-xl md:text-2xl inline-block'>

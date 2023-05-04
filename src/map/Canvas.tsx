@@ -1,8 +1,8 @@
-import type { OrbitControlsChangeEvent } from '@react-three/drei'
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Vector3, MOUSE } from 'three'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
-import { useContext, useMemo } from 'react'
+import { useContext, useMemo, useEffect, useState, useRef } from 'react'
 import { AppContext } from '../main'
 
 import ObjectMesh from './ObjectMesh'
@@ -25,20 +25,44 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 }
 
 function CustomCamera () {
-  const { appState } = useContext(AppContext)
+  const { appState, setAppState } = useContext(AppContext)
   const canInteract = useMemo(() => {
     const list = ['explore', 'pick', 'saved']
     return list.includes(appState.viewMode)
       && !appState.zoomIn
   }, [appState.viewMode, appState.zoomIn])
-  // const minPan = new Vector3(-333, -333, 300);
-  // const maxPan = new Vector3(333, 333, 6000);
 
-  // const enforcePanLimits = (e?: OrbitControlsChangeEvent) => {
-  //   if (!e?.target?.object) return
+  const controls = useRef<OrbitControlsImpl>(null)
+  const [zooming, setZooming] = useState(false)
+  const doneZoom = () => {
+    setZooming(false)
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, zoomIn: false }))
+  }
+  useEffect(() => {
+    if (appState.zoomIn) {
+      setZooming(true)
+      setTimeout(() => {
+        doneZoom()
+      }, 2500)
+    }
+  }, [appState.zoomIn])
 
-  //   e.target.object.position.clamp(minPan, maxPan)
-  // }
+  const vec = new Vector3()
+  useFrame((state) => {
+    if (!state.camera) return
+    if (!zooming) return
+
+    state.camera.position.lerp(vec.set(0, 0, 900), 0.018)
+    state.camera.updateProjectionMatrix()
+
+    if (controls?.current) {
+      controls.current.target.lerp(vec.set(0, 0, 0), 0.018)
+    }
+    if (state.camera.position.z === 900) {
+      doneZoom()
+    }
+  })
 
   return (
     <PerspectiveCamera
@@ -48,11 +72,11 @@ function CustomCamera () {
       near={4}
       far={12000}>
       <OrbitControls
-        // onChange={enforcePanLimits}
+        ref={controls}
         enableRotate={false}
         enabled={canInteract}
         mouseButtons={{ LEFT: MOUSE.PAN }}
-        minDistance={300}
+        minDistance={380}
         maxDistance={6000}
         zoomSpeed={0.53}
         minPolarAngle={Math.PI / 2.5}

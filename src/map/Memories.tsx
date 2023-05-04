@@ -88,6 +88,7 @@ function Pin ({ entry, points, idx, opacity }) {
     setAppState((state) => ({ ...state, currentEntry: entry, currentMarker: point }))
   }
 
+  // return (<></>)
   return (
     <sprite onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[pin.x, pin.y, 2]} scale={pick.scale}>
       {/* @ts-ignore-line */}

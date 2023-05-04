@@ -33,6 +33,10 @@ body {
   /* font-weight: 100; */
 }
 
+textarea, input, button {
+  &:focus { @apply outline-offset-0 outline-double outline-orange-500; }
+}
+
 .text-bg {
   @apply bg-white rounded-full;
   @apply bg-opacity-80;
