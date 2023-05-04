@@ -17,7 +17,7 @@ type Props = {
   points?: Point[]
   position?: Pos
   idx: number
-  opacity: SpringValue<number> | number
+  opacity?: SpringValue<number>
   mult: number
   rmPin?: any
   emo?: string
@@ -53,14 +53,18 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     document.body.style.cursor = hover ? 'pointer' : 'auto'
   }, [hover])
 
-  const interactive = ['explore', 'filtered']
+  const isHidden = () => {
+    // @ts-ignore-line
+    return opacity?.goal < 1
+  }
 
+  const interactive = ['explore', 'filtered']
   const onHover = () => {
-    if (!interactive.includes(appState.viewMode)) return
+    if (!interactive.includes(appState.viewMode) || isHidden()) return
     setHover(true)
   }
   const onLeave = () => {
-    if (!interactive.includes(appState.viewMode)) return
+    if (!interactive.includes(appState.viewMode) || isHidden()) return
     setHover(false)
   }
 
@@ -70,9 +74,11 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
       rmPin(idx)
       return
     }
+    if (isHidden()) return
     if (!interactive.includes(appState.viewMode)) return
-    // TODO: which point was clicked?
     if (!points?.length) return
+
+    e.stopPropagation()
     const point = points[0]
     // @ts-ignore-line
     setAppState((state) => ({ ...state, currentEntry: entry, currentMarker: point }))
@@ -86,7 +92,7 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
         {pin.map((p) => (
           <sprite key={p.id} onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[p.x, p.y, 4]} scale={pick.scale}>
             {/* @ts-ignore-line */}
-            <animated.spriteMaterial attach="material" map={texture} opacity={opacity}/>
+            <animated.spriteMaterial attach="material" map={texture} opacity={opacity} fog={false}/>
           </sprite>
         ))}
       </>

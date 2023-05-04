@@ -100,7 +100,7 @@ export default function (props: ThreeElements['mesh']) {
                 rmPin={rmPin}
                 key={index}
                 idx={index}
-                opacity={1}
+                // opacity={1}
                 position={point}
                 mult={0.8}
               />

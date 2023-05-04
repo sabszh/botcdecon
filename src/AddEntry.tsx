@@ -2,6 +2,7 @@ import { TypeAnimation } from 'react-type-animation'
 import { CSSTransition } from 'react-transition-group'
 import { useState, useContext, useMemo } from 'react'
 import { AppContext } from './main'
+import Turnstile from 'react-turnstile'
 import knot from './assets/knot-1.png'
 
 const api = import.meta.env.VITE_DATA_ENDPOINT || ''
@@ -12,12 +13,14 @@ export default function () {
   const [text, setText] = useState('')
   const [name, setName] = useState('')
   const [location, setLocation] = useState('')
+  const [token, setToken] = useState('')
 
   const [shownPickIntro, setShownPickIntro] = useState(false)
 
   const points = useMemo(() => appState.entryPoints, [appState.entryPoints])
   const showSave = useMemo(() => points.length > 0, [points])
   const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState(false)
   const [saved, setSaved] = useState(false)
 
   async function handleSubmit (e: any) {
@@ -32,17 +35,23 @@ export default function () {
   async function saveEntry (e: any) {
     e.preventDefault()
 
+    setErr(false)
     setSaving(true)
     try {
       const res = await fetch(`${api}/entries`, {
         method: 'POST',
-        body: JSON.stringify({ text, name, location, points })
+        body: JSON.stringify({ text, name, location, points, token })
       })
+      if (res?.status >= 400) {
+        setSaving(false)
+        setErr(true)
+        return
+      }
       setSaved(true)
       setText('')
       setName('')
       setLocation('')
-      // TODO: save the response in state?
+      setToken('')
       setSaving(false)
        // @ts-ignore-line
       setAppState(state => ({ ...state, viewMode: 'saved' }))
@@ -79,6 +88,9 @@ export default function () {
       <CSSTransition in={appState.viewMode === 'post'} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blur pt-32 md:pt-40'>
           <form onSubmit={handleSubmit} method='post' className='w-full max-w-2xl mx-auto'>
+            <Turnstile
+              sitekey='0x4AAAAAAAEcpIvYt90dSRB7'
+              onVerify={setToken}/>
             <p className='text-2xl md:text-3xl whitespace-pre-line'>
               <TypeAnimation
                 sequence={['What do you want the future to remember?']}
@@ -127,6 +139,9 @@ export default function () {
       <CSSTransition in={picking && showSave && !saved} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blur'>
           <form onSubmit={saveEntry} className='text-center'>
+            <CSSTransition in={err} classNames='fade' timeout={300} unmountOnExit>
+              <div className='text-bg text-2xl md:text-3xl inline-block text-red-600'>Something went wrong, please try again</div>
+            </CSSTransition>
             <div className='mt-2 w-full'>
               <button disabled={saving} type='submit' className='text-bg active:bg-opacity-50 text-2xl md:text-3xl inline-block'>
                 <span>{ saving ? 'Saving...' : 'Save your memory' }</span>
