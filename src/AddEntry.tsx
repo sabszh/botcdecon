@@ -111,7 +111,7 @@ export default function () {
         <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blur pt-32 md:pt-40 pointer-events-none'>
           <p className='text-2xl md:text-3xl whitespace-pre-line'>
             <TypeAnimation
-              sequence={['When the future remembers your memory, how do you think it will make the future feel?', 2000, 'Place your memory in this landscape of emotions by moving the pointer.', 3000, '', () => {
+              sequence={['If your memory was found in the future, how do you think it would make the future feel?', 2000, 'Place your memory in this landscape of emotions by clicking on the map', 3000, '', () => {
                 setShownPickIntro(true)
               }]}
               repeat={0}

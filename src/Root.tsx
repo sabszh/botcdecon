@@ -12,9 +12,9 @@ export default function () {
     <div className='App'>
       <CSSTransition in={appState.headerVisible} nodeRef={headerRef} classNames='fade' timeout={300} unmountOnExit>
         <header ref={headerRef} className='absolute top-0 left-0 m-10 md:m-16 z-10 blur'>
-          <p className='mx-2'>
+          {/* <p className='mx-2'>
             <span className='text-bg'>Welcome to the</span>
-          </p>
+          </p> */}
           <h1 className='text-2xl md:text-3xl'>
             <Link to="/" className='text-bg'>Carte de Continuonus</Link>
           </h1>
