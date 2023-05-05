@@ -82,13 +82,15 @@ export default function (props: ThreeElements['mesh']) {
             <Text
               key={index}
               position={[Number(label.x), Number(label.y), Number(label.z)]}
-              font='/fonts/Trattatello.woff'
-              outlineBlur={0.8}
-              outlineColor={0xffffff}
-              outlineWidth={0.6}
-              fontSize={22}
+              // font='/fonts/Trattatello.woff'
+              font='/fonts/Lars-Medium.woff'
+              outlineBlur={5}
+              outlineColor={0x000000}
+              outlineWidth={5}
+              outlineOpacity={0.1}
+              fontSize={23}
               fillOpacity={1}
-              color={0x433429}>
+              color={0xffffff}>
               {label.title}
             </Text>
           )
