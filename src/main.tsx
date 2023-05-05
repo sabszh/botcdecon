@@ -40,6 +40,7 @@ type Context = {
     emotions: Emotion[]
     entries: Entry[]
     filteredEntries: Entry[]
+    myEntries: Entry[]
     currentEntry: Entry | null
     currentMarker: Point | null
     viewMode: 'empty' | 'post' | 'pick' | 'saved' | 'explore' | 'filtered'
@@ -56,6 +57,7 @@ const State: Context['appState'] = {
   emotions: [],
   entries: [],
   filteredEntries: [],
+  myEntries: getStoredEntries(),
   currentEntry: null,
   currentMarker: null,
   viewMode: 'empty',
@@ -95,6 +97,11 @@ const router = createBrowserRouter([
     ]
   }
 ])
+
+function getStoredEntries () {
+  const stored = JSON.parse(localStorage?.getItem('entries') || '[]')
+  return stored as Entry[]
+}
 
 function StoreProvider (props: React.PropsWithChildren) {
   const [appState, setAppState] = React.useState(State)

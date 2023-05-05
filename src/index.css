@@ -34,14 +34,18 @@ body {
 }
 
 textarea, input, button {
-  &:focus { @apply outline-offset-0 outline-double outline-orange-500; }
+  /* &:focus { @apply outline-offset-0 outline outline-1 outline-orange-500; } */
+  &:focus {
+    /* @apply shadow shadow-orange-500 outline-none; */
+    @apply shadow-input shadow-orange-500 outline-none;
+  }
 }
 
 .text-bg {
   @apply bg-white rounded-full;
   @apply bg-opacity-80;
 
-  line-height: 1.666;
+  line-height: 1.6687;
 
   padding: 0.2em 1.3rem;
   box-decoration-break: clone;

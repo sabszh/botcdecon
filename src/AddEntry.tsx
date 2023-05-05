@@ -1,3 +1,4 @@
+import type { Entry } from './main'
 import { TypeAnimation } from 'react-type-animation'
 import { CSSTransition } from 'react-transition-group'
 import { useState, useContext, useMemo } from 'react'
@@ -58,9 +59,11 @@ export default function () {
 
       const entry = await res.json()
 
-      const myEntries = JSON.parse(localStorage?.getItem('entries') || '[]')
+      const myEntries: Entry[] = JSON.parse(localStorage?.getItem('entries') || '[]')
       myEntries.push(entry)
       localStorage?.setItem('entries', JSON.stringify(myEntries))
+      // @ts-ignore-line
+      setAppState(state => ({ ...state, myEntries }))
     } catch (err) {
       console.error(err)
     }
@@ -86,7 +89,7 @@ export default function () {
   return (
     <>
       <CSSTransition in={appState.viewMode === 'post'} classNames='fade' timeout={300} unmountOnExit>
-        <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blur pt-32 md:pt-40'>
+        <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blurX pt-32 md:pt-40'>
           <form onSubmit={handleSubmit} method='post' className='w-full max-w-2xl mx-auto'>
             <Turnstile
               sitekey='0x4AAAAAAAEcpIvYt90dSRB7'
@@ -120,7 +123,7 @@ export default function () {
       </CSSTransition>
 
       <CSSTransition in={picking && !shownPickIntro} timeout={300} classNames='fade' unmountOnExit>
-        <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blur pt-32 md:pt-40 pointer-events-none'>
+        <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blurX pt-32 md:pt-40 pointer-events-none'>
           <p className='text-2xl md:text-3xl whitespace-pre-line'>
             <TypeAnimation
               sequence={['If your memory was found in the future, how do you think it would make the future feel?', 2000, 'Place your memory in this landscape of emotions by clicking on the map', 3000, '', () => {
@@ -137,7 +140,7 @@ export default function () {
       </CSSTransition>
 
       <CSSTransition in={picking && showSave && !saved} classNames='fade' timeout={300} unmountOnExit>
-        <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blur'>
+        <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blurX'>
           <form onSubmit={saveEntry} className='text-center'>
             <CSSTransition in={err} classNames='fade' timeout={300} unmountOnExit>
               <div className='text-bg text-2xl md:text-3xl inline-block text-red-600'>Something went wrong, please try again</div>
@@ -152,7 +155,7 @@ export default function () {
       </CSSTransition>
 
       <CSSTransition in={picking && saved} classNames='fade' timeout={300} unmountOnExit>
-        <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blur'>
+        <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blurX'>
           <div className='text-center'>
             <div className='mt-2 w-full'>
               <TypeAnimation

@@ -9,8 +9,15 @@ export default function Memories () {
   const { appState, setAppState } = useContext(AppContext)
 
   const entries = useMemo(() => {
-    return appState.entries.filter((entry) => entry.points.length > 0)
-  }, [appState.entries])
+    const db = appState.entries.filter((entry) => entry.points.length > 0)
+    if (appState.myEntries?.length) {
+      appState.myEntries.forEach((entry) => {
+        if (db.find((e) => e.slug === entry.slug)) return
+        db.push(entry)
+      })
+    }
+    return db
+  }, [appState.entries, appState.myEntries])
   const showEntries = useMemo(() => {
     return appState.viewMode === 'explore'
   }, [appState.viewMode])

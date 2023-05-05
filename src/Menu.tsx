@@ -39,9 +39,9 @@ export default function () {
   return (
     <div className='contents'>
       <CSSTransition in={appState.menuOpen} nodeRef={menuRef} classNames='fade-right' timeout={300} unmountOnExit>
-        <div ref={menuRef} onClick={close} className='fixed top-0 right-0 bottom-0 p-4 md:p-12 w-full max-w-lg z-20'>
+        <div ref={menuRef} onClick={close} className='fixed top-0 right-0 bottom-0 p-4 md:p-12 w-full max-w-lg z-20 blurX'>
           <div className='bg-white rounded-2xl md:rounded-3xl px-10 py-8 min-h-full overflow-y-auto shadow-lg flex flex-col'>
-            <ul className='mt-12 blur flex-auto'>
+            <ul className='mt-12 flex-auto'>
               <li className='mb-4'>
                 <Link to='/' onClick={toSave} className='text-xl md:text-2xl'>Save a memory</Link>
               </li>
@@ -52,7 +52,7 @@ export default function () {
                 <Link to='about' className='text-xl md:text-2xl'>About the carte</Link>
               </li>
             </ul>
-            <div className='blur'>
+            <div className=''>
               <div className='text-sm mb-2'>
                 <Link to='/impressum' className=''>Imprint</Link>
                 <span> &middot; </span>
@@ -60,14 +60,14 @@ export default function () {
                 <span> &middot; </span>
                 <Link to='/credits' className=''>Credits</Link>
               </div>
-              <div className='text-xs'>&copy; 2023 Studio Olafur Eliason GmbH</div>
+              <div className='text-xs'>&copy; 2023 Helene Nymann</div>
             </div>
           </div>
         </div>
       </CSSTransition>
 
       <CSSTransition in={appState.viewMode === 'filtered'} nodeRef={menuRef} classNames='fade' timeout={300} unmountOnExit>
-        <div className='fixed top-0 right-20 m-6 md:m-16 z-10 blur'>
+        <div className='fixed top-0 right-20 m-6 md:m-16 z-10 blurX'>
           <button onClick={toExplore} className='text-bg bg-white text-3xl'>
             <span className='sr-only'>Close</span>
             <img src='/x.svg' alt='Close' className='' style={{ width:'28px', height:'15px' }}/>
@@ -75,7 +75,7 @@ export default function () {
         </div>
       </CSSTransition>
 
-      <div className='fixed top-0 right-0 m-6 md:m-16 z-30 blur'>
+      <div className='fixed top-0 right-0 m-6 md:m-16 z-30 blurX'>
         <button onClick={menuBtnClick} className='text-bg text-3xl'>
           <span className='sr-only'>Menu</span>
           <img src={appState.menuOpen ? '/x.svg' : '/bars.svg'} alt='Menu' className='' style={{ width:'28px', height:'15px' }}/>

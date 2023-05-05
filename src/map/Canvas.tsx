@@ -1,5 +1,5 @@
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
-import { Vector3, MOUSE } from 'three'
+import { Vector3, MOUSE, TOUCH } from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import { useContext, useMemo, useEffect, useState, useRef } from 'react'
@@ -62,8 +62,6 @@ function CustomCamera () {
     if (!state.camera) return
     if (!zooming) return
 
-    // console.log('go to', x, y)
-
     state.camera.position.lerp(vec.set(x, y, 900), 0.018)
     state.camera.updateProjectionMatrix()
 
@@ -99,6 +97,7 @@ function CustomCamera () {
         enableRotate={false}
         enabled={canInteract}
         mouseButtons={{ LEFT: MOUSE.PAN }}
+        touches={{ ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }}
         minDistance={380}
         maxDistance={6000}
         zoomSpeed={0.53}

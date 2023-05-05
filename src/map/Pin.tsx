@@ -94,17 +94,26 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     setAppState((state) => ({ ...state, currentEntry: entry, currentMarker: point }))
   }
 
+  const myTextures = [
+    useTexture(icons[0].url) as Texture,
+    useTexture(icons[1].url) as Texture,
+    useTexture(icons[2].url) as Texture,
+    useTexture(icons[3].url) as Texture
+  ]
+
   if (!pin) return (<></>)
 
   if (Array.isArray(pin)) {
     return (
       <>
-        {pin.map((p) => (
-          <sprite key={p.id} onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[p.x, p.y, 4]} scale={pick.scale} center={pick.center}>
-            {/* @ts-ignore-line */}
-            <animated.spriteMaterial attach="material" map={texture} opacity={opacity} fog={false}/>
-          </sprite>
-        ))}
+        {pin.map((p, i) => {
+          return (
+            <sprite key={i} onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[p.x, p.y, 4]} scale={icons[i].scale} center={icons[i].center}>
+              {/* @ts-ignore-line */}
+              <animated.spriteMaterial attach="material" map={myTextures[i]} opacity={opacity} fog={false}/>
+            </sprite>
+          )
+        })}
       </>
     )
   }

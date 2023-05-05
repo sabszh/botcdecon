@@ -55,7 +55,7 @@ export default function () {
       </div>
 
       <CSSTransition in={!appState.introSeen} nodeRef={introRef} classNames='fade' timeout={300} unmountOnExit>
-        <div ref={introRef} className='absolute top-0 left-0 m-10 md:m-16 z-10 blur pt-32 md:pt-40'>
+        <div ref={introRef} className='absolute top-0 left-0 m-10 md:m-16 z-10 blurX pt-32 md:pt-40'>
           {introStep > 0 && (<div className='text-2xl md:text-3xl whitespace-pre-line mb-8 md:mb-10'>
             <TypeAnimation
               sequence={[intro[0]]}

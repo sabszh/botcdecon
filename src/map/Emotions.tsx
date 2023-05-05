@@ -39,11 +39,20 @@ export default function Emotions () {
   }, [query, filter])
 
   const entries = useMemo(() => {
-    return appState.filteredEntries
+    const db = appState.filteredEntries
+    if (appState.myEntries?.length) {
+      appState.myEntries.forEach((entry) => {
+        if (db.find((e) => e.slug === entry.slug)) return
+        if (entry.points.find((p) => p.emotion === filter)) {
+          db.push(entry)
+        }
+      })
+    }
+    return db
   }, [appState.filteredEntries])
   const showEntries = useMemo(() => {
     return appState.viewMode === 'filtered'
-  }, [appState.viewMode])
+  }, [appState.viewMode, appState.myEntries])
 
   const { opacity } = useSpring({ opacity: showEntries ? 1 : 0, config: config.wobbly })
 

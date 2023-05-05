@@ -8,6 +8,9 @@ export default {
     extend: {
       blur: {
         DEFAULT: '0.02em'
+      },
+      boxShadow: {
+        input: 'inset 0 0 0 1px var(--tw-shadow-color)'
       }
     },
   },

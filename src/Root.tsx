@@ -9,9 +9,9 @@ export default function () {
   const headerRef = useRef(null)
 
   return (
-    <div className='App'>
+    <div className='App blur'>
       <CSSTransition in={appState.headerVisible} nodeRef={headerRef} classNames='fade' timeout={300} unmountOnExit>
-        <header ref={headerRef} className='absolute top-0 left-0 m-10 md:m-16 z-10 blur'>
+        <header ref={headerRef} className='absolute top-0 left-0 m-10 md:m-16 z-10 mr-32'>
           {/* <p className='mx-2'>
             <span className='text-bg'>Welcome to the</span>
           </p> */}
