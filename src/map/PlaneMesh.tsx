@@ -18,7 +18,8 @@ export default function (props: ThreeElements['mesh']) {
   }
 
   // const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
-  const texture = useTexture('/layers/carte-lg.jpg') // 14957 * 9656
+  // const texture = useTexture('/layers/carte-lg.jpg') // 14957 * 9656
+  const texture = useTexture('/layers/map-compressed.jpg') // 14957 * 9656
   const geometry = useMemo(() => new PlaneGeometry(14957 / 3, 9656 / 3), [])
   const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
 
