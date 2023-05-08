@@ -7,6 +7,7 @@ import Root from './Root'
 import Error from './pages/Error'
 import Home from './pages/Home'
 import About from './pages/About'
+import Legal from './pages/Legal'
 
 export type Emotion = {
   slug: string
@@ -83,16 +84,8 @@ const router = createBrowserRouter([
         element: <About/>
       },
       {
-        path: 'impressum',
-        element: <About/>
-      },
-      {
-        path: 'privacy',
-        element: <About/>
-      },
-      {
-        path: 'credits',
-        element: <About/>
+        path: 'legal',
+        element: <Legal/>
       }
     ]
   }

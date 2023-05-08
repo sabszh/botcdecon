@@ -17,6 +17,10 @@ export default function () {
     setAppState(state => ({ ...state, menuOpen: false }))
   }
 
+  const toStart = () => {
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, viewMode: 'empty', introSeen: false, headerVisible: true, zoomIn: false }))
+  }
   const toSave = () => {
     // @ts-ignore-line
     setAppState(state => ({ ...state, viewMode: 'post', introSeen: true, headerVisible: false, zoomIn: true }))
@@ -42,6 +46,9 @@ export default function () {
         <div ref={menuRef} onClick={close} className='fixed top-0 right-0 bottom-0 p-4 md:p-12 w-full max-w-lg z-20 blurX'>
           <div className='bg-white rounded-2xl md:rounded-3xl px-10 py-8 min-h-full overflow-y-auto shadow-lg flex flex-col'>
             <ul className='mt-12 flex-auto'>
+              {/* <li className='mb-4'>
+                <Link to='/' onClick={toStart} className='text-xl md:text-2xl'>Start</Link>
+              </li> */}
               <li className='mb-4'>
                 <Link to='/' onClick={toSave} className='text-xl md:text-2xl'>Save a memory</Link>
               </li>
@@ -54,11 +61,7 @@ export default function () {
             </ul>
             <div className=''>
               <div className='text-sm mb-2'>
-                <Link to='/impressum' className=''>Imprint</Link>
-                <span> &middot; </span>
-                <Link to='/privacy' className=''>Privacy</Link>
-                <span> &middot; </span>
-                <Link to='/credits' className=''>Credits</Link>
+                <Link to='/legal' className=''>Legal</Link>
               </div>
               <div className='text-xs'>&copy; 2023 Helene Nymann</div>
             </div>

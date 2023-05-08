@@ -17,8 +17,9 @@ export default function (props: ThreeElements['mesh']) {
     return texture
   }
 
-  const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
-  const geometry = useMemo(() => new PlaneGeometry(7936 / 2, 8000 / 2), [])
+  // const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
+  const texture = useTexture('/layers/carte-lg.jpg') // 14957 * 9656
+  const geometry = useMemo(() => new PlaneGeometry(14957 / 3, 9656 / 3), [])
   const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
 
   const labels = useMemo(() => {
@@ -75,41 +76,42 @@ export default function (props: ThreeElements['mesh']) {
         geometry={geometry}
         material={material}
         ref={mesh}
-        position={[0, 0, 0]}
+        position={[-582, 140, 0]}
         {...props}>
-        {showLabels && labels.map((label, index) => {
+      </mesh>
+      {showLabels && labels.map((label, index) => {
+        return (
+          <Text
+            key={index}
+            position={[Number(label.x), Number(label.y), Number(label.z)]}
+            // font='/fonts/Trattatello.woff'
+            // font='/fonts/Lars-Medium.woff'
+            font='/fonts/perpetua-webfont.woff'
+            outlineBlur={5}
+            outlineColor={0xffffff}
+            outlineWidth={2}
+            outlineOpacity={0.4}
+            fontSize={23}
+            fillOpacity={1}
+            color={0x000000}>
+            {label.title}
+          </Text>
+        )
+      })}
+      <group>
+        {picking && points.map((point, index) => {
           return (
-            <Text
+            <Pin
+              rmPin={rmPin}
               key={index}
-              position={[Number(label.x), Number(label.y), Number(label.z)]}
-              // font='/fonts/Trattatello.woff'
-              font='/fonts/Lars-Medium.woff'
-              outlineBlur={5}
-              outlineColor={0x000000}
-              outlineWidth={5}
-              outlineOpacity={0.1}
-              fontSize={23}
-              fillOpacity={1}
-              color={0xffffff}>
-              {label.title}
-            </Text>
+              idx={index}
+              // opacity={1}
+              position={point}
+              mult={0.8}
+            />
           )
         })}
-        <group>
-          {picking && points.map((point, index) => {
-            return (
-              <Pin
-                rmPin={rmPin}
-                key={index}
-                idx={index}
-                // opacity={1}
-                position={point}
-                mult={0.8}
-              />
-            )
-          })}
-        </group>
-      </mesh>
+      </group>
     </group>
   )
 }
