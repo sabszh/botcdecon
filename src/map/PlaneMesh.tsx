@@ -1,8 +1,8 @@
-import { Mesh, PlaneGeometry, MeshStandardMaterial } from 'three'
+import { Mesh, PlaneGeometry, MeshStandardMaterial, sRGBEncoding } from 'three'
 import { useRef, useEffect, useMemo, useContext, useState } from 'react'
 import { ThreeElements } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
-import { Text } from '@react-three/drei'
+import { Text, Html } from '@react-three/drei'
 import { AppContext } from '../main'
 import Pin from './Pin'
 
@@ -20,8 +20,13 @@ export default function (props: ThreeElements['mesh']) {
   // const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
   // const texture = useTexture('/layers/carte-lg.jpg') // 14957 * 9656
   const texture = useTexture('/layers/map-compressed.jpg') // 14957 * 9656
+  texture.encoding = sRGBEncoding
   const geometry = useMemo(() => new PlaneGeometry(14957 / 3, 9656 / 3), [])
-  const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
+  const material = useMemo(() => new MeshStandardMaterial({
+    map: texture,
+    // metalness: 0.1
+    // emissive: 0xffffff
+  }), [texture])
 
   const labels = useMemo(() => {
     return appState.emotions
@@ -90,21 +95,38 @@ export default function (props: ThreeElements['mesh']) {
       )}
       {showLabels && labels.map((label, index) => {
         return (
-          <Text
-            key={index}
-            position={[Number(label.x), Number(label.y), Number(label.z)]}
-            // font='/fonts/Trattatello.woff'
-            // font='/fonts/Lars-Medium.woff'
-            font='/fonts/perpetua-webfont.woff'
-            outlineBlur={5}
-            outlineColor={0xffffff}
-            outlineWidth={2}
-            outlineOpacity={0.4}
-            fontSize={23}
-            fillOpacity={1}
-            color={0x000000}>
-            {label.title}
-          </Text>
+          // <Html
+          //   key={index}
+          //   position={[Number(label.x), Number(label.y), Number(label.z)]}
+          //   center={true}
+          //   distanceFactor={900} // ensures scaling with map layer
+          //   transform // fixes to plane
+          //   className='map-label'
+          //   >
+          //   <p>{label.title}</p>
+          // </Html>
+          <group>
+            {/* <mesh position={[Number(label.x), Number(label.y), Number(label.z)]} scale={10}>
+              <bufferGeometry attach="geometry" />
+              <meshStandardMaterial attach="material" color="white" />
+            </mesh> */}
+            <Text
+              key={index}
+              position={[Number(label.x), Number(label.y), Number(label.z)]}
+              // font='/fonts/Trattatello.woff'
+              font='/fonts/Lars-Medium.woff'
+              // font='/fonts/perpetua-webfont.woff'
+              // font='/fonts/perpetua_italic-webfont.woff'
+              outlineBlur={5}
+              outlineColor={0xffffff}
+              outlineWidth={2}
+              outlineOpacity={0.4}
+              fontSize={23}
+              fillOpacity={1}
+              color={0x000000}>
+              {label.title}
+            </Text>
+          </group>
         )
       })}
       <group>
