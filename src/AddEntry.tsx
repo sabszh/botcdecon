@@ -3,7 +3,7 @@ import { TypeAnimation } from 'react-type-animation'
 import { CSSTransition } from 'react-transition-group'
 import { useState, useContext, useMemo } from 'react'
 import { AppContext } from './main'
-import Turnstile from 'react-turnstile'
+// import Turnstile from 'react-turnstile'
 import knot from './assets/knot-1.png'
 
 const api = import.meta.env.VITE_DATA_ENDPOINT || ''
@@ -95,9 +95,9 @@ export default function ({ onRestart }: { onRestart: () => void }) {
       <CSSTransition in={appState.viewMode === 'post'} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blurX pt-32 md:pt-40'>
           <form onSubmit={handleSubmit} method='post' className='w-full max-w-2xl mx-auto'>
-            <Turnstile
+            {/* <Turnstile
               sitekey='0x4AAAAAAAEcpIvYt90dSRB7'
-              onVerify={setToken}/>
+              onVerify={setToken}/> */}
             <p className='text-2xl md:text-3xl whitespace-pre-line'>
               <TypeAnimation
                 sequence={['What do you want the future to remember?']}
