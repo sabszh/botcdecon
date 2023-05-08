@@ -1,5 +1,5 @@
 import { Mesh, PlaneGeometry, MeshStandardMaterial } from 'three'
-import { useRef, useEffect, useMemo, useContext } from 'react'
+import { useRef, useEffect, useMemo, useContext, useState } from 'react'
 import { ThreeElements } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
 import { Text } from '@react-three/drei'
@@ -64,6 +64,14 @@ export default function (props: ThreeElements['mesh']) {
     setAppState((state) => ({ ...state, entryPoints: state.entryPoints.filter((_, i) => i !== idx) }))
   }
 
+  const [mapLoaded, setMapLoaded] = useState(false)
+
+  useEffect(() => {
+    setTimeout(() => {
+      setMapLoaded(true)
+    }, 200)
+  }, [texture])
+
   return (
     <group>
       <mesh
@@ -72,13 +80,13 @@ export default function (props: ThreeElements['mesh']) {
         position={[0, 0, -1]}
         // onPointerDown={doneZoom}
         onClick={mapClick}/>
-      <mesh
+      {mapLoaded && (<mesh
         geometry={geometry}
         material={material}
         ref={mesh}
         position={[-582, 140, 0]}
-        {...props}>
-      </mesh>
+        {...props}/>
+      )}
       {showLabels && labels.map((label, index) => {
         return (
           <Text

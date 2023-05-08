@@ -102,7 +102,7 @@ function CustomCamera () {
         enabled={canInteract}
         mouseButtons={{ LEFT: MOUSE.PAN }}
         touches={{ ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN }}
-        minDistance={380}
+        minDistance={680}
         maxDistance={6000}
         zoomSpeed={0.53}
         minPolarAngle={Math.PI / 2.5}
