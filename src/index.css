@@ -15,7 +15,8 @@ body {
   /* background-color: #988C99; */
   /* background-color: #BFA16A; */
   /* background-color: #fcafd9; */
-  background-color: #86c663;
+  /* background-color: #86c663; */
+  background-color: #dd4c3b;
   font-family: 'Lars-Regular', sans-serif;
 }
 
@@ -37,10 +38,12 @@ body {
 }
 
 textarea, input, button {
+  /* --tw-shadow-color: #dd4c3b; */
+  --tw-shadow-color: #551249;
   /* &:focus { @apply outline-offset-0 outline outline-1 outline-orange-500; } */
   &:focus {
     /* @apply shadow shadow-orange-500 outline-none; */
-    @apply shadow-input shadow-orange-500 outline-none;
+    @apply shadow-input outline-none;
   }
 }
 

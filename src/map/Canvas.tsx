@@ -11,6 +11,9 @@ import Memories from './Memories'
 import Emotions from './Emotions'
 
 export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
+  useEffect(() => {
+    onObjLoaded()
+  }, [])
   return (
     <Canvas shadows='basic'>
       <CustomCamera/>
@@ -23,7 +26,7 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 
       <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={0.84}/>
       {/* <fog attach='fog' args={[0x988C99, 700, 4400]}/> */}
-      <fog attach='fog' args={[0x86c663, 700, 3400]}/>
+      <fog attach='fog' args={[0xdd4c3b, 700, 3400]}/>
     </Canvas>
   )
 }

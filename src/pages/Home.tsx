@@ -7,7 +7,6 @@ import AddEntry from '../AddEntry'
 import ViewEntry from '../ViewEntry'
 
 export default function () {
-  const [introStarted, setIntroStarted] = useState(false)
   const [introStep, setIntroStep] = useState(0)
 
   const { appState, setAppState } = useContext(AppContext)
@@ -22,19 +21,25 @@ export default function () {
     'What do you remember that you want the future to remember?'
   ]
 
-  async function doIntro () {
-    if (appState.introSeen || introStarted) return
-    setIntroStarted(true)
+  const doIntro = async () => {
+    if (stateRef.current.introSeen || stateRef.current.introStarted) return
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, introStarted: true }))
 
-    await sleep(1500)
+    await sleep(600)
+    if (stateRef.current.introSeen || !stateRef.current.introStarted) return
     setIntroStep(1)
 
-    await sleep(6000)
+    await sleep(7000)
+    if (stateRef.current.introSeen) return
     setIntroStep(2)
 
-    await sleep(4000)
+    await sleep(6000)
+    if (stateRef.current.introSeen) return
     // @ts-ignore-line
-    setAppState((state) => ({ ...state, introSeen: true }))
+    setAppState((state) => ({ ...state, introStarted: false, introSeen: true }))
+
+    console.log(location.pathname, stateRef.current.viewMode)
 
     await sleep(600)
     if (stateRef.current.viewMode !== 'empty') return
@@ -42,11 +47,15 @@ export default function () {
     setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post' }))
   }
 
-  // useEffect(() => {
-  //   doIntro()
-  // }, [])
+  const restart = async () => {
+    setIntroStep(0)
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, introStarted: false, introSeen: false, headerVisible: true, viewMode: 'empty' }))
+    await sleep(1)
+    doIntro()
+  }
 
-  const typeSpeed = 65
+  const typeSpeed = 55
 
   return (
     <>
@@ -77,7 +86,7 @@ export default function () {
         </div>
       </CSSTransition>
 
-      <AddEntry/>
+      <AddEntry onRestart={restart}/>
       <ViewEntry/>
     </>
   )

@@ -35,6 +35,7 @@ export type Point = {
 
 type Context = {
   appState: {
+    introStarted: boolean
     introSeen: boolean
     menuOpen: boolean
     headerVisible: boolean
@@ -52,6 +53,7 @@ type Context = {
   setAppState: (state: Context['appState']) => void
 }
 const State: Context['appState'] = {
+  introStarted: false,
   introSeen: false,
   menuOpen: false,
   headerVisible: true,

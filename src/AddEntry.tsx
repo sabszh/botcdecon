@@ -8,7 +8,7 @@ import knot from './assets/knot-1.png'
 
 const api = import.meta.env.VITE_DATA_ENDPOINT || ''
 
-export default function () {
+export default function ({ onRestart }: { onRestart: () => void }) {
   const { appState, setAppState } = useContext(AppContext)
 
   const [text, setText] = useState('')
@@ -31,6 +31,10 @@ export default function () {
 
     // @ts-ignore-line
     setAppState(state => ({ ...state, viewMode: 'pick', zoomIn: true, entryPoints: [] }))
+  }
+
+  const viewIntro = () => {
+    onRestart()
   }
 
   async function saveEntry (e: any) {
@@ -111,7 +115,10 @@ export default function () {
               <div className='w-1/2 mt-0.5'>
                 <input value={location} onChange={e => setLocation(e.target.value)} name="location" placeholder='Location (optional)' className='w-full px-4 py-3 text-xl bg-white bg-opacity-95 rounded-br-3xl'/>
               </div>
-              <div className='mt-2 w-full'>
+              <div className='mt-2 w-full flex'>
+                <button onClick={viewIntro} type='button' className='text-bg active:bg-opacity-50 text-xl md:text-2xl inline-block mr-2'>
+                  <span>Previous</span>
+                </button>
                 <button type='submit' className='text-bg active:bg-opacity-50 text-xl md:text-2xl inline-block'>
                   <span>Next</span>
                   <img src={knot} className='inline-block ml-2 h-6 md:h-8'/>

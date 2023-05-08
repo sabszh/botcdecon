@@ -30,6 +30,7 @@ export default function () {
     setAppState(state => ({
       ...state,
       viewMode: 'explore',
+      introStarted: false,
       introSeen: true,
       headerVisible: false,
       zoomIn: true,

@@ -9,16 +9,12 @@ export default function () {
   const headerRef = useRef(null)
 
   return (
-    <div className='App blur'>
+    <div className=''>
       <CSSTransition in={appState.headerVisible} nodeRef={headerRef} classNames='fade' timeout={300} unmountOnExit>
         <header ref={headerRef} className='absolute top-0 left-0 m-10 md:m-16 z-10 mr-32'>
-          {/* <p className='mx-2'>
-            <span className='text-bg'>Welcome to the</span>
-          </p> */}
           <h1 className='text-2xl md:text-3xl'>
             <Link to="/" className='text-bg'>Carte de Continuonus</Link>
           </h1>
-          <p className='map-label hidden'>Label style</p>
         </header>
       </CSSTransition>
 
