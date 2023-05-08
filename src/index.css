@@ -7,7 +7,28 @@
   src: url('/fonts/Lars-Regular.woff2') format('woff2'),
     url('/fonts/Lars-Regular.woff') format('woff');
   font-weight: 400;
-  style: normal;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Lars-Regular';
+  src: url('/fonts/Lars-RegularItalic.woff2') format('woff2'),
+    url('/fonts/Lars-RegularItalic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Lars-Regular';
+  src: url('/fonts/Lars-Medium.woff2') format('woff2'),
+    url('/fonts/Lars-Medium.woff') format('woff');
+  font-weight: 700;
+  font-style: regular;
+}
+@font-face {
+  font-family: 'Lars-Regular';
+  src: url('/fonts/Lars-MediumItalic.woff2') format('woff2'),
+    url('/fonts/Lars-MediumItalic.woff') format('woff');
+  font-weight: 700;
+  font-style: italic;
 }
 
 body {
@@ -76,6 +97,6 @@ textarea, input, button {
 .fade-right-exit-active { @apply opacity-0 translate-x-1/2; }
 
 .prose {
-  & h1, & h2, & h3, & h4, & h5, & h6 { @apply mb-4; }
+  & h1, & h2, & h3, & h4, & h5, & h6 { @apply mb-4 font-bold; }
   & p { @apply mb-4; }
 }

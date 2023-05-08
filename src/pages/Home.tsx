@@ -50,7 +50,11 @@ export default function () {
   const restart = async () => {
     setIntroStep(0)
     // @ts-ignore-line
-    setAppState((state) => ({ ...state, introStarted: false, introSeen: false, headerVisible: true, viewMode: 'empty' }))
+    setAppState((state) => ({ ...state, introStarted: false, introSeen: false, viewMode: 'empty' }))
+    if (location.pathname === '/') {
+      // @ts-ignore-line
+      setAppState((state) => ({ ...state, headerVisible: false }))
+    }
     await sleep(1)
     doIntro()
   }

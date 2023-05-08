@@ -133,13 +133,13 @@ export default function ({ onRestart }: { onRestart: () => void }) {
         <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blurX pt-32 md:pt-40 pointer-events-none'>
           <p className='text-2xl md:text-3xl whitespace-pre-line'>
             <TypeAnimation
-              sequence={['If your memory was found in the future, how do you think it would make the future feel?', 2000, 'Place your memory in this landscape of emotions by clicking on the map', 3000, '', () => {
+              sequence={['If your memory was found in the future, how do you think it would make the future feel?', 4000, 'Place your memory in this landscape of emotions by clicking on the map', 4000, 'Feel free to add your memory to more than one point on the map', 4000, () => {
                 setShownPickIntro(true)
               }]}
               repeat={0}
               cursor={false}
-              speed={60}
-              deletionSpeed={99}
+              speed={54}
+              deletionSpeed={90}
               wrapper='span'
               className='text-bg'/>
           </p>
