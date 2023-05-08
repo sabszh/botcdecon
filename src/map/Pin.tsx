@@ -45,7 +45,12 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     { url: '/markers/marker-1.png', scale: [66 / d, 150 / d, 0], center: new Vector2(1, 0) },
     { url: '/markers/marker-6.png', scale: [49 / d, 155 / d, 0], center: new Vector2(0, 0) },
     { url: '/markers/marker-12.png', scale: [73 / d, 74 / d, 0], center: new Vector2(0.62, 1) },
-    { url: '/markers/marker-11.png', scale: [71 / d, 80 / d, 0], center: new Vector2(0.8, 0) },
+    { url: '/markers/marker-11.png', scale: [71 / s, 80 / s, 0], center: new Vector2(0.8, 0) },
+
+    { url: '/markers/marker-14.png', scale: [138 / s, 87 / s, 0], center: new Vector2(0.8, 0) },
+    { url: '/markers/marker-15.png', scale: [89 / s, 140 / s, 0], center: new Vector2(0.8, 0) },
+    { url: '/markers/marker-16.png', scale: [131 / s, 152 / s, 0], center: new Vector2(0.8, 0) },
+    { url: '/markers/marker-17.png', scale: [84 / s, 140 / s, 0], center: new Vector2(0.8, 0) },
   ]
   const pick = icons[idx % icons.length]
   const texture = useTexture(pick.url) as Texture
@@ -65,7 +70,7 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
 
   const isHidden = () => {
     // @ts-ignore-line
-    return opacity?.goal < 1
+    return opacity?.goal < 0.8
   }
 
   const interactive = ['explore', 'filtered']
@@ -94,12 +99,7 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     setAppState((state) => ({ ...state, currentEntry: entry, currentMarker: point }))
   }
 
-  const myTextures = [
-    useTexture(icons[0].url) as Texture,
-    useTexture(icons[1].url) as Texture,
-    useTexture(icons[2].url) as Texture,
-    useTexture(icons[3].url) as Texture
-  ]
+  const allTextures = icons.map((icon) => useTexture(icon.url) as Texture)
 
   if (!pin) return (<></>)
 
@@ -107,10 +107,12 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     return (
       <>
         {pin.map((p, i) => {
+          const pp = (idx + i) % icons.length
+          const tex = allTextures[pp]
           return (
-            <sprite key={i} onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[p.x, p.y, 4]} scale={icons[i].scale} center={icons[i].center}>
+            <sprite key={i} onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[p.x, p.y, 4]} scale={icons[pp].scale} center={icons[pp].center}>
               {/* @ts-ignore-line */}
-              <animated.spriteMaterial attach="material" map={myTextures[i]} opacity={opacity} fog={false}/>
+              <animated.spriteMaterial attach="material" map={tex} opacity={opacity} fog={false}/>
             </sprite>
           )
         })}
