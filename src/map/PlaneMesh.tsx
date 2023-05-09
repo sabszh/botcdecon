@@ -120,10 +120,10 @@ export default function (props: ThreeElements['mesh']) {
             key={index}
             position={[Number(label.x), Number(label.y), Number(label.z)]}
             center={true}
-            distanceFactor={600} // ensures scaling with map layer
-            transform // fixes to plane
+            distanceFactor={1100} // ensures scaling with map layer
             style={{
               opacity: calc(zoomLevel),
+              pointerEvents: 'none',
               zIndex: 0
             }}
             className='map-label'>
