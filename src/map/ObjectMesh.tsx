@@ -39,7 +39,8 @@ export default function (props: ThreeElements['mesh'] & { onObjLoaded: () => voi
     <Float
       rotationIntensity={0}
       floatIntensity={0}
-      speed={0}>
+      speed={0}
+      frustumCulled={true}>
       <mesh ref={hippo}
         geometry={nodes.Default.geometry}
         material={nodes.Default.material}

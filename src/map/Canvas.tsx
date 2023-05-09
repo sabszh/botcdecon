@@ -24,7 +24,7 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
 
-      <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={0.74}/>
+      <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={0.8}/>
       {/* <fog attach='fog' args={[0x988C99, 700, 4400]}/> */}
       <fog attach='fog' args={[0xa984ac, 700, 4400]}/>
       {/* <fog attach='fog' args={[0xdd4c3b, 700, 3400]}/> */}

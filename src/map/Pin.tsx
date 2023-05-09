@@ -112,7 +112,7 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
           return (
             <sprite key={i} onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[p.x, p.y, 4]} scale={icons[pp].scale} center={icons[pp].center}>
               {/* @ts-ignore-line */}
-              <animated.spriteMaterial attach="material" map={tex} opacity={opacity} fog={false}/>
+              <animated.spriteMaterial attach="material" map={tex} opacity={opacity} fog={true}/>
             </sprite>
           )
         })}

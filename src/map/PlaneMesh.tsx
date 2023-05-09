@@ -1,8 +1,8 @@
 import { Mesh, PlaneGeometry, MeshStandardMaterial, sRGBEncoding } from 'three'
 import { useRef, useEffect, useMemo, useContext, useState } from 'react'
-import { ThreeElements } from '@react-three/fiber'
+import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
-import { Text, Html } from '@react-three/drei'
+import { Text, Plane, Html } from '@react-three/drei'
 import { AppContext } from '../main'
 import Pin from './Pin'
 
@@ -19,7 +19,8 @@ export default function (props: ThreeElements['mesh']) {
 
   // const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
   // const texture = useTexture('/layers/carte-lg.jpg') // 14957 * 9656
-  const texture = useTexture('/layers/map-compressed.jpg') // 14957 * 9656
+  // const texture = useTexture('/layers/map-compressed.jpg') // 14957 * 9656
+  const texture = useTexture('/layers/carte.jpg') // 14957 * 9656
   texture.encoding = sRGBEncoding
   const geometry = useMemo(() => new PlaneGeometry(14957 / 3, 9656 / 3), [])
   const material = useMemo(() => new MeshStandardMaterial({
@@ -78,6 +79,25 @@ export default function (props: ThreeElements['mesh']) {
     }, 200)
   }, [texture])
 
+  const { camera } = useThree()
+  const [zoomLevel, setZoomLevel] = useState(camera.position.z)
+
+  useFrame(() => {
+    setZoomLevel(camera.position.z)
+  })
+
+  function calc (a: number) {
+    const max = 3400
+    const min = 1700
+    if (a > max) {
+        return 0
+    } else if (a <= min) {
+        return 1
+    } else {
+        return (max - a) / (max - min)
+    }
+}
+
   return (
     <group>
       <mesh
@@ -95,38 +115,19 @@ export default function (props: ThreeElements['mesh']) {
       )}
       {showLabels && labels.map((label, index) => {
         return (
-          // <Html
-          //   key={index}
-          //   position={[Number(label.x), Number(label.y), Number(label.z)]}
-          //   center={true}
-          //   distanceFactor={900} // ensures scaling with map layer
-          //   transform // fixes to plane
-          //   className='map-label'
-          //   >
-          //   <p>{label.title}</p>
-          // </Html>
-          <group>
-            {/* <mesh position={[Number(label.x), Number(label.y), Number(label.z)]} scale={10}>
-              <bufferGeometry attach="geometry" />
-              <meshStandardMaterial attach="material" color="white" />
-            </mesh> */}
-            <Text
-              key={index}
-              position={[Number(label.x), Number(label.y), Number(label.z)]}
-              // font='/fonts/Trattatello.woff'
-              font='/fonts/Lars-Medium.woff'
-              // font='/fonts/perpetua-webfont.woff'
-              // font='/fonts/perpetua_italic-webfont.woff'
-              outlineBlur={5}
-              outlineColor={0xffffff}
-              outlineWidth={2}
-              outlineOpacity={0.4}
-              fontSize={23}
-              fillOpacity={1}
-              color={0x000000}>
-              {label.title}
-            </Text>
-          </group>
+          // <Label label={label} index={index} key={index}/>
+          <Html
+            key={index}
+            position={[Number(label.x), Number(label.y), Number(label.z)]}
+            center={true}
+            distanceFactor={600} // ensures scaling with map layer
+            transform // fixes to plane
+            style={{
+              opacity: calc(zoomLevel)
+            }}
+            className='map-label'>
+            <p>{label.title}</p>
+          </Html>
         )
       })}
       <group>
@@ -146,3 +147,59 @@ export default function (props: ThreeElements['mesh']) {
     </group>
   )
 }
+
+// function Label ({ label, index }) {
+//   const padding = 0.2
+
+//   // Use a ref to access the text bounding box
+//   const textRef = useRef()
+
+//   // This function returns the size of the background mesh based on the text size
+//   const calculateBackgroundSize = () => {
+//     if (!textRef.current) return [0, 0]
+
+//     console.log('calc size', textRef.current)
+
+//     const { min, max } = textRef.current.geometry.boundingBox
+//     const width = (max.x - min.x) + padding * 2
+//     const height = (max.y - min.y) + padding * 2
+
+//     return [width, height]
+//   };
+
+//   const backgroundSize = useMemo(calculateBackgroundSize, [textRef.current])
+
+//   return (
+//     <Html
+//       key={index}
+//       position={[Number(label.x), Number(label.y), Number(label.z)]}
+//       center={true}
+//       distanceFactor={900} // ensures scaling with map layer
+//       transform // fixes to plane
+//       className='map-label'
+//       >
+//       <p>{label.title}</p>
+//     </Html>
+//     // <group key={index}>
+//     //   <Plane args={backgroundSize} position={[0, 0, 1]} receiveShadow>
+//     //     <meshBasicMaterial color="white" />
+//     //   </Plane>
+//     //   <Text
+//     //     ref={textRef}
+//     //     position={[Number(label.x), Number(label.y), Number(label.z)]}
+//     //     // font='/fonts/Trattatello.woff'
+//     //     font='/fonts/Lars-Medium.woff'
+//     //     // font='/fonts/perpetua-webfont.woff'
+//     //     // font='/fonts/perpetua_italic-webfont.woff'
+//     //     outlineBlur={5}
+//     //     outlineColor={0xffffff}
+//     //     outlineWidth={2}
+//     //     outlineOpacity={0.4}
+//     //     fontSize={23}
+//     //     fillOpacity={1}
+//     //     color={0x000000}>
+//     //     {label.title}
+//     //   </Text>
+//     // </group>
+//   )
+// }
