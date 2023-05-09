@@ -57,7 +57,7 @@ export default function () {
                 <Link to='/' onClick={toExplore} className='text-xl md:text-2xl'>Explore memories</Link>
               </li>
               <li className='mb-4'>
-                <Link to='about' className='text-xl md:text-2xl'>About the carte</Link>
+                <Link to='about' className='text-xl md:text-2xl'>About</Link>
               </li>
             </ul>
             <div className=''>

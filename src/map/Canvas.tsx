@@ -50,6 +50,7 @@ function CustomCamera () {
     setAppState((state) => ({ ...state, zoomIn: false }))
     setx(0)
     sety(0)
+    setz(1000)
   }
   useEffect(() => {
     if (appState.zoomIn) {
@@ -62,26 +63,28 @@ function CustomCamera () {
 
   const [x, setx] = useState(0)
   const [y, sety] = useState(0)
+  const [z, setz] = useState(1000)
 
   const vec = new Vector3()
   useFrame((state) => {
     if (!state.camera) return
     if (!zooming) return
 
-    state.camera.position.lerp(vec.set(x, y, 1000), 0.018)
+    state.camera.position.lerp(vec.set(x, y, z), 0.018)
     state.camera.updateProjectionMatrix()
 
     if (controls?.current) {
       controls.current.target.lerp(vec.set(x, y, 0), 0.018)
     }
-    if (state.camera.position.z === 1000) {
+    if (state.camera.position.z === z) {
       doneZoom()
     }
   })
 
-  const mvCam = (focus: Emotion) => {
+  const mvCam = (focus: Emotion, z = 1000) => {
     setx(focus.x)
     sety(focus.y)
+    setz(z)
     // @ts-ignore-line
     setAppState(state => ({ ...state, zoomIn: true }))
   }

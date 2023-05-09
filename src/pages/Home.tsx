@@ -39,12 +39,12 @@ export default function () {
     // @ts-ignore-line
     setAppState((state) => ({ ...state, introStarted: false, introSeen: true }))
 
-    console.log(location.pathname, stateRef.current.viewMode)
-
     await sleep(600)
     if (stateRef.current.viewMode !== 'empty') return
+
+    stateRef.current.mvCam?.({ x: 0, y: 0 }, 3200)
     // @ts-ignore-line
-    setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post' }))
+    setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post', zoomIn: true }))
   }
 
   const restart = async () => {
