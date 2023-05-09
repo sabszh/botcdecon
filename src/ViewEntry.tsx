@@ -36,11 +36,22 @@ export default function () {
 
   const [sortedEntries, setSortedEntries] = useState<EntryWithDistance[]>([])
 
+  const entries = useMemo(() => {
+    const db = appState.entries.filter((entry) => entry.points.length > 0)
+    if (appState.myEntries?.length) {
+      appState.myEntries.forEach((entry) => {
+        if (db.find((e) => e.slug === entry.slug)) return
+        db.push(entry)
+      })
+    }
+    return db
+  }, [appState.entries, appState.myEntries])
+
   useEffect(() => {
     const refPoint = appState.currentMarker
     if (!refPoint) return
 
-    const list = appState.viewMode === 'filtered' ? appState.filteredEntries : appState.entries
+    const list = appState.viewMode === 'filtered' ? appState.filteredEntries : entries
 
     const objectsWithDistances = calculateDistance(refPoint, list)
     const sortedObjects = sortByProximity(objectsWithDistances)
