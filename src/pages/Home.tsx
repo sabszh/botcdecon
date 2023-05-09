@@ -63,7 +63,7 @@ export default function () {
 
   return (
     <>
-      <div className='w-full h-screen'>
+      <div className='w-full h-screen relative z-10'>
         <MapCanvas onObjLoaded={doIntro}/>
       </div>
 

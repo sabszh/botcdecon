@@ -45,7 +45,7 @@ body {
 .map-label {
   @apply bg-white bg-opacity-50 whitespace-nowrap text-xs;
   @apply px-2 py-0.5 rounded-full;
-  @apply select-none tracking-wider;
+  @apply select-none pointer-events-none;
   /* @apply underline decoration-from-font underline-offset-4; */
   /* @apply blur; */
   /* color: #351A04; */

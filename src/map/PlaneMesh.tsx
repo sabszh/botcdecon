@@ -123,7 +123,8 @@ export default function (props: ThreeElements['mesh']) {
             distanceFactor={600} // ensures scaling with map layer
             transform // fixes to plane
             style={{
-              opacity: calc(zoomLevel)
+              opacity: calc(zoomLevel),
+              zIndex: 0
             }}
             className='map-label'>
             <p>{label.title}</p>
