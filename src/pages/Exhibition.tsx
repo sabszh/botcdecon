@@ -1,10 +1,14 @@
 import { useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useContext } from 'react'
+import { AppContext } from '../main'
 
 export default function () {
+  const { setAppState } = useContext(AppContext)
   const navigate = useNavigate()
 
   useEffect(() => {
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, onsite: 1 }))
     navigate('/')
   }, [])
 

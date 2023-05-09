@@ -50,6 +50,7 @@ type Context = {
     zoomIn: boolean
     entryPoints: { x: number; y: number }[],
     mvCam: any
+    onsite: number
   }
   setAppState: (state: Context['appState']) => void
 }
@@ -67,7 +68,8 @@ const State: Context['appState'] = {
   viewMode: 'empty',
   zoomIn: false,
   entryPoints: [],
-  mvCam: null
+  mvCam: null,
+  onsite: 0
 }
 
 export const AppContext = React.createContext<Context>(null!)

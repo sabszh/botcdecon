@@ -42,10 +42,13 @@ export default function ({ onRestart }: { onRestart: () => void }) {
 
     setErr(false)
     setSaving(true)
+
+    const onsite = appState.onsite
+
     try {
       const res = await fetch(`${api}/entries`, {
         method: 'POST',
-        body: JSON.stringify({ text, name, location, points, token })
+        body: JSON.stringify({ text, name, location, points, onsite, token })
       })
       if (res?.status >= 400) {
         setSaving(false)
