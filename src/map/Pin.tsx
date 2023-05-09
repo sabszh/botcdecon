@@ -30,27 +30,33 @@ type Props = {
 export default function Pin ({ entry, points, position, idx, opacity, mult = 1, rmPin, emo }: Props) {
   const { appState, setAppState } = useContext(AppContext)
 
-  const d = 3 * mult
-  const s = 4 * mult
+  const d = 6 * mult
+  // const s = 4 * mult
   const icons: Icon[] = [
-    { url: '/markers/marker-13.png', scale: [46 / d, 92 / d, 0], center: new Vector2(0.1, 0) },
-    { url: '/markers/marker-7.png', scale: [107 / d, 74 / d, 0], center: new Vector2(0, 0) },
-    { url: '/markers/marker-5.png', scale: [43 / d, 158 / d, 0], center: new Vector2(1, 0) },
-    { url: '/markers/marker-9.png', scale: [58 / d, 90 / d, 0], center: new Vector2(0.66, 1) },
-    { url: '/markers/marker-2.png', scale: [50 / d, 153 / d, 0], center: new Vector2(0, 0) },
-    { url: '/markers/marker-3.png', scale: [98 / s, 138 / s, 0], center: new Vector2(0.9, 0) },
-    { url: '/markers/marker-8.png', scale: [80 / d, 48 / d, 0], center: new Vector2(1, 1) },
-    { url: '/markers/marker-4.png', scale: [88 / s, 120 / s, 0], center: new Vector2(0, 0) },
-    { url: '/markers/marker-10.png', scale: [70 / d, 90 / d, 0], center: new Vector2(0, 0) },
-    { url: '/markers/marker-1.png', scale: [66 / d, 150 / d, 0], center: new Vector2(1, 0) },
-    { url: '/markers/marker-6.png', scale: [49 / d, 155 / d, 0], center: new Vector2(0, 0) },
-    { url: '/markers/marker-12.png', scale: [73 / d, 74 / d, 0], center: new Vector2(0.62, 1) },
-    { url: '/markers/marker-11.png', scale: [71 / s, 80 / s, 0], center: new Vector2(0.8, 0) },
+    { url: '/markers/knot-1.png', scale: [190 / d, 438/ d, 0], center: new Vector2(0.1, 0) },
+    { url: '/markers/knot-2.png', scale: [113 / d, 378 / d, 0], center: new Vector2(0.1, 0) },
+    { url: '/markers/knot-3.png', scale: [245 / d, 224 / d, 0], center: new Vector2(0.1, 0) },
+    { url: '/markers/knot-4.png', scale: [183 / d, 288 / d, 0], center: new Vector2(0.1, 0) },
+    { url: '/markers/knot-5.png', scale: [181 / d, 296 / d, 0], center: new Vector2(0.1, 0) },
 
-    { url: '/markers/marker-14.png', scale: [138 / s, 87 / s, 0], center: new Vector2(0.8, 0) },
-    { url: '/markers/marker-15.png', scale: [89 / s, 140 / s, 0], center: new Vector2(0.8, 0) },
-    { url: '/markers/marker-16.png', scale: [131 / s, 152 / s, 0], center: new Vector2(0.8, 0) },
-    { url: '/markers/marker-17.png', scale: [84 / s, 140 / s, 0], center: new Vector2(0.8, 0) },
+    // { url: '/markers/marker-13.png', scale: [46 / d, 92 / d, 0], center: new Vector2(0.1, 0) },
+    // { url: '/markers/marker-7.png', scale: [107 / d, 74 / d, 0], center: new Vector2(0, 0) },
+    // { url: '/markers/marker-5.png', scale: [43 / d, 158 / d, 0], center: new Vector2(1, 0) },
+    // { url: '/markers/marker-9.png', scale: [58 / d, 90 / d, 0], center: new Vector2(0.66, 1) },
+    // { url: '/markers/marker-2.png', scale: [50 / d, 153 / d, 0], center: new Vector2(0, 0) },
+    // { url: '/markers/marker-3.png', scale: [98 / s, 138 / s, 0], center: new Vector2(0.9, 0) },
+    // { url: '/markers/marker-8.png', scale: [80 / d, 48 / d, 0], center: new Vector2(1, 1) },
+    // { url: '/markers/marker-4.png', scale: [88 / s, 120 / s, 0], center: new Vector2(0, 0) },
+    // { url: '/markers/marker-10.png', scale: [70 / d, 90 / d, 0], center: new Vector2(0, 0) },
+    // { url: '/markers/marker-1.png', scale: [66 / d, 150 / d, 0], center: new Vector2(1, 0) },
+    // { url: '/markers/marker-6.png', scale: [49 / d, 155 / d, 0], center: new Vector2(0, 0) },
+    // { url: '/markers/marker-12.png', scale: [73 / d, 74 / d, 0], center: new Vector2(0.62, 1) },
+    // { url: '/markers/marker-11.png', scale: [71 / s, 80 / s, 0], center: new Vector2(0.8, 0) },
+
+    // { url: '/markers/marker-14.png', scale: [138 / s, 87 / s, 0], center: new Vector2(0.8, 0) },
+    // { url: '/markers/marker-15.png', scale: [89 / s, 140 / s, 0], center: new Vector2(0.8, 0) },
+    // { url: '/markers/marker-16.png', scale: [131 / s, 152 / s, 0], center: new Vector2(0.8, 0) },
+    // { url: '/markers/marker-17.png', scale: [84 / s, 140 / s, 0], center: new Vector2(0.8, 0) },
   ]
   const pick = icons[idx % icons.length]
   const texture = useTexture(pick.url) as Texture

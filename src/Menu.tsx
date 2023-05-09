@@ -64,7 +64,7 @@ export default function () {
               <div className='text-sm mb-2'>
                 <Link to='/legal' className=''>Legal</Link>
               </div>
-              <div className='text-xs'>&copy; 2023 Helene Nymann</div>
+              <div className='text-xs'>&copy; 2023 Helene Nymann / Interacting Minds Centre</div>
             </div>
           </div>
         </div>
