@@ -134,12 +134,6 @@ export default function () {
 }
 
 function EntryPoint ({ point }: { point: Point }) {
-  const rotate = () => {
-    if (point.angle === undefined) return
-    // convert radians to degrees
-    const deg = point.angle * (180 / Math.PI)
-    return `rotate(${deg}deg)`
-  }
   const opacity = () => {
     if (point.distance === undefined) return
     const pc = 1 / (1 + point.distance / 400)
@@ -151,13 +145,11 @@ function EntryPoint ({ point }: { point: Point }) {
   return (
     <li className='mx-2'>
       <p style={{ opacity: opacity() }}>
+        {point.emotion === 'Beyond' ? (
+          <span>{point.emotion}</span>
+        ) : (
         <Link to={link}>{point.emotion}</Link>
-        {/* {rotate && (
-          <>
-            <span style={{ transform: rotate() }} className='inline-block align-middle'>&rarr;</span>
-            <span className='text-xs'> {Number(point.distance).toFixed(2)}</span>
-          </>
-        )} */}
+        )}
       </p>
     </li>
   )
