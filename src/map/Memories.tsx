@@ -22,7 +22,7 @@ export default function Memories () {
     return appState.viewMode === 'explore'
   }, [appState.viewMode])
 
-  const { opacity } = useSpring({ opacity: showEntries ? 0.84 : 0, config: config.wobbly })
+  const { opacity } = useSpring({ opacity: showEntries ? 0.92 : 0, config: config.wobbly })
 
   useEffect(() => {
     if (appState.entries.length > 0) return
