@@ -43,7 +43,7 @@ body {
 }
 
 .map-label {
-  @apply bg-white bg-opacity-50 whitespace-nowrap text-sm;
+  @apply bg-white bg-opacity-70 whitespace-nowrap text-sm;
   @apply px-2 py-0.5 rounded-full;
   @apply select-none pointer-events-none;
   /* @apply underline decoration-from-font underline-offset-4; */

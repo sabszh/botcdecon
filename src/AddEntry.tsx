@@ -80,6 +80,11 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     return appState.viewMode === 'pick' || appState.viewMode === 'saved'
   }, [appState.viewMode])
 
+  function startAgain () {
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, viewMode: 'post', zoomIn: false }))
+    reset()
+  }
   function goExplore () {
     // @ts-ignore-line
     setAppState(state => ({ ...state, viewMode: 'explore', entryPoints: [] }))
@@ -176,9 +181,12 @@ export default function ({ onRestart }: { onRestart: () => void }) {
                 wrapper='span'
                 className='text-bg text-2xl md:text-3xl'/>
             </div>
-            <div className='mt-3.5'>
+            <div className='mt-3.5 flex items-center justify-center space-x-2'>
               <button onClick={goExplore} className='text-bg active:bg-opacity-50 text-2xl md:text-3xl inline-block'>
                 <span>Explore memories</span>
+              </button>
+              <button onClick={startAgain} className='text-bg active:bg-opacity-50 text-2xl md:text-3xl inline-block'>
+                <span>Add another memory</span>
               </button>
             </div>
           </div>
