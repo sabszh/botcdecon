@@ -101,8 +101,9 @@ const router = createBrowserRouter([
 ])
 
 function getStoredEntries () {
-  const stored = JSON.parse(localStorage?.getItem('entries') || '[]')
-  return stored as Entry[]
+  return [] // These should expire at some point, or we skip completely
+  // const stored = JSON.parse(localStorage?.getItem('entries') || '[]')
+  // return stored as Entry[]
 }
 
 function StoreProvider (props: React.PropsWithChildren) {
