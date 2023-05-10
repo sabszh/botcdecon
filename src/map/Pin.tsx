@@ -33,11 +33,11 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
   const d = 6 * mult
   // const s = 4 * mult
   const icons: Icon[] = [
-    { url: '/markers/knot-1.png', scale: [185 / d, 404/ d, 0], center: new Vector2(1, 0) },
-    { url: '/markers/knot-5.png', scale: [121 / d, 246 / d, 0], center: new Vector2(0.1, 0) },
-    { url: '/markers/knot-2.png', scale: [100 / d, 291 / d, 0], center: new Vector2(0.1, 0) },
-    { url: '/markers/knot-3.png', scale: [175 / d, 152 / d, 0], center: new Vector2(0.1, 0) },
-    { url: '/markers/knot-4.png', scale: [169 / d, 210 / d, 0], center: new Vector2(1, 0) },
+    { url: '/markers/knot-1.png?v=1', scale: [185 / d, 404/ d, 0], center: new Vector2(1, 0) },
+    { url: '/markers/knot-5.png?v=1', scale: [121 / d, 246 / d, 0], center: new Vector2(0.1, 0) },
+    { url: '/markers/knot-2.png?v=1', scale: [100 / d, 291 / d, 0], center: new Vector2(0.1, 0) },
+    { url: '/markers/knot-3.png?v=1', scale: [175 / d, 152 / d, 0], center: new Vector2(0.1, 0) },
+    { url: '/markers/knot-4.png?v=1', scale: [169 / d, 210 / d, 0], center: new Vector2(1, 0) },
 
     // { url: '/markers/marker-13.png', scale: [46 / d, 92 / d, 0], center: new Vector2(0.1, 0) },
     // { url: '/markers/marker-7.png', scale: [107 / d, 74 / d, 0], center: new Vector2(0, 0) },
