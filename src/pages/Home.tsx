@@ -42,9 +42,9 @@ export default function () {
     await sleep(600)
     if (stateRef.current.viewMode !== 'empty') return
 
-    stateRef.current.mvCam?.({ x: 0, y: 0 }, 2800)
+    // stateRef.current.mvCam?.({ x: 0, y: 0 }, 2800)
     // @ts-ignore-line
-    setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post', zoomIn: true }))
+    setAppState(state => ({ ...state, headerVisible: false, viewMode: 'post' }))
   }
 
   const restart = async () => {
