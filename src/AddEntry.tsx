@@ -99,9 +99,12 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     setName('')
     setLocation('')
     setSaving(false)
+    setRegion('')
   }
 
   async function handleRegion () {
+    if (region !== '') return
+
     try {
       const res = await fetch('/region')
       const data = await res.json()
@@ -109,7 +112,7 @@ export default function ({ onRestart }: { onRestart: () => void }) {
       setRegion(data.where)
     } catch (err) {
       console.log('region error', err)
-      setRegion('')
+      setRegion('Offline')
     }
   }
 
