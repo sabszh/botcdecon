@@ -70,10 +70,10 @@ export default function () {
 
   const nextEntry = () => {
     const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
-    console.log('next entry', current, appState)
     if (current === -1) return
 
-    const next = sortedEntries[(current + 1) % sortedEntries.length]
+    const nextindex = (current + 1) % sortedEntries.length
+    const next = sortedEntries[nextindex]
 
     // @ts-ignore-line
     setAppState(state => ({ ...state, currentEntry: next }))
