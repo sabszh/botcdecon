@@ -1,6 +1,6 @@
 export default async (_req, ctx) => {
   const countryCode = ctx.geo?.country.code
-  return new Response.json({
+  return Response.json({
     where: countryCode || ''
   })
 }
