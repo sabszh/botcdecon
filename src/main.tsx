@@ -8,6 +8,8 @@ import Error from './pages/Error'
 import Home from './pages/Home'
 import About from './pages/About'
 import Legal from './pages/Legal'
+
+// for QR codes
 import Exhibition from './pages/Exhibition'
 import Berlin from './pages/Berlin'
 

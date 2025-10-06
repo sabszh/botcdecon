@@ -70,6 +70,7 @@ export default function () {
 
   const nextEntry = () => {
     const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
+    console.log('next entry', current, appState)
     if (current === -1) return
 
     const next = sortedEntries[(current + 1) % sortedEntries.length]
@@ -79,6 +80,7 @@ export default function () {
   }
   const prevEntry = () => {
     const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
+    console.log('prev entry', current, appState)
     if (current === -1) return
 
     const prev = sortedEntries[(current - 1 + sortedEntries.length) % sortedEntries.length]
