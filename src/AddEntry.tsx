@@ -24,6 +24,9 @@ export default function ({ onRestart }: { onRestart: () => void }) {
   const [err, setErr] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const [region, setRegion] = useState('')
+  handleRegion()
+
   async function handleSubmit (e: any) {
     e.preventDefault()
 
@@ -48,7 +51,7 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     try {
       const res = await fetch(`${api}/entries`, {
         method: 'POST',
-        body: JSON.stringify({ text, name, location, points, onsite, token })
+        body: JSON.stringify({ text, name, location, points, onsite, token, region })
       })
       if (res?.status >= 400) {
         setSaving(false)
@@ -96,6 +99,18 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     setName('')
     setLocation('')
     setSaving(false)
+  }
+
+  async function handleRegion () {
+    try {
+      const res = await fetch('/region')
+      const data = await res.json()
+      console.log('got', data)
+      setRegion(data.where)
+    } catch (err) {
+      console.log('region error', err)
+      setRegion('')
+    }
   }
 
   const ref1 = useRef(null)
