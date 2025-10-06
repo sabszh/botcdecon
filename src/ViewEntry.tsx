@@ -1,5 +1,5 @@
 import type { Point } from './main'
-import { useContext, useMemo, useState, useEffect } from 'react'
+import { useContext, useMemo, useState, useEffect, useRef } from 'react'
 import { AppContext, Entry } from './main'
 import { CSSTransition } from 'react-transition-group'
 import { Link } from 'react-router-dom'
@@ -87,9 +87,11 @@ export default function () {
     setAppState(state => ({ ...state, currentEntry: prev }))
   }
 
+  const ref1 = useRef(null)
+
   return (
     <>
-      <CSSTransition in={showEntry} classNames='fade' timeout={300} unmountOnExit>
+      <CSSTransition nodeRef={ref1} in={showEntry} classNames='fade' timeout={300} unmountOnExit>
         <div onClick={close} className='fixed inset-0 p-4 md:p-16 z-10 blurX overflow-auto'>
           <div onClick={e => e.stopPropagation()} className='w-full max-w-2xl mx-auto bg-white rounded-3xl px-8 py-6 text-xl md:text-2xl mt-32 md:mt-40 relative'>
             <ul className='flex flex-wrap -mx-2 mb-4 text-base'>

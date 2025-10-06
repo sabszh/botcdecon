@@ -1,8 +1,8 @@
-import { Mesh, PlaneGeometry, MeshStandardMaterial, sRGBEncoding } from 'three'
+import { Mesh, PlaneGeometry, MeshStandardMaterial, SRGBColorSpace } from 'three'
 import { useRef, useEffect, useMemo, useContext, useState } from 'react'
 import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
-import { Text, Plane, Html } from '@react-three/drei'
+import { Html } from '@react-three/drei'
 import { AppContext } from '../main'
 import Pin from './Pin'
 
@@ -21,7 +21,8 @@ export default function (props: ThreeElements['mesh']) {
   // const texture = useTexture('/layers/carte-lg.jpg') // 14957 * 9656
   // const texture = useTexture('/layers/map-compressed.jpg') // 14957 * 9656
   const texture = useTexture('/layers/carte.jpg') // 14957 * 9656
-  texture.encoding = sRGBEncoding
+  // texture.encoding = sRGBEncoding
+  texture.colorSpace = SRGBColorSpace
   const geometry = useMemo(() => new PlaneGeometry(14957 / 3, 9656 / 3), [])
   const material = useMemo(() => new MeshStandardMaterial({
     map: texture,

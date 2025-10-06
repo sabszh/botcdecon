@@ -1,7 +1,7 @@
 import type { Entry } from './main'
 import { TypeAnimation } from 'react-type-animation'
 import { CSSTransition } from 'react-transition-group'
-import { useState, useContext, useMemo } from 'react'
+import { useState, useRef, useContext, useMemo } from 'react'
 import { AppContext } from './main'
 // import Turnstile from 'react-turnstile'
 import knot from './assets/knot-1.png'
@@ -98,9 +98,15 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     setSaving(false)
   }
 
+  const ref1 = useRef(null)
+  const ref2 = useRef(null)
+  const ref3 = useRef(null)
+  const ref4 = useRef(null)
+  const ref5 = useRef(null)
+
   return (
     <>
-      <CSSTransition in={appState.viewMode === 'post'} classNames='fade' timeout={300} unmountOnExit>
+      <CSSTransition nodeRef={ref1} in={appState.viewMode === 'post'} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blurX pt-32 md:pt-40'>
           <form onSubmit={handleSubmit} method='post' className='w-full max-w-2xl mx-auto'>
             {/* <Turnstile
@@ -137,7 +143,7 @@ export default function ({ onRestart }: { onRestart: () => void }) {
         </div>
       </CSSTransition>
 
-      <CSSTransition in={picking && !shownPickIntro} timeout={300} classNames='fade' unmountOnExit>
+      <CSSTransition nodeRef={ref2} in={picking && !shownPickIntro} timeout={300} classNames='fade' unmountOnExit>
         <div className='absolute top-0 left-0 right-0 m-10 md:m-16 z-10 blurX pt-32 md:pt-40 pointer-events-none'>
           <p className='text-2xl md:text-3xl whitespace-pre-line'>
             <TypeAnimation
@@ -154,10 +160,10 @@ export default function ({ onRestart }: { onRestart: () => void }) {
         </div>
       </CSSTransition>
 
-      <CSSTransition in={picking && showSave && !saved} classNames='fade' timeout={300} unmountOnExit>
+      <CSSTransition nodeRef={ref3} in={picking && showSave && !saved} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blurX'>
           <form onSubmit={saveEntry} className='text-center'>
-            <CSSTransition in={err} classNames='fade' timeout={300} unmountOnExit>
+            <CSSTransition nodeRef={ref4} in={err} classNames='fade' timeout={300} unmountOnExit>
               <div className='text-bg text-2xl md:text-3xl inline-block text-red-600'>Something went wrong, please try again</div>
             </CSSTransition>
             <div className='mt-2 w-full'>
@@ -169,7 +175,7 @@ export default function ({ onRestart }: { onRestart: () => void }) {
         </div>
       </CSSTransition>
 
-      <CSSTransition in={picking && saved} classNames='fade' timeout={300} unmountOnExit>
+      <CSSTransition nodeRef={ref5} in={picking && saved} classNames='fade' timeout={300} unmountOnExit>
         <div className='absolute bottom-0 left-0 right-0 m-10 md:m-16 z-10 blurX'>
           <div className='text-center'>
             <div className='mt-2 w-full'>

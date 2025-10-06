@@ -17,7 +17,7 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
   return (
     <Canvas shadows='basic'>
       <CustomCamera/>
-      <ambientLight intensity={0.2}/>
+      <ambientLight intensity={5}/>
       <PlaneMesh receiveShadow/>
       <Memories/>
       <Emotions/>
