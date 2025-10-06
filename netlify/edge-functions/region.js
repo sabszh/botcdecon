@@ -1,5 +1,7 @@
 export default async (request, context) => {
-  return new Response('OK', { status: 200 })
+  const countryCode = context.geo?.country.code
+  // Use countryCode as needed
+  return new Response(`Country code: ${countryCode}`);
 }
 
 export const config = { path: '/region' }
