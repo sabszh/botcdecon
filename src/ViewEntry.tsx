@@ -77,6 +77,7 @@ export default function () {
 
     // @ts-ignore-line
     setAppState(state => ({ ...state, currentEntry: next }))
+    // appState.mvCam(next.points[0], 1000)
   }
   const prevEntry = () => {
     const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
@@ -86,6 +87,7 @@ export default function () {
 
     // @ts-ignore-line
     setAppState(state => ({ ...state, currentEntry: prev }))
+    // appState.mvCam(prev.points[0], 1000)
   }
 
   const ref1 = useRef(null)

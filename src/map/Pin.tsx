@@ -103,6 +103,7 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     const point = points[0]
     // @ts-ignore-line
     setAppState((state) => ({ ...state, currentEntry: entry, currentMarker: point }))
+    // appState.mvCam(point, 1000)
   }
 
   const allTextures = icons.map((icon) => useTexture(icon.url) as Texture)

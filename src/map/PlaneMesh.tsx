@@ -48,7 +48,6 @@ export default function (props: ThreeElements['mesh']) {
   }, [])
 
   const mapClick = (e: any) => {
-    // console.log(e.point)
     if (appState.viewMode !== 'pick') return
     if (e.delta > 2) return
     if (appState.entryPoints.length >= 4) return
@@ -97,7 +96,7 @@ export default function (props: ThreeElements['mesh']) {
     } else {
         return (max - a) / (max - min)
     }
-}
+  }
 
   return (
     <group>

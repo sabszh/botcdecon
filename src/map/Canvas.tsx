@@ -11,11 +11,21 @@ import Memories from './Memories'
 import Emotions from './Emotions'
 
 export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
+  const { appState, setAppState } = useContext(AppContext)
+
   useEffect(() => {
     onObjLoaded()
   }, [])
+
+  function pointerDown () {
+    if (appState.zoomIn) {
+      // @ts-ignore-line
+      setAppState((state) => ({ ...state, zoomIn: false }))
+    }
+  }
+
   return (
-    <Canvas shadows='basic'>
+    <Canvas shadows='basic' onPointerDown={pointerDown}>
       <CustomCamera/>
       <ambientLight intensity={5}/>
       <PlaneMesh receiveShadow/>
@@ -50,38 +60,54 @@ function CustomCamera () {
     setAppState((state) => ({ ...state, zoomIn: false }))
     setx(0)
     sety(0)
-    setz(1000)
+    setz(1200)
   }
+  const [timer, setTimer] = useState<number>()
   useEffect(() => {
     if (appState.zoomIn) {
+      clearTimeout(timer)
       setZooming(true)
-      setTimeout(() => {
-        doneZoom()
-      }, 2500)
+      setTimer(setTimeout(doneZoom, 2500))
+    } else {
+      clearTimeout(timer)
+      setZooming(false)
     }
   }, [appState.zoomIn])
 
   const [x, setx] = useState(0)
   const [y, sety] = useState(0)
-  const [z, setz] = useState(1000)
+  const [z, setz] = useState(1200)
+
+  const [angle, setAngle] = useState(0)
 
   const vec = new Vector3()
   useFrame((state) => {
     if (!state.camera) return
+    if (appState.viewMode === 'post') {
+      setAngle((val) => (val + 0.0007) % (Math.PI * 2))
+      const radius = 300
+      const cx = -150 + Math.cos(angle) * radius
+      const cy = 0 + Math.sin(angle) * radius
+      state.camera.position.lerp(vec.set(cx, cy, z), 0.03)
+
+      return
+    }
     if (!zooming) return
 
-    state.camera.position.lerp(vec.set(x, y, z), 0.018)
+    state.camera.position.lerp(vec.set(x, y, z), 0.03)
     state.camera.updateProjectionMatrix()
 
     if (controls?.current) {
-      controls.current.target.lerp(vec.set(x, y, 0), 0.018)
+      controls.current.target.lerp(vec.set(x, y, 0), 0.03)
     }
     if (state.camera.position.z === z) {
       doneZoom()
     }
   })
 
-  const mvCam = (focus: Emotion, z = 1000) => {
+  const mvCam = (focus: Emotion, z = 1200) => {
+    // @ts-ignore-line
+    setAppState(state => ({ ...state, zoomIn: false }))
     setx(focus.x)
     sety(focus.y)
     setz(z)
@@ -93,6 +119,7 @@ function CustomCamera () {
     // @ts-ignore-line
     setAppState(state => ({ ...state, mvCam }))
   }, [])
+
 
   return (
     <PerspectiveCamera
