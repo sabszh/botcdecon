@@ -1,7 +1,6 @@
-import { useEffect, useContext, useMemo, useState, useRef } from 'react'
+import { useEffect, useContext, useMemo, useState } from 'react'
 import { AppContext } from '../main'
 import { useSpring, config } from '@react-spring/three'
-import { CSSTransition } from 'react-transition-group'
 import Pin from './Pin'
 
 const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
