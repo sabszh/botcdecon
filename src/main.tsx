@@ -27,6 +27,7 @@ export type Entry = {
   text: string
   date: string
   points: Point[]
+  index: number
 }
 export type Point = {
   id: number

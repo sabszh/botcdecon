@@ -1,6 +1,7 @@
 import { useEffect, useContext, useMemo, useState, useRef } from 'react'
 import { AppContext } from '../main'
 import { useSpring, config } from '@react-spring/three'
+import { CSSTransition } from 'react-transition-group'
 import Pin from './Pin'
 
 const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
@@ -27,51 +28,52 @@ export default function Memories () {
   useEffect(() => {
     if (appState.entries.length > 0) return
 
-    fetch(`${dataEndpoint}/entries`).then(res => res.json()).then((data) => {
-      // @ts-ignore-line
-      setAppState(state => ({ ...state, entries: data }))
-    })
+    fetchEntries(true)
   }, [])
 
-  const points = [
-    { x: -56, y: 24 },
-    { x: -16, y: 23 },
-    { x: -37, y: -35 },
-    { x: 30, y: -4 }
-  ]
-  const [idx, setIdx] = useState(0)
-  const [int, setInt] = useState<number>()
-  const idxRef = useRef(idx)
+  const COUNT = 5
+  function fetchEntries (initial = false) {
+    fetch(`${dataEndpoint}/entries`).then(res => res.json()).then((data) => {
+      // @ts-ignore-line
+      setAppState((state) => {
+        if (initial) {
+          return { ...state, entries: data }
+        }
 
-  function cycle () {
-    const ci = idxRef.current
-    const p = points[ci]
-    appState.mvCam(p, 1200)
-    setIdx((val) => (val + 1) % points.length)
+        const newlist = state.entries.slice(COUNT)
+        const ids = state.entries.map((e: any) => e.slug)
+
+        let replaced = 0
+        data.sort(() => Math.random() - 0.5) // shuffle
+        data.forEach((entry: any) => {
+          if (replaced >= COUNT) return
+          if (ids.includes(entry.slug)) return
+
+          newlist.push(entry)
+          replaced++
+        })
+
+        newlist.sort(() => Math.random() - 0.5) // shuffle
+
+        return { ...state, entries: newlist }
+      })
+    })
   }
 
+  // every 1 min call fetchEntries
   useEffect(() => {
-    idxRef.current = idx
-  }, [idx])
-
-  // useEffect(() => {
-  //   clearInterval(int)
-  //
-  //   if (appState.viewMode !== 'post') {
-  //     // setIdx(0)
-  //     return
-  //   }
-  //
-  //   cycle()
-  //   setInt(setInterval(cycle, 4000))
-  // }, [appState.viewMode])
+    const interval = setInterval(() => {
+      fetchEntries()
+    }, 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <>
       <group>
         {entries.map((entry, index) => (
           <Pin
-            key={index}
+            key={entry.slug}
             entry={entry}
             idx={index}
             opacity={opacity}

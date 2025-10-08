@@ -58,7 +58,8 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     // { url: '/markers/marker-16.png', scale: [131 / s, 152 / s, 0], center: new Vector2(0.8, 0) },
     // { url: '/markers/marker-17.png', scale: [84 / s, 140 / s, 0], center: new Vector2(0.8, 0) },
   ]
-  const pick = icons[idx % icons.length]
+  const lookup = entry ? entry.index : idx
+  const pick = icons[lookup % icons.length]
   const texture = useTexture(pick.url) as Texture
 
   let pin: Point | Point[] | Pos | undefined = position
@@ -114,7 +115,7 @@ export default function Pin ({ entry, points, position, idx, opacity, mult = 1, 
     return (
       <>
         {pin.map((p, i) => {
-          const pp = (idx + i) % icons.length
+          const pp = lookup % icons.length
           const tex = allTextures[pp]
           return (
             <sprite key={i} onPointerEnter={onHover} onPointerLeave={onLeave} onClick={onClick} position={[p.x, p.y, 4]} scale={icons[pp].scale} center={icons[pp].center}>
