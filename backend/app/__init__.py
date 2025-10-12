@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(api_router, prefix=settings.api_prefix)
 
     # ✅ serve frontend build
-    dist_dir = Path(__file__).resolve().parent.parent / "dist"
+    dist_dir = Path(__file__).resolve().parent.parent.parent / "dist"
     if dist_dir.exists():
         app.mount("/", StaticFiles(directory=dist_dir, html=True), name="frontend")
     else:
