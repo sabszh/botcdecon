@@ -6,7 +6,7 @@ import { Html } from '@react-three/drei'
 import { AppContext } from '../main'
 import Pin from './Pin'
 
-const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
+const apiBase: string = (import.meta.env.VITE_API_BASE as string)
 
 export default function (props: ThreeElements['mesh']) {
   const { appState, setAppState } = useContext(AppContext)
@@ -41,7 +41,7 @@ export default function (props: ThreeElements['mesh']) {
   useEffect(() => {
     if (appState.emotions.length > 0) return
 
-    fetch(`${dataEndpoint}/emotions`).then(res => res.json()).then((data) => {
+    fetch(`${apiBase}/emotions`).then(res => res.json()).then((data) => {
       // @ts-ignore-line
       setAppState(state => ({ ...state, emotions: data }))
     })

@@ -4,7 +4,7 @@ import { CSSTransition } from 'react-transition-group'
 import { useState, useRef, useContext, useMemo } from 'react'
 import { AppContext } from './main'
 
-const api = import.meta.env.VITE_DATA_ENDPOINT || ''
+const apiBase: string = (import.meta.env.VITE_API_BASE as string)
 
 export default function ({ onRestart }: { onRestart: () => void }) {
   const { appState, setAppState } = useContext(AppContext)
@@ -47,7 +47,7 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     const onsite = appState.onsite
 
     try {
-      const res = await fetch(`${api}/entries`, {
+      const res = await fetch(`${apiBase}/entries`, {
         method: 'POST',
         body: JSON.stringify({ text, name, location, points, onsite, token, region })
       })
@@ -104,7 +104,7 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     if (region !== '') return
 
     try {
-      const res = await fetch('/region')
+      const res = await fetch(`${apiBase}/region`)
       const data = await res.json()
       setRegion(data.where)
     } catch (err) {
@@ -212,4 +212,3 @@ export default function ({ onRestart }: { onRestart: () => void }) {
     </>
   )
 }
-

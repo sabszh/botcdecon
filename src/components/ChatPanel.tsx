@@ -13,9 +13,8 @@ type Props = {
   onChangeLanguage: () => void
 }
 
-const resolvedBase = (import.meta.env.VITE_API_BASE ?? '').trim()
-const API_BASE = resolvedBase ? resolvedBase.replace(/\/$/, '') : (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '')
-const CHAT_ENDPOINT = API_BASE ? `${API_BASE}/api/chat` : '/api/chat'
+const apiBase: string = (import.meta.env.VITE_API_BASE as string)
+const CHAT_ENDPOINT = `${apiBase}/api/chat`
 
 const scripts = {
   en: {
@@ -336,7 +335,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           })
         }
         if (audioUrl) {
-          const resolved = audioUrl.startsWith('data:') ? audioUrl : (API_BASE ? `${API_BASE}${audioUrl}` : audioUrl)
+          const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
           playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken))
         } else if (replyText) {
           speakBrowserTTS(replyText, language, afterAnswerSpoken)

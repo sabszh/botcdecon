@@ -3,7 +3,7 @@ import { AppContext } from '../main'
 import { useSpring, config } from '@react-spring/three'
 import Pin from './Pin'
 
-const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
+const apiBase: string = (import.meta.env.VITE_API_BASE as string)
 
 export default function Memories () {
   const { appState, setAppState } = useContext(AppContext)
@@ -32,7 +32,7 @@ export default function Memories () {
 
   const COUNT = 5
   function fetchEntries (initial = false) {
-    fetch(`${dataEndpoint}/entries`).then(res => res.json()).then((data) => {
+    fetch(`${apiBase}/entries`).then(res => res.json()).then((data) => {
       // @ts-ignore-line
       setAppState((state) => {
         if (initial) {

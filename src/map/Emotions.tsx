@@ -8,7 +8,7 @@ function useQuery() {
   return new URLSearchParams(useLocation().search)
 }
 
-const dataEndpoint = import.meta.env.VITE_DATA_ENDPOINT || ''
+const apiBase: string = (import.meta.env.VITE_API_BASE as string)
 
 export default function Emotions () {
   const { appState, setAppState } = useContext(AppContext)
@@ -59,7 +59,7 @@ export default function Emotions () {
   useEffect(() => {
     if (!filter) return
 
-    fetch(`${dataEndpoint}/emotion?id=${filter}`).then(res => res.json()).then((data) => {
+    fetch(`${apiBase}/emotion?id=${filter}`).then(res => res.json()).then((data) => {
       // @ts-ignore-line
       setAppState(state => ({ ...state, filteredEntries: data }))
     })
