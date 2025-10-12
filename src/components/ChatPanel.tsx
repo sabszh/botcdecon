@@ -94,7 +94,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [messages, isLoading])
 
-  const playAudio = useCallback((src: string, onEnded?: () => void) => {
+  const playAudio = useCallback((src: string, onEnded?: () => void, onError?: () => void) => {
     if (!src) return
     lastAudioSrcRef.current = src
     const el = audioElRef.current
@@ -115,12 +115,38 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
     el.onerror = () => {
       setIsAudioPlaying(false)
-      // Treat errors like ended so flows continue
-      if (onEnded) onEnded()
+      // If an error handler is provided, use it; otherwise continue as ended
+      if (onError) onError()
+      else if (onEnded) onEnded()
     }
     el.onplay = () => setIsAudioPlaying(true)
     el.onpause = () => setIsAudioPlaying(false)
     el.play().catch(() => setIsAudioPlaying(false))
+  }, [])
+
+  // Fallback TTS using the browser's SpeechSynthesis
+  const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void) => {
+    if (!text) { if (onEnded) onEnded(); return }
+    const synth = (window as any).speechSynthesis as SpeechSynthesis | undefined
+    if (!synth) { if (onEnded) onEnded(); return }
+    try { synth.cancel() } catch {}
+    // Stop mic while speaking
+    try { recognitionRef.current?.stop?.() } catch {}
+    setIsMicOn(false)
+    setIsAudioPlaying(true)
+    const utter = new SpeechSynthesisUtterance(text)
+    utter.lang = lang === 'da' ? 'da-DK' : 'en-US'
+    utter.rate = 1
+    utter.onend = () => {
+      setIsAudioPlaying(false)
+      setMicDesired(true)
+      if (onEnded) onEnded()
+    }
+    utter.onerror = () => {
+      setIsAudioPlaying(false)
+      if (onEnded) onEnded()
+    }
+    synth.speak(utter)
   }, [])
 
   // Speech recognition setup per language
@@ -299,26 +325,23 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           })
         })
       } else {
-        // Question mode: play TTS of the answer first; once finished, play EXPLORE audio,
-        // and only after that audio ends, show the Explore message.
+        // Question mode: play TTS of the answer first; on failure, fallback to browser TTS.
+        // After the answer is spoken, play EXPLORE audio and only then show the Explore message.
         const conf = scripts[language]
-        if (audioUrl) {
-          const resolved = audioUrl.startsWith('data:') ? audioUrl : (API_BASE ? `${API_BASE}${audioUrl}` : audioUrl)
-          playAudio(resolved, () => {
-            // After the answer audio finishes, play Explore audio first, then show Explore text
-            playAudio(`/audio/${language}_EXPLORE.mp3`, () => {
-              addMessage('bot', conf.explore)
-              setPhase('explore')
-              setMicDesired(false)
-            })
-          })
-        } else {
-          // No answer audio; still play Explore audio first, then show Explore text
+        const afterAnswerSpoken = () => {
           playAudio(`/audio/${language}_EXPLORE.mp3`, () => {
             addMessage('bot', conf.explore)
             setPhase('explore')
             setMicDesired(false)
           })
+        }
+        if (audioUrl) {
+          const resolved = audioUrl.startsWith('data:') ? audioUrl : (API_BASE ? `${API_BASE}${audioUrl}` : audioUrl)
+          playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken))
+        } else if (replyText) {
+          speakBrowserTTS(replyText, language, afterAnswerSpoken)
+        } else {
+          afterAnswerSpoken()
         }
       }
     } catch (err) {
