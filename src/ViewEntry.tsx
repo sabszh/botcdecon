@@ -1,135 +1,55 @@
-import type { Point } from './main'
-import { useContext, useMemo, useState, useEffect, useRef } from 'react'
-import { AppContext, Entry } from './main'
+import { useContext, useMemo, useRef } from 'react'
 import { CSSTransition } from 'react-transition-group'
-import { Link } from 'react-router-dom'
-
-function euclideanDistance (point1: Point, point2: Point) {
-  const dx = point1.x - point2.x
-  const dy = point1.y - point2.y
-  return Math.sqrt(dx * dx + dy * dy)
-}
-
-function calculateDistance (referencePoint: Point, objectsArray: Entry[]) {
-  return objectsArray.map(obj => {
-    const pointsDistances = obj.points.map(point => euclideanDistance(referencePoint, point))
-    const minDistance = Math.min(...pointsDistances)
-    return {
-      ...obj,
-      minDistance
-    }
-  })
-}
-
-function sortByProximity(objectsArray: (Entry & { minDistance: number })[]) {
-  return objectsArray.sort((a, b) => a.minDistance - b.minDistance);
-}
-
-type EntryWithDistance = Entry & { minDistance: number }
+import { AppContext } from './main'
 
 export default function () {
   const { appState, setAppState } = useContext(AppContext)
 
-  const entry = useMemo(() => appState.currentEntry, [appState.currentEntry])
-  const [closing, setClosing] = useState(false)
-  const showEntry = useMemo(() => (entry !== null && !closing), [entry, closing])
-
-  const [sortedEntries, setSortedEntries] = useState<EntryWithDistance[]>([])
-
-  const entries = useMemo(() => {
-    const db = appState.entries.filter((entry) => entry.points.length > 0)
-    if (appState.myEntries?.length) {
-      appState.myEntries.forEach((entry) => {
-        if (db.find((e) => e.slug === entry.slug)) return
-        db.push(entry)
-      })
-    }
-    return db
-  }, [appState.entries, appState.myEntries])
-
-  useEffect(() => {
-    const refPoint = appState.currentMarker
-    if (!refPoint) return
-
-    const list = appState.viewMode === 'filtered' ? appState.filteredEntries : entries
-
-    const objectsWithDistances = calculateDistance(refPoint, list)
-    const sortedObjects = sortByProximity(objectsWithDistances)
-    setSortedEntries(sortedObjects)
-  }, [appState.currentMarker])
-
-  const close = async () => {
-    setClosing(true)
-
-    await sleep(300)
-
-    // @ts-ignore-line
-    setAppState(state => ({ ...state, currentEntry: null }))
-    setClosing(false)
-  }
-
-  const nextEntry = () => {
-    const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
-    if (current === -1) return
-
-    const nextindex = (current + 1) % sortedEntries.length
-    const next = sortedEntries[nextindex]
-
-    // @ts-ignore-line
-    setAppState(state => ({ ...state, currentEntry: next }))
-    // appState.mvCam(next.points[0], 1000)
-  }
-  const prevEntry = () => {
-    const current = sortedEntries.findIndex(entry => entry.slug === appState.currentEntry?.slug)
-    if (current === -1) return
-
-    const prev = sortedEntries[(current - 1 + sortedEntries.length) % sortedEntries.length]
-
-    // @ts-ignore-line
-    setAppState(state => ({ ...state, currentEntry: prev }))
-    // appState.mvCam(prev.points[0], 1000)
-  }
+  const show = useMemo(() => appState.currentEntry !== null, [appState.currentEntry])
 
   const ref1 = useRef(null)
+  const ref2 = useRef(null)
+
+  function back () {
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, currentEntry: null }))
+  }
+
+  function backToExplore () {
+    // @ts-ignore-line
+    setAppState((state) => ({ ...state, currentEntry: null, viewMode: 'explore' }))
+  }
+
+  const viewEntry = appState.currentEntry
 
   return (
     <>
-      <CSSTransition nodeRef={ref1} in={showEntry} classNames='fade' timeout={300} unmountOnExit>
-        <div onClick={close} className='fixed inset-0 p-4 md:p-16 z-10 blurX overflow-auto'>
-          <div onClick={e => e.stopPropagation()} className='w-full max-w-2xl mx-auto bg-white rounded-3xl px-8 py-6 text-xl md:text-2xl mt-32 md:mt-40 relative'>
-            <ul className='flex flex-wrap -mx-2 mb-4 text-base'>
-              {entry?.points?.map((point: any, i: number) => (
-                <EntryPoint key={i} point={point}/>
-              ))}
-            </ul>
-            <div className='whitespace-pre-line'>
-              <p>{entry?.text}</p>
-            </div>
-            {(entry?.name || entry?.location) && (
-              <div className='flex mt-4 text-base'>
-                <p className=''>{entry?.name}</p>
-                {(entry?.name && entry?.location) && (
-                  <p className='px-2'>&middot;</p>
-                )}
-                <p className=''>{entry?.location}</p>
-              </div>
-            )}
+      <CSSTransition nodeRef={ref1} in={show} classNames='fade' timeout={300} unmountOnExit>
+        <div ref={ref1} className='absolute top-0 left-20 m-6 md:m-16 z-10 blurX'>
+          <button onClick={back} className='text-bg bg-white text-3xl'>
+            <span className='sr-only'>Close</span>
+            <img src='/x.svg' alt='Close' className='' style={{ width:'28px', height:'15px' }}/>
+          </button>
+        </div>
+      </CSSTransition>
 
-            <div onClick={e => e.stopPropagation()} className='absolute bottom-full left-0 mb-0.5'>
-              <div className='flex items-center'>
-                <button onClick={close} className='text-bg bg-white text-3xl'>
-                  <span className='sr-only'>Close</span>
-                  <img src='/x.svg' alt='Close' className='' style={{ width:'28px', height:'15px' }}/>
-                </button>
-                <button onClick={prevEntry} className='text-bg bg-white text-sm ml-0.5 !leading-normal'>
-                  <span className='sr-only'>Previous entry</span>
-                  <span>&larr;</span>
-                </button>
-                <button onClick={nextEntry} className='text-bg bg-white text-sm ml-0.5 !leading-normal'>
-                  <span className='sr-only'>Next entry</span>
-                  <span>&rarr;</span>
-                </button>
+      <CSSTransition nodeRef={ref2} in={show} classNames='fade' timeout={300} unmountOnExit>
+        <div ref={ref2} className='absolute right-0 top-0 bottom-0 p-4 md:p-12 w-full max-w-lg z-10 blurX'>
+          <div className='bg-white rounded-2xl md:rounded-3xl px-10 py-8 min-h-full overflow-y-auto shadow-lg flex flex-col'>
+            <div className='flex-auto'>
+              <div className='mt-12'>
+                <div className='text-xl md:text-2xl'>A memory to remember for the future:</div>
+                <div className='mt-2 text-2xl md:text-3xl italic'>
+                  {viewEntry?.text}
+                </div>
               </div>
+              <div className='mt-8 text-sm'>By <span className='underline'>{viewEntry?.name}</span> from <span className='underline'>{viewEntry?.location || 'Unknown'}</span></div>
+              <div className='mt-2 text-sm'>Posted on <span className='underline'>{viewEntry?.date}</span></div>
+            </div>
+            <div>
+              <button onClick={backToExplore} className='text-bg text-2xl md:text-3xl mt-8'>
+                <span>Back to the memories</span>
+              </button>
             </div>
           </div>
         </div>
@@ -138,28 +58,3 @@ export default function () {
   )
 }
 
-function EntryPoint ({ point }: { point: Point }) {
-  const opacity = () => {
-    if (point.distance === undefined) return
-    const pc = 1 / (1 + point.distance / 400)
-    return pc
-  }
-
-  const link = `?emotion=${point.emotion}`
-
-  return (
-    <li className='mx-2'>
-      <p style={{ opacity: opacity() }}>
-        {point.emotion === 'Beyond' ? (
-          <span>{point.emotion}</span>
-        ) : (
-        <Link to={link}>{point.emotion}</Link>
-        )}
-      </p>
-    </li>
-  )
-}
-
-function sleep (ms = 1000) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}

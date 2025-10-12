@@ -1,17 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
-
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import Root from './Root'
-import Error from './pages/Error'
 import Home from './pages/Home'
-import About from './pages/About'
-import Legal from './pages/Legal'
-
-// for QR codes
-import Exhibition from './pages/Exhibition'
-import Berlin from './pages/Berlin'
 
 export type Emotion = {
   slug: string
@@ -84,35 +74,7 @@ const State: Context['appState'] = {
 
 export const AppContext = React.createContext<Context>(null!)
 
-const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <Root/>,
-    errorElement: <Error/>,
-    children: [
-      {
-        path: '',
-        element: <Home/>
-      },
-      {
-        path: 'about',
-        element: <About/>
-      },
-      {
-        path: 'legal',
-        element: <Legal/>
-      },
-      {
-        path: 'exhibition',
-        element: <Exhibition/>
-      },
-      {
-        path: 'berlin',
-        element: <Berlin/>
-      }
-    ]
-  }
-])
+// Chat-only app: render Home directly (no router/pages)
 
 function getStoredEntries () {
   return [] // These should expire at some point, or we skip completely
@@ -132,6 +94,6 @@ function StoreProvider (props: React.PropsWithChildren) {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <StoreProvider>
-    <RouterProvider router={router}/>
+    <Home />
   </StoreProvider>
 )

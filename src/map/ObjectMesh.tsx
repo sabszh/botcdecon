@@ -22,7 +22,8 @@ export default function (props: ThreeElements['mesh'] & { onObjLoaded: () => voi
 
   useFrame((_state, delta) => {
     if (!hippo?.current) return
-    hippo.current.rotation.y += delta
+    // Slow, subtle rotation for background
+    hippo.current.rotation.y += delta * 0.12
 
     if (materials[matKey].opacity !== 1) {
       materials[matKey].opacity += 0.01

@@ -8,7 +8,7 @@ export default function () {
 
   useEffect(() => {
     // @ts-ignore-line
-    setAppState((state) => ({ ...state, onsite: 1 }))
+    setAppState((state) => ({ ...state, onsite: 2 }))
     navigate('/')
   }, [])
 
@@ -22,3 +22,4 @@ export default function () {
     </div>
   )
 }
+

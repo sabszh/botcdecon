@@ -1,0 +1,19 @@
+# Core FastAPI and server
+fastapi==0.118.0
+uvicorn==0.37.0
+python-dotenv==1.1.1
+python-multipart==0.0.20
+
+# AI/ML APIs
+huggingface-hub==0.34.4
+elevenlabs==2.16.0
+
+# LangChain for embeddings
+langchain-huggingface==0.3.1
+numpy
+
+# Vector database
+pinecone==7.3.0
+
+# Note: Using HuggingFace cloud embeddings (no local models/PyTorch needed)
+# Total size: ~50-100MB (vs 900MB+ with sentence-transformers)

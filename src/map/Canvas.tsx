@@ -7,8 +7,7 @@ import { AppContext, Emotion } from '../main'
 
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'
-import Memories from './Memories'
-import Emotions from './Emotions'
+// Removed Memories/Emotions to avoid router dependency and ensure background renders
 
 export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
   const { appState, setAppState } = useContext(AppContext)
@@ -29,8 +28,6 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
       <CustomCamera/>
       <ambientLight intensity={5}/>
       <PlaneMesh receiveShadow/>
-      <Memories/>
-      <Emotions/>
 
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
 
@@ -47,10 +44,9 @@ function CustomCamera () {
   const { appState, setAppState } = useContext(AppContext)
 
   const canInteract = useMemo(() => {
-    const list = ['explore', 'pick', 'saved', 'filtered']
-    return list.includes(appState.viewMode)
-      && !appState.zoomIn
-  }, [appState.viewMode, appState.zoomIn])
+    // Allow limited interaction in all modes except when zooming
+    return !appState.zoomIn
+  }, [appState.zoomIn])
 
   const controls = useRef<OrbitControlsImpl>(null)
   const [zooming, setZooming] = useState(false)
@@ -84,11 +80,17 @@ function CustomCamera () {
   useFrame((state) => {
     if (!state.camera) return
     if (appState.viewMode === 'post') {
-      setAngle((val) => (val + 0.0007) % (Math.PI * 2))
-      const radius = 300
-      const cx = -150 + Math.cos(angle) * radius
-      const cy = 0 + Math.sin(angle) * radius
-      state.camera.position.lerp(vec.set(cx, cy, z), 0.03)
+      // Increase amplitude and smooth background movement
+      setAngle((val) => (val + 0.0016) % (Math.PI * 2))
+      const radius = 1000
+      const cx = -300 + Math.cos(angle) * radius
+      const cy = 100 + Math.sin(angle * 0.85) * radius
+      // gentle in/out zoom between ~1200 and ~1900
+      const zz = 1550 + Math.sin(angle * 0.6) * 350
+      state.camera.position.lerp(vec.set(cx, cy, zz), 0.035)
+      if (controls?.current) {
+        controls.current.target.lerp(vec.set(cx * 0.4, cy * 0.4, 0), 0.02)
+      }
 
       return
     }
