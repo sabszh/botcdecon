@@ -29,12 +29,12 @@ def main() -> None:
                 "Please share a memory? Something you’d like those people in the future to remember to remember. Press the Share button when you’re done."
             ),
             # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
-            "THANK_YOU": "Thank you for sharing your memory. It is now part of Carte de Continuonus.",
+            "THANK_YOU": "Thank you for sharing your memory.",
             "QUESTION_1": (
-                "Thank you for sharing. Now would you ask us about what others have felt it was important for the future to remember to remember? You are in their future. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done."
+                "Now would you ask us about what others have felt it was important for the future to remember to remember? You are in their future. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done."
             ),
             "QUESTION_2": (
-                "Would you like to ask something else before continuing on? Press the Share button when you’re done."
+                "Would you like to ask something else before continuing on? If you want to ask more, you can do that now; otherwise say \"no\". Press the Share button when you’re done."
             ),
             # Empty in ChatPanel; skip generation if empty
             "EXPLORE": "",
@@ -54,12 +54,12 @@ def main() -> None:
                 "Vil du dele en erindring? Noget du gerne vil have, at mennesker i fremtiden skal huske at huske. Tryk på Del, når du er færdig."
             ),
             # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
-            "THANK_YOU": "Tak for at dele din erindring. Den er nu en del af Carte de Continuonus.",
+            "THANK_YOU": "Tak for at dele din erindring.",
             "QUESTION_1": (
-                "Tak fordi du delte. Vil du nu spørge os om, hvad andre har følt var vigtigt for fremtiden at huske at huske? Du er i deres fremtid. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del, når du er færdig."
+                "Vil du nu spørge os om, hvad andre har følt var vigtigt for fremtiden at huske at huske? Du er i deres fremtid. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del, når du er færdig."
             ),
             "QUESTION_2": (
-                "Vil du spørge om noget mere, før vi fortsætter? Tryk på Del, når du er færdig."
+                "Vil du spørge om noget mere, før vi fortsætter? Hvis du vil spørge mere, kan du gøre det nu; ellers sig \"nej\". Tryk på Del, når du er færdig."
             ),
             # Empty in ChatPanel; skip generation if empty
             "EXPLORE": "",
