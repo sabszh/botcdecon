@@ -49,7 +49,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const [micDesired, setMicDesired] = useState(false)
   const [phase, setPhase] = useState<Phase>('intro')
   const [hasSharedMemory, setHasSharedMemory] = useState(false)
-  const [questionCount, setQuestionCount] = useState(0)
+  // No follow-up question now; no need to track question count
   const [micError, setMicError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const chatListRef = useRef<HTMLDivElement | null>(null)
@@ -330,26 +330,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         })
       } else {
         // Question mode: play TTS of the answer first; on failure, fallback to browser TTS.
-        // After the answer is spoken, prompt for another question (first time),
-        // otherwise say farewell and return.
+        // After the answer is spoken, immediately thank and finish (no follow-up question).
         const conf = scripts[language]
         const afterAnswerSpoken = () => {
-          if (questionCount === 0) {
-            // First answered question → ask if they'd like another
-            addMessage('bot', conf.question2)
-            playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
-              setPhase('await_question')
-              setMicDesired(true)
-            })
-            setQuestionCount(c => c + 1)
-          } else {
-            // Subsequent answer → finish with farewell
-            addMessage('bot', conf.farewell)
-            playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
-              onChangeLanguage()
-            })
-            setMicDesired(false)
-          }
+          addMessage('bot', conf.farewell)
+          playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
+            onChangeLanguage()
+          })
+          setMicDesired(false)
         }
         if (audioUrl) {
           const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
