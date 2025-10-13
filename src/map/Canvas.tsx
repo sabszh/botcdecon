@@ -25,6 +25,8 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 
   return (
     <Canvas shadows='basic' onPointerDown={pointerDown}>
+      {/* Near-white with a subtle purple tint */}
+      <color attach='background' args={['#f6f2fa']} />
       <CustomCamera/>
       <ambientLight intensity={5}/>
       <PlaneMesh receiveShadow/>
@@ -32,10 +34,8 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
 
       <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={1}/>
-      {/* <fog attach='fog' args={[0x988C99, 700, 4400]}/> */}
-      {/* <fog attach='fog' args={[0xa984ac, 700, 4400]}/> */}
-      <fog attach='fog' args={[0xb2a4b6, 700, 4400]}/>
-      {/* <fog attach='fog' args={[0xdd4c3b, 700, 3400]}/> */}
+      {/* Fog matching the subtle purple-tinted background */}
+      <fog attach='fog' args={[0xf6f2fa, 700, 4400]}/>
     </Canvas>
   )
 }

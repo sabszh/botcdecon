@@ -15,37 +15,57 @@ def main() -> None:
 
     client = ElevenLabs(api_key=api_key)
 
-    # Exact texts from src/pages/Home.tsx (memory2 removed)
+    # Exact texts from src/components/ChatPanel.tsx
     SCRIPTS = {
         "en": {
             "WELCOME": (
-                "Hello, what a long strange trip we've been on, but there's still a long road ahead. "
-                "Welcome to our vehicle. We are Bot de Continuonus, a chatbot speaking with Helene Nymann's cloned voice.\n\n"
-                "We speak through a dataset of thousands of people who were here before you. They each shared a memory "
-                "they want the future to remember and placed it on Carte de Continuonus.\n\n"
-                "Let's travel across the map. You can leave something for the future and ask about what others remembered."
+                "Hello!\n\n"
+                "Thank you for being here. What a long strange trip we’ve been on, but there’s still a long road ahead.\n\n"
+                "Welcome to our vehicle. We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.\n\n"
+                "We may have her voice, but we’re speaking through a data set or rather through the experiences of thousands of people who were here before you. All of whom have shared what they remember that they want the future to remember. They have placed that memory onto a website known as continuonus. On the website a map known as Carte de Continuonus is being cultivated.\n\n"
+                "Now let's journey through that map. In here you may share thing that you feel is important for the future to remember and you can ask us about what previous visitors shared?"
             ),
-            "MEMORY_1": "Please share a memory you want the future to remember. Press Send when you are ready.",
+            "MEMORY_1": (
+                "Please share a memory? Something you’d like those people in the future to remember to remember. Press the Share button when you’re done."
+            ),
+            # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
             "THANK_YOU": "Thank you for sharing your memory. It is now part of Carte de Continuonus.",
-            "QUESTION_1": "Now, ask about what others felt was important for the future to remember. Press Send when you are ready.",
-            "QUESTION_2": "Would you like to ask another question? Press Send when you are ready or choose Skip.",
-            "EXPLORE": "You can now explore Carte de Continuonus and listen to the memories that were left here or skip to leave the car.",
-            "FAREWELL": "Thank you for sharing. You are now part of the continuous landscape.",
+            "QUESTION_1": (
+                "Thank you for sharing. Now would you ask us about what others have felt it was important for the future to remember to remember? You are in their future. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done."
+            ),
+            "QUESTION_2": (
+                "Would you like to ask something else before continuing on? Press the Share button when you’re done."
+            ),
+            # Empty in ChatPanel; skip generation if empty
+            "EXPLORE": "",
+            "FAREWELL": (
+                "Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future."
+            ),
         },
         "da": {
             "WELCOME": (
-                "Hej, sikke en lang mærkelig tur vi har været på, men der er stadig en vej forude. "
-                "Velkommen til vores køretøj. Vi er Bot de Continuonus, en chatbot der taler med Helene Nymanns stemme.\n\n"
-                "Vi taler gennem et datasæt af tusindvis af mennesker, der var her før dig. De har alle delt en erindring, "
-                "som de vil have fremtiden til at huske og placeret den på Carte de Continuonus.\n\n"
-                "Lad os rejse gennem kortet. Du kan efterlade noget til fremtiden og spørge om, hvad andre har husket."
+                "Hej!\n\n"
+                "Tak fordi du er her. Sikke en lang, mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\n"
+                "Velkommen til vores køretøj. Vi er Bot de ContinuOnus, en AI‑genereret chatbot, der taler med kunstneren Helene Nymanns klonede stemme.\n\n"
+                "Vi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort kendt som Carte de Continuonus.\n\n"
+                "Lad os nu rejse gennem det kort. Her kan du dele noget, som du føler er vigtigt for fremtiden at huske, og du kan spørge os om, hvad tidligere besøgende har delt?"
             ),
-            "MEMORY_1": "Del en erindring du vil have, at fremtiden skal huske. Tryk Send når du er klar.",
+            "MEMORY_1": (
+                "Vil du dele en erindring? Noget du gerne vil have, at mennesker i fremtiden skal huske at huske. Tryk på Del, når du er færdig."
+            ),
+            # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
             "THANK_YOU": "Tak for at dele din erindring. Den er nu en del af Carte de Continuonus.",
-            "QUESTION_1": "Spørg nu til noget, andre har følt var vigtigt for fremtiden at huske. Tryk Send når du er klar.",
-            "QUESTION_2": "Vil du stille endnu et spørgsmål? Tryk Send når du er klar eller vælg Spring over.",
-            "EXPLORE": "Du kan nu udforske Carte de Continuonus og lytte til erindringerne, der blev efterladt her eller springe over for at forlade bilen.",
-            "FAREWELL": "Tak fordi du delte. Du er nu en del af det kontinuerlige landskab.",
+            "QUESTION_1": (
+                "Tak fordi du delte. Vil du nu spørge os om, hvad andre har følt var vigtigt for fremtiden at huske at huske? Du er i deres fremtid. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del, når du er færdig."
+            ),
+            "QUESTION_2": (
+                "Vil du spørge om noget mere, før vi fortsætter? Tryk på Del, når du er færdig."
+            ),
+            # Empty in ChatPanel; skip generation if empty
+            "EXPLORE": "",
+            "FAREWELL": (
+                "Tak fordi du tog denne del af rejsen sammen med os. Du er nu også en del af continuOnus‑landskabet. Vi håber at se dig i fremtiden."
+            ),
         },
     }
 
@@ -79,6 +99,9 @@ def main() -> None:
 
     for lang, items in SCRIPTS.items():
         for label, text in items.items():
+            # Skip generating audio for empty texts
+            if not (text or "").strip():
+                continue
             filename = f"{lang}_{label}.mp3"
             audio = synth(text, speed=speed_for(label))
             (frontend_out / filename).write_bytes(audio)

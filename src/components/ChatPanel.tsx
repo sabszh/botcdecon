@@ -15,23 +15,24 @@ type Props = {
 
 const apiBase: string = (import.meta.env.VITE_API_BASE as string)
 const CHAT_ENDPOINT = `${apiBase}/api/chat`
+const INITIAL_AUDIO_DELAY_MS = 1200
 
 const scripts = {
   en: {
-    welcome: `Hello, what a long strange trip we've been on, but there's still a long road ahead. Welcome to our vehicle. We are Bot de Continuonus, a chatbot speaking with Helene Nymann's cloned voice.\n\nWe speak through a dataset of thousands of people who were here before you. They each shared a memory they want the future to remember and placed it on Carte de Continuonus.\n\nLet's travel across the map. You can leave something for the future and ask about what others remembered.`,
-    memory1: 'Please share a memory you want the future to remember. Press Send when you are ready.',
-    question1: 'Now, ask about what others felt was important for the future to remember. Press Send when you are ready.',
-    question2: 'Would you like to ask another question? Press Send when you are ready or choose Skip.',
-    explore: 'You can now explore Carte de Continuonus and listen to the memories that were left here or skip to leave the car.',
-    farewell: 'Thank you for participating and exploring Carte de Continuonus.'
+    welcome: `Hello!\n\nThank you for being here. What a long strange trip we’ve been on, but there’s still a long road ahead.\n\nWelcome to our vehicle. We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.\n\nWe may have her voice, but we’re speaking through a data set or rather through the experiences of thousands of people who were here before you. All of whom have shared what they remember that they want the future to remember. They have placed that memory onto a website known as continuonus. On the website a map known as Carte de Continuonus is being cultivated.\n\nNow let's journey through that map. In here you may share something that you feel is important for the future to remember and you can ask us about what previous visitors shared?`,
+    memory1: `Please share a memory? Something you’d like those people in the future to remember to remember. Press the Share button when you’re done.`,
+    question1: `Thank you for sharing. Now would you ask us about what others have felt it was important for the future to remember to remember? You are in their future. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done.`,
+    question2: `Would you like to ask something else before continuing on? Press the Share button when you’re done.`,
+    explore: ``,
+    farewell: `Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future.`
   },
   da: {
-    welcome: `Hej, sikke en lang mærkelig tur vi har været på, men der er stadig en vej forude. Velkommen til vores køretøj. Vi er Bot de Continuonus, en chatbot der taler med Helene Nymanns stemme.\n\nVi taler gennem et datasæt af tusindvis af mennesker, der var her før dig. De har alle delt en erindring, som de vil have fremtiden til at huske og placeret den på Carte de Continuonus.\n\nLad os rejse gennem kortet. Du kan efterlade noget til fremtiden og spørge om, hvad andre har husket.`,
-    memory1: 'Del en erindring du vil have, at fremtiden skal huske. Tryk Send når du er klar.',
-    question1: 'Spørg nu til noget, andre har følt var vigtigt for fremtiden at huske. Tryk Send når du er klar.',
-    question2: 'Vil du stille endnu et spørgsmål? Tryk Send når du er klar eller vælg Spring over.',
-    explore: 'Du kan nu udforske Carte de Continuonus og lytte til erindringerne, der blev efterladt her eller springe over for at forlade bilen.',
-    farewell: 'Tak fordi du deltog og udforskede Carte de Continuonus.'
+    welcome: `Hej!\n\nTak fordi du er her. Sikke en lang, mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\n Velkommen til vores køretøj. Vi er Bot de ContinuOnus, en AI‑genereret chatbot, der taler med kunstneren Helene Nymanns klonede stemme.\n\nVi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort kendt som Carte de Continuonus.\n\nLad os nu rejse gennem det kort. Her kan du dele noget, som du føler er vigtigt for fremtiden at huske, og du kan spørge os om, hvad tidligere besøgende har delt?`,
+    memory1: `Vil du dele en erindring? Noget du gerne vil have, at mennesker i fremtiden skal huske at huske. Tryk på Del, når du er færdig.`,
+    question1: `Tak fordi du delte. Vil du nu spørge os om, hvad andre har følt var vigtigt for fremtiden at huske at huske? Du er i deres fremtid. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del, når du er færdig.`,
+    question2: `Vil du spørge om noget mere, før vi fortsætter? Tryk på Del, når du er færdig.`,
+    explore: ``,
+    farewell: `Tak fordi du tog denne del af rejsen sammen med os. Du er nu også en del af continuOnus‑landskabet. Vi håber at se dig i fremtiden.`
   }
 } as const
 
@@ -48,6 +49,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const [micDesired, setMicDesired] = useState(false)
   const [phase, setPhase] = useState<Phase>('intro')
   const [hasSharedMemory, setHasSharedMemory] = useState(false)
+  const [questionCount, setQuestionCount] = useState(0)
   const [micError, setMicError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const chatListRef = useRef<HTMLDivElement | null>(null)
@@ -74,16 +76,19 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   useEffect(() => {
     if (!language) return
     const conf = scripts[language]
-    addMessage('bot', conf.welcome)
-    playAudio(`/audio/${language}_WELCOME.mp3`, () => {
-      // chain Memory 1 prompt
-      addMessage('bot', conf.memory1)
-      // After the prompt audio finishes, enable mic automatically
-      playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
-        setPhase('await_memory')
-        setMicDesired(true)
+    const t = setTimeout(() => {
+      addMessage('bot', conf.welcome)
+      playAudio(`/audio/${language}_WELCOME.mp3`, () => {
+        // chain Memory 1 prompt
+        addMessage('bot', conf.memory1)
+        // After the prompt audio finishes, enable mic automatically
+        playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
+          setPhase('await_memory')
+          setMicDesired(true)
+        })
       })
-    })
+    }, INITIAL_AUDIO_DELAY_MS)
+    return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language])
 
@@ -325,14 +330,26 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         })
       } else {
         // Question mode: play TTS of the answer first; on failure, fallback to browser TTS.
-        // After the answer is spoken, play EXPLORE audio and only then show the Explore message.
+        // After the answer is spoken, prompt for another question (first time),
+        // otherwise say farewell and return.
         const conf = scripts[language]
         const afterAnswerSpoken = () => {
-          playAudio(`/audio/${language}_EXPLORE.mp3`, () => {
-            addMessage('bot', conf.explore)
-            setPhase('explore')
+          if (questionCount === 0) {
+            // First answered question → ask if they'd like another
+            addMessage('bot', conf.question2)
+            playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
+              setPhase('await_question')
+              setMicDesired(true)
+            })
+            setQuestionCount(c => c + 1)
+          } else {
+            // Subsequent answer → finish with farewell
+            addMessage('bot', conf.farewell)
+            playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
+              onChangeLanguage()
+            })
             setMicDesired(false)
-          })
+          }
         }
         if (audioUrl) {
           const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
@@ -405,7 +422,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         <div className='flex items-center gap-3 justify-between'>
           <h2 className='text-2xl md:text-3xl font-medium tracking-wide'>Bot de Continuonus</h2>
           <button type='button' onClick={onChangeLanguage} className='rounded-full border border-black/60 px-4 py-2 text-xl text-black hover:bg-black hover:text-white'>
-            {language === 'da' ? 'Skift sprog' : 'Change language'}
+            {language === 'da' ? 'Tilbage' : 'Return'}
           </button>
         </div>
       </div>
@@ -442,20 +459,34 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         <label htmlFor='message' className='sr-only'>Message</label>
         <input ref={inputRef} id='message' name='message' type='text' value={draft} onChange={e => { setDraft(e.target.value); stopMic() }} placeholder={language === 'da' ? 'Skriv her…' : 'Type here…'} className='rounded-full border border-black/30 bg-white/80 px-5 py-4 text-2xl text-black placeholder:text-black/50 shadow-sm focus:border-black focus:outline-none disabled:cursor-not-allowed disabled:opacity-60' disabled={isLoading} autoComplete='off' />
         <div className='flex items-center gap-3'>
-          <button type='button' onClick={() => lastAudioSrcRef.current && playAudio(lastAudioSrcRef.current)} disabled={!lastAudioSrcRef.current} className='rounded-full border border-black/60 bg-white/70 px-5 py-3 text-xl text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50'>
-            {language === 'da' ? 'Afspil' : 'Play'}
-          </button>
-          <button type='button' onClick={() => audioElRef.current?.pause()} disabled={!isAudioPlaying} className='rounded-full border border-black/60 bg-white/70 px-5 py-3 text-xl text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50'>
-            {language === 'da' ? 'Pause' : 'Pause'}
+          <button
+            type='button'
+            onClick={() => {
+              const el = audioElRef.current
+              if (!el) return
+              if (isAudioPlaying) {
+                try { el.pause() } catch {}
+              } else if (lastAudioSrcRef.current) {
+                const last = lastAudioSrcRef.current
+                const cur = el.src || ''
+                const canResume = !!last && cur.includes(last) && el.currentTime > 0 && !el.ended
+                if (canResume) {
+                  el.play().catch(() => {})
+                } else {
+                  playAudio(last)
+                }
+              }
+            }}
+            disabled={!isAudioPlaying && !lastAudioSrcRef.current}
+            className='rounded-full border border-black/60 bg-white/70 px-5 py-3 text-xl text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50'>
+            {isAudioPlaying ? 'Stop' : 'Go'}
           </button>
           <button type='button' onClick={() => (micDesired ? stopMic() : startMic())} disabled={!isSpeechSupported} className={`rounded-full border px-5 py-3 text-xl transition ${micDesired ? 'border-black bg-black text-white' : 'border-black/60 bg-white/70 text-black hover:bg-black hover:text-white'} disabled:cursor-not-allowed disabled:opacity-50`}>
             {micDesired ? (language === 'da' ? 'Mic Til' : 'Mic On') : (language === 'da' ? 'Mic Fra' : 'Mic Off')}
           </button>
-          <button type='button' onClick={skip} className='rounded-full border border-black/60 bg-white/70 px-5 py-3 text-xl text-black hover:bg-black hover:text-white'>
-            {language === 'da' ? 'Spring over' : 'Skip'}
-          </button>
+          {/* Skip button removed as requested */}
           <button type='submit' disabled={isLoading || !draft.trim()} className='ml-auto rounded-full border border-black/60 bg-white px-7 py-4 text-2xl font-medium text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50'>
-            {language === 'da' ? 'Send' : 'Send'}
+            {language === 'da' ? 'Del' : 'Share'}
           </button>
         </div>
       </form>

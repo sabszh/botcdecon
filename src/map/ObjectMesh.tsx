@@ -20,6 +20,8 @@ export default function (props: ThreeElements['mesh'] & { onObjLoaded: () => voi
     materials[matKey].opacity = 0
   }, [materials])
 
+  // Keep original material appearance; do not add tint/highlight
+
   useFrame((_state, delta) => {
     if (!hippo?.current) return
     // Slow, subtle rotation for background
