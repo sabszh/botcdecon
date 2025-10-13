@@ -13,9 +13,14 @@ type Props = {
   onChangeLanguage: () => void
 }
 
-const apiBase: string = (import.meta.env.VITE_API_BASE as string)
+const apiBase: string = (import.meta.env.VITE_API_BASE as string) || ''
 const CHAT_ENDPOINT = `${apiBase}/api/chat`
 const INITIAL_AUDIO_DELAY_MS = 1200
+
+const THANK_YOU_TEXTS: Record<Language, string> = {
+  en: 'Thank you for sharing your memory. It is now part of Carte de Continuonus.',
+  da: 'Tak for at dele din erindring. Den er nu en del af Carte de Continuonus.'
+}
 
 const scripts = {
   en: {
@@ -320,6 +325,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       if (isMemoryTurn) {
         const conf = scripts[language]
         setHasSharedMemory(true)
+        // Ensure a visible thank-you message even if backend returned empty
+        if (!replyText) {
+          addMessage('bot', THANK_YOU_TEXTS[language])
+        }
         // Always use the pre-generated static THANK_YOU audio, regardless of backend response
         playAudio(`/audio/${language}_THANK_YOU.mp3`, () => {
           addMessage('bot', conf.question1)
@@ -339,13 +348,16 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           })
           setMicDesired(false)
         }
-        if (audioUrl) {
+        if (replyText && audioUrl) {
           const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
           playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken))
         } else if (replyText) {
           speakBrowserTTS(replyText, language, afterAnswerSpoken)
         } else {
-          afterAnswerSpoken()
+          // No answer received; keep the session open and prompt to try again
+          addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
+          setPhase('await_question')
+          setMicDesired(true)
         }
       }
     } catch (err) {
