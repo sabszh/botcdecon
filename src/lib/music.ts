@@ -18,18 +18,24 @@ class BackgroundMusicController {
     el.preload = 'auto'
     this.audio = el
     this.initialized = true
-    // Try autoplay; if blocked, start on first user gesture
-    this.play().catch(() => {
-      const startOnGesture = () => {
-        this.play().finally(() => {
-          window.removeEventListener('pointerdown', startOnGesture)
-          window.removeEventListener('keydown', startOnGesture)
-          window.removeEventListener('touchstart', startOnGesture)
-        })
-      }
-      window.addEventListener('pointerdown', startOnGesture, { once: true, passive: true })
-      window.addEventListener('keydown', startOnGesture, { once: true })
-      window.addEventListener('touchstart', startOnGesture, { once: true, passive: true })
+    // Try autoplay; also attach a one-time gesture resume to be safe
+    const startOnGesture = () => {
+      this.play().finally(() => {
+        window.removeEventListener('pointerdown', startOnGesture)
+        window.removeEventListener('keydown', startOnGesture)
+        window.removeEventListener('touchstart', startOnGesture)
+      })
+    }
+    window.addEventListener('pointerdown', startOnGesture, { once: true, passive: true })
+    window.addEventListener('keydown', startOnGesture, { once: true })
+    window.addEventListener('touchstart', startOnGesture, { once: true, passive: true })
+
+    // Initial attempt (may be blocked, which is fine)
+    this.play().catch(() => {})
+
+    // When returning to tab, ensure music is playing
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.play().catch(() => {})
     })
   }
 
@@ -83,4 +89,3 @@ class BackgroundMusicController {
 }
 
 export const bgm = new BackgroundMusicController()
-
