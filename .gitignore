@@ -30,4 +30,5 @@ __pycache__
 .env
 
 .env
-public\audio\backgroundmusic.wav
+
+public/audio/backgroundmusic.wav
