@@ -88,7 +88,7 @@ function StoreProvider (props: React.PropsWithChildren) {
 
   React.useEffect(() => {
     // Initialize background music once at app start
-    bgm.init('/audio/backgroundmusic.wav', 1)
+    bgm.init('/audio/backgroundmusic.mp3', 1)
   }, [])
 
   return (

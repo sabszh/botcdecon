@@ -6,7 +6,7 @@ class BackgroundMusicController {
   private target = 1
   private original = 1
 
-  init(src: string = '/audio/backgroundmusic.wav', originalVolume = 1) {
+  init(src: string = '/audio/backgroundmusic.mp3', originalVolume = 1) {
     if (this.initialized) return
     this.original = originalVolume
     const el = new Audio(src)
