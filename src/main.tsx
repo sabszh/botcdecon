@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import Home from './pages/Home'
+import { bgm } from './lib/music'
 
 export type Emotion = {
   slug: string
@@ -84,6 +85,11 @@ function getStoredEntries () {
 
 function StoreProvider (props: React.PropsWithChildren) {
   const [appState, setAppState] = React.useState(State)
+
+  React.useEffect(() => {
+    // Initialize background music once at app start
+    bgm.init('/audio/backgroundmusic.wav', 1)
+  }, [])
 
   return (
     <AppContext.Provider value={{ appState, setAppState }}>

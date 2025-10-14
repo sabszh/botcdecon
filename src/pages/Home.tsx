@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react'
 import { AppContext } from '../main'
 import ChatPanel from '../components/ChatPanel'
 import MapCanvas from '../map/Canvas'
+import { bgm } from '../lib/music'
 
 export default function Home () {
   const [language, setLanguage] = useState<'en' | 'da' | null>(null)
@@ -15,6 +16,8 @@ export default function Home () {
     const resetTimer = () => {
       if (inactivityTimer.current) window.clearTimeout(inactivityTimer.current)
       inactivityTimer.current = window.setTimeout(() => {
+        // Interaction ended: fade music back up
+        bgm.fadeUp(800)
         setLanguage(null)
         // Reset background state so hippocampus splash is shown
         // @ts-ignore-line
@@ -34,6 +37,8 @@ export default function Home () {
 
   const pick = (lang: 'en' | 'da') => {
     setLanguage(lang)
+    // Interaction begins: fade music down
+    bgm.fadeDown(600)
     // Engage zoom/pan map behind chat
     // @ts-ignore-line
     setAppState((s) => ({ ...s, headerVisible: false, viewMode: 'post', zoomIn: true }))
@@ -62,6 +67,8 @@ export default function Home () {
       {language && (
         <div className='absolute inset-0 z-20 flex items-center justify-center'>
           <ChatPanel language={language} onChangeLanguage={() => {
+            // Leaving interaction: fade up
+            bgm.fadeUp(800)
             setLanguage(null)
             // Reset background state so hippocampus splash is shown
             // @ts-ignore-line
