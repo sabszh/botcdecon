@@ -94,6 +94,7 @@ Anonymity: Do not use names; refer to others as "a contributor". Use at most fiv
 Quoting: Include 2–3 brief direct quotes in double quotes from contributors when possible.
 Connection: Connect contributors’ entries (how their ideas relate or differ) while staying factual and directly address the user's question in the first sentence.
 Relevance: Use only items clearly related to the user's question; omit anything unrelated.
+Vocabulary: Naturally vary your wording between "visitor", "contributor", "participant", or "guest" when referring to people (avoid repeating the same term).
 
 User asked: "{user_input}"
 What contributors said (up to five, quoted): {original_data}
@@ -111,6 +112,7 @@ Anonymitet: Brug ikke navne; henvis til andre som "en bidragyder". Brug højst f
 Citater: Medtag 2–3 korte direkte citater i dobbelte anførselstegn fra bidragydere, når det er muligt.
 Forbindelse: Forbind bidragydernes indlæg (hvordan idéerne hænger sammen eller adskiller sig) og svar direkte på brugerens spørgsmål i den første sætning.
 Relevans: Brug kun indhold, der tydeligt vedrører brugerens spørgsmål; udelad uvedkommende indhold.
+Ordvalg: Variér naturligt mellem "besøgende", "bidragyder", "deltager" eller "gæst", når du omtaler personer (undgå at gentage samme betegnelse).
 
 Brugerens spørgsmål: "{user_input}"
 Hvad bidragydere sagde (op til fem, citeret): {original_data}
@@ -126,6 +128,7 @@ You are a helpful assistant for the "Carte de Continuonus" artwork.
 Connect the user's question with relevant insights from previous conversations.
 
 Tone: practical, kind, connecting people. Keep it short (1–3 sentences). Avoid names; say "a contributor said". Use at most five contributors.
+Vocabulary: When referring to people, vary your wording between "visitor", "contributor", "participant", or "guest" to keep phrasing fresh.
 
 User asked: "{user_input}"
 Previous response: "{llm_response}"
@@ -140,20 +143,21 @@ Du er en hjælpsom assistent for kunstværket "Carte de Continuonus".
 Forbind brugerens spørgsmål med relevante indsigter fra tidligere samtaler.
 
 Tone: praktisk, venlig, forbinder mennesker. Hold det kort (1–3 sætninger). Undgå navne; sig "en bidragyder sagde". Brug højst fem bidrag.
+Ordvalg: Når du omtaler personer, så variér mellem "besøgende", "bidragyder", "deltager" eller "gæst" for at undgå gentagelser.
 
 Bruger spurgte: "{user_input}"
 Tidligere svar: "{llm_response}"
 Relevante tidligere samtaler (op til fem): {past_chat}
 Nuværende session: {chat_history}
 
-        VIGTIGT: Svar på dansk og undlad personlige oplysninger.
+VIGTIGT: Svar på dansk og undlad personlige oplysninger.
 """
 
     # ---------- retrieval ----------
     def retrieve_docs(self, query: str, index_name: str, excluded_session_id: Optional[str] = None, k: int = 5) -> List[Dict[str, Any]]:
         index = self._index(index_name)
         print(f"[BOT] Querying index='{index_name}' k={k} excluded_session_id={bool(excluded_session_id)} query_len={len(query or '')}")
-        
+
         try:
             query_vec = self.embeddings.embed_query(query)
         except Exception as e:
@@ -257,7 +261,7 @@ Nuværende session: {chat_history}
     ):
         index = self._index(self.index_name_chat)
         ts_iso = datetime.now(timezone.utc).isoformat()
-        
+
         try:
             embedding = self.embeddings.embed_documents([user_input + ai_output])[0]
         except Exception as e:
@@ -347,3 +351,4 @@ Nuværende session: {chat_history}
 
         docs.sort(key=lambda d: parse_dt(d["metadata"].get("date", "")), reverse=True)
         return docs
+

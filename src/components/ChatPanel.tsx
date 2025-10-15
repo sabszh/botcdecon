@@ -15,7 +15,8 @@ type Props = {
 
 const apiBase: string = (import.meta.env.VITE_API_BASE as string) || ''
 const CHAT_ENDPOINT = `${apiBase}/api/chat`
-const INITIAL_AUDIO_DELAY_MS = 1200
+const INITIAL_AUDIO_DELAY_MS = 8000
+const GENERATED_SPEECH_RATE = 0.9 // Tad slower, still natural for all bot audio
 
 const THANK_YOU_TEXTS: Record<Language, string> = {
   en: 'Thank you for sharing.',
@@ -54,6 +55,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const [micDesired, setMicDesired] = useState(false)
   const [phase, setPhase] = useState<Phase>('intro')
   const [hasSharedMemory, setHasSharedMemory] = useState(false)
+  // No UI or persistence for speech rate; use a fixed constant for generated audio only
   // No follow-up question now; no need to track question count
   const [micError, setMicError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -61,6 +63,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const audioElRef = useRef<HTMLAudioElement | null>(null)
   const messageIdRef = useRef(0)
   const lastAudioSrcRef = useRef<string | null>(null)
+  const lastAudioRateRef = useRef<number>(1)
   const recognitionRef = useRef<any>(null)
   const isMicOnRef = useRef(false)
   const isAudioPlayingRef = useRef(false)
@@ -126,8 +129,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
           setPhase('await_memory')
           setMicDesired(true)
-        })
-      })
+        }, undefined, GENERATED_SPEECH_RATE)
+      }, undefined, GENERATED_SPEECH_RATE)
     }, INITIAL_AUDIO_DELAY_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,9 +142,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [messages, isLoading])
 
-  const playAudio = useCallback((src: string, onEnded?: () => void, onError?: () => void) => {
+  const playAudio = useCallback((src: string, onEnded?: () => void, onError?: () => void, rate?: number) => {
     if (!src) return
     lastAudioSrcRef.current = src
+    lastAudioRateRef.current = typeof rate === 'number' && isFinite(rate) && rate > 0 ? rate : 1
     const el = audioElRef.current
     if (!el) return
     // Stop mic while bot audio is playing, to prevent capture
@@ -151,6 +155,17 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     setIsAudioPlaying(true)
     try { el.pause() } catch {}
     el.src = src
+    // Apply playback rate ONLY when explicitly requested (for generated audio)
+    try {
+      if (typeof rate === 'number' && isFinite(rate) && rate > 0) {
+        el.playbackRate = Math.max(0.5, Math.min(2, rate))
+        ;(el as any).preservesPitch = true
+        ;(el as any).mozPreservesPitch = true
+        ;(el as any).webkitPreservesPitch = true
+      } else {
+        el.playbackRate = 1
+      }
+    } catch {}
     el.onended = () => {
       setIsAudioPlaying(false)
       // After bot stops speaking, it's user's turn again
@@ -181,7 +196,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     setIsAudioPlaying(true)
     const utter = new SpeechSynthesisUtterance(text)
     utter.lang = lang === 'da' ? 'da-DK' : 'en-US'
-    utter.rate = 1
+    // Apply the same slower rate for generated TTS fallback
+    utter.rate = GENERATED_SPEECH_RATE
     utter.onend = () => {
       setIsAudioPlaying(false)
       setMicDesired(true)
@@ -345,7 +361,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         addMessage('bot', conf.farewell)
         playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
           onChangeLanguage()
-        })
+        }, undefined, GENERATED_SPEECH_RATE)
         return
       }
       // If explicitly affirmative (e.g., "yes"/"ja"), nudge them to ask the next question
@@ -362,15 +378,15 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       setIsLoading(true)
       try {
         const historyPayload = messages.map(m => ({ role: m.role, content: m.content }))
-        const payload = {
-          sessionId: `session_${Date.now()}`,
-          message: text,
-          language,
-          userName: 'Visitor',
-          userLocation: 'Museum',
-          mode: 'question' as const,
-          history: historyPayload
-        }
+      const payload = {
+        sessionId: `session_${Date.now()}`,
+        message: text,
+        language,
+        userName: 'Visitor',
+        userLocation: 'Museum',
+        mode: 'question' as const,
+        history: historyPayload
+      }
         const res = await fetch(CHAT_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         const ct = res.headers.get('content-type') || ''
         if (!ct.includes('application/json')) throw new Error('Non-JSON response')
@@ -384,11 +400,12 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
             setPhase('confirm_more')
             setMicDesired(true)
-          })
+          }, undefined, GENERATED_SPEECH_RATE)
         }
         if (replyText && audioUrl) {
           const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
-          playAudio(resolved, afterAnswer, () => speakBrowserTTS(replyText, language, afterAnswer))
+          // Slightly slower rate for generated audio
+          playAudio(resolved, afterAnswer, () => speakBrowserTTS(replyText, language, afterAnswer), GENERATED_SPEECH_RATE)
         } else if (replyText) {
           speakBrowserTTS(replyText, language, afterAnswer)
         } else {
@@ -437,8 +454,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           playAudio(`/audio/${language}_QUESTION_1.mp3`, () => {
             setPhase('await_question')
             setMicDesired(true)
-          })
-        })
+          }, undefined, GENERATED_SPEECH_RATE)
+        }, undefined, GENERATED_SPEECH_RATE)
       } else {
         // Question mode: speak the answer, then prompt for more (Question 2)
         const conf = scripts[language]
@@ -447,11 +464,12 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
             setPhase('confirm_more')
             setMicDesired(true)
-          })
+          }, undefined, GENERATED_SPEECH_RATE)
         }
         if (replyText && audioUrl) {
           const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
-          playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken))
+          // Slightly slower rate for generated audio
+          playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken), GENERATED_SPEECH_RATE)
         } else if (replyText) {
           speakBrowserTTS(replyText, language, afterAnswerSpoken)
         } else {
@@ -483,7 +501,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
           setPhase('await_memory')
           setMicDesired(true)
-        })
+        }, undefined, GENERATED_SPEECH_RATE)
       } else {
         // Memory prompt already shown; finish it
         setPhase('await_memory')
@@ -510,7 +528,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       addMessage('bot', conf.farewell)
       playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
         onChangeLanguage()
-      })
+      }, undefined, GENERATED_SPEECH_RATE)
       return
     }
   }, [language, phase, messages, addMessage, playAudio])
@@ -574,7 +592,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
                 if (canResume) {
                   el.play().catch(() => {})
                 } else {
-                  playAudio(last)
+                  playAudio(last, undefined, undefined, lastAudioRateRef.current || 1)
                 }
               }
             }}
@@ -591,6 +609,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           </button>
         </div>
       </form>
+
+      {/* removed in-app speed tester UI */}
     </div>
   )
 }
