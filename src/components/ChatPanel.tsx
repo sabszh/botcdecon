@@ -60,16 +60,16 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const [micError, setMicError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const chatListRef = useRef<HTMLDivElement | null>(null)
-  const audioElRef = useRef<HTMLAudioElement | null>(null)
-  const messageIdRef = useRef(0)
-  const lastAudioSrcRef = useRef<string | null>(null)
-  const lastAudioRateRef = useRef<number>(1)
-  const recognitionRef = useRef<any>(null)
-  const isMicOnRef = useRef(false)
-  const isAudioPlayingRef = useRef(false)
-  const micDesiredRef = useRef(false)
-  const isLoadingRef = useRef(false)
-  const committedMicRef = useRef('')
+  const audioElRef = useRef<HTMLAudioElement | null>(null) // Keep audio element reference
+  const messageIdRef = useRef(0) // Message ID reference
+  const lastAudioSrcRef = useRef<string | null>(null) // Last audio source reference
+  const lastAudioRateRef = useRef<number>(1) // Last audio rate reference
+  const recognitionRef = useRef<any>(null) // Speech recognition reference
+  const isMicOnRef = useRef(false) // Microphone state reference
+  const isAudioPlayingRef = useRef(false) // Audio playing state reference
+  const micDesiredRef = useRef(false) // Desired microphone state reference
+  const isLoadingRef = useRef(false) // Loading state reference
+  const committedMicRef = useRef('') // Committed microphone reference
 
   useEffect(() => { isMicOnRef.current = isMicOn }, [isMicOn])
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
@@ -284,15 +284,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [language])
 
   // Proactively request mic permission once (speeds up STT start and surfaces prompt)
-  useEffect(() => {
-    if (!language) return
-    if (!navigator?.mediaDevices?.getUserMedia) return
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => { stream.getTracks().forEach(t => t.stop()) })
-      .catch(() => {
-        setMicError(language === 'da' ? 'Kunne ikke få adgang til mikrofonen.' : 'Could not access the microphone.')
-      })
-  }, [language])
+  // Removed proactive mic permission request on language change
 
   const startMic = useCallback(() => {
     // external toggle: mark desired, controller effect will start
@@ -554,6 +546,25 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             </div>
           </div>
         )}
+        {/* Debug overlay */}
+        <div style={{
+          position: 'fixed',
+          top: 8,
+          right: 8,
+          zIndex: 9999,
+          background: 'rgba(0,0,0,0.7)',
+          color: '#fff',
+          padding: '8px 14px',
+          borderRadius: 8,
+          fontSize: 14,
+          pointerEvents: 'none'
+        }}>
+          <div>Mic: {isMicOn ? 'ON' : 'OFF'}</div>
+          <div>Mic Desired: {micDesired ? 'YES' : 'NO'}</div>
+          <div>Audio Playing: {isAudioPlaying ? 'YES' : 'NO'}</div>
+          <div>Speech Supported: {isSpeechSupported ? 'YES' : 'NO'}</div>
+          <div>Mic Error: {micError || 'none'}</div>
+        </div>
         {messages.map(m => (
           <div key={m.id} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[80%] rounded-2xl px-5 py-4 text-2xl leading-relaxed border ${m.role === 'user' ? 'bg-white text-black border-black/10' : 'bg-white/80 text-black border-black/10'}`}>
