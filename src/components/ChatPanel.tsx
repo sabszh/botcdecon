@@ -17,6 +17,8 @@ const apiBase: string = (import.meta.env.VITE_API_BASE as string) || ''
 const CHAT_ENDPOINT = `${apiBase}/api/chat`
 const INITIAL_AUDIO_DELAY_MS = 8000
 const GENERATED_SPEECH_RATE = 0.9 // Tad slower, still natural for all bot audio
+// Browser TTS (fallback) should be ~5% faster than generated
+const BROWSER_TTS_RATE = Math.min(2, GENERATED_SPEECH_RATE * 1.05)
 
 const THANK_YOU_TEXTS: Record<Language, string> = {
   en: 'Thank you for sharing.',
@@ -52,13 +54,17 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false)
   const [isMicOn, setIsMicOn] = useState(false)
   const [isSpeechSupported, setIsSpeechSupported] = useState(false)
+  // Control whether the on-screen keyboard is allowed to appear (default Off everywhere)
+  const [keyboardEnabled, setKeyboardEnabled] = useState<boolean>(false)
   const [micDesired, setMicDesired] = useState(false)
   const [phase, setPhase] = useState<Phase>('intro')
   const [hasSharedMemory, setHasSharedMemory] = useState(false)
   // No UI or persistence for speech rate; use a fixed constant for generated audio only
   // No follow-up question now; no need to track question count
   const [micError, setMicError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const inputWrapRef = useRef<HTMLDivElement | null>(null)
+  const inputBaseHeightRef = useRef<number>(0)
   const chatListRef = useRef<HTMLDivElement | null>(null)
   const audioElRef = useRef<HTMLAudioElement | null>(null) // Keep audio element reference
   const messageIdRef = useRef(0) // Message ID reference
@@ -70,6 +76,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const micDesiredRef = useRef(false) // Desired microphone state reference
   const isLoadingRef = useRef(false) // Loading state reference
   const committedMicRef = useRef('') // Committed microphone reference
+  // Repeating delete (backspace) support
+  const deleteHoldTimeoutRef = useRef<number | null>(null)
+  const deleteHoldIntervalRef = useRef<number | null>(null)
 
   useEffect(() => { isMicOnRef.current = isMicOn }, [isMicOn])
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
@@ -77,9 +86,49 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   useEffect(() => { isLoadingRef.current = isLoading }, [isLoading])
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string) => {
-    if (!content?.trim()) return
-    setMessages(cur => [...cur, { id: messageIdRef.current++, role, content }])
+    if (!content?.trim()) return null as number | null
+    const id = messageIdRef.current++
+    setMessages(cur => [...cur, { id, role, content }])
+    return id
   }, [])
+
+  const deleteOneWord = useCallback(() => {
+    const current = (draft || '').toString()
+    if (!current) return
+    // Remove trailing spaces first, then remove last word
+    const trimmedEnd = current.replace(/\s+$/g, '')
+    const withoutLast = trimmedEnd.replace(/\S+\s*$/g, '')
+    const next = withoutLast
+    setDraft(next)
+    setSttBuffer(next)
+    setSttLive('')
+    committedMicRef.current = next
+  }, [draft])
+
+  const startDeleteHold = useCallback(() => {
+    // Immediate delete, then start repeating after a short delay
+    deleteOneWord()
+    if (deleteHoldTimeoutRef.current) window.clearTimeout(deleteHoldTimeoutRef.current)
+    if (deleteHoldIntervalRef.current) window.clearInterval(deleteHoldIntervalRef.current)
+    deleteHoldTimeoutRef.current = window.setTimeout(() => {
+      deleteHoldIntervalRef.current = window.setInterval(() => {
+        deleteOneWord()
+      }, 150)
+    }, 300)
+  }, [deleteOneWord])
+
+  const stopDeleteHold = useCallback(() => {
+    if (deleteHoldTimeoutRef.current) {
+      window.clearTimeout(deleteHoldTimeoutRef.current)
+      deleteHoldTimeoutRef.current = null
+    }
+    if (deleteHoldIntervalRef.current) {
+      window.clearInterval(deleteHoldIntervalRef.current)
+      deleteHoldIntervalRef.current = null
+    }
+  }, [])
+
+  useEffect(() => () => stopDeleteHold(), [stopDeleteHold])
 
   // Very lightweight negation detection per language
   const isNegativeResponse = useCallback((text: string, lang: Language) => {
@@ -124,13 +173,13 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       addMessage('bot', conf.welcome)
       playAudio(`/audio/${language}_WELCOME.mp3`, () => {
         // chain Memory 1 prompt
-        addMessage('bot', conf.memory1)
+        const idM1 = addMessage('bot', conf.memory1)
         // After the prompt audio finishes, enable mic automatically
         playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
           setPhase('await_memory')
           setMicDesired(true)
-        }, undefined, GENERATED_SPEECH_RATE)
-      }, undefined, GENERATED_SPEECH_RATE)
+        }, undefined, GENERATED_SPEECH_RATE, idM1 ?? undefined, true)
+      }, undefined, GENERATED_SPEECH_RATE, undefined, false)
     }, INITIAL_AUDIO_DELAY_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,7 +191,111 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [messages, isLoading])
 
-  const playAudio = useCallback((src: string, onEnded?: () => void, onError?: () => void, rate?: number) => {
+  // Autosize the text input as content grows
+  const resizeTextarea = useCallback((el?: HTMLTextAreaElement | null) => {
+    const node = el || inputRef.current
+    if (!node) return
+    // Measure content height
+    node.style.height = 'auto'
+    const max = Math.round(window.innerHeight * 0.4)
+    const h = Math.min(node.scrollHeight, max)
+    if (!inputBaseHeightRef.current) {
+      // Use the first measured single-line height as base
+      inputBaseHeightRef.current = h
+    }
+    const base = inputBaseHeightRef.current
+    const extra = Math.max(0, h - base)
+    // Set actual textarea height
+    node.style.height = h + 'px'
+    // Move it up so it visually expands upward
+    node.style.transform = `translateY(-${extra}px)`
+    // Fix outer wrapper height so siblings don't shift
+    const wrap = inputWrapRef.current
+    if (wrap) {
+      wrap.style.height = base + 'px'
+      wrap.style.setProperty('--taOffset', extra + 'px')
+    }
+  }, [])
+
+  useEffect(() => { resizeTextarea() }, [draft, resizeTextarea])
+
+  // Track which message should be auto-scrolled with the playing audio
+  const autoScrollMsgIdRef = useRef<number | null>(null)
+  const scrollRafRef = useRef<number | null>(null)
+
+  const scrollMessageProgress = useCallback((msgId: number, ratio: number) => {
+    const list = chatListRef.current
+    if (!list) return
+    const el = list.querySelector(`[data-msg-id="${msgId}"]`) as HTMLElement | null
+    if (!el) return
+    const total = Math.max(0, el.scrollHeight - list.clientHeight * 0.9)
+    const baseTop = el.offsetTop
+    const targetWithin = total * Math.max(0, Math.min(1, ratio))
+    const target = baseTop + targetWithin
+    list.scrollTo({ top: target, behavior: 'auto' })
+  }, [])
+
+  const stopAudioAutoScroll = useCallback(() => {
+    autoScrollMsgIdRef.current = null
+    if (scrollRafRef.current) {
+      cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = null
+    }
+  }, [])
+
+  const computeScrollBounds = useCallback((msgId: number) => {
+    const list = chatListRef.current
+    if (!list) return null as { start: number; end: number } | null
+    const bubble = list.querySelector(`[data-msg-id="${msgId}"]`) as HTMLElement | null
+    if (!bubble) return null
+    const messageTop = bubble.offsetTop
+    const messageBottom = messageTop + bubble.scrollHeight
+    const start = Math.max(0, messageTop - 8)
+    const end = Math.max(0, messageBottom - list.clientHeight * 0.9)
+    return { start, end }
+  }, [])
+
+  const startTimedAudioAutoScroll = useCallback((msgId: number, durationMs: number) => {
+    const list = chatListRef.current
+    if (!list || !durationMs || durationMs <= 0) return
+    const bounds = computeScrollBounds(msgId)
+    if (!bounds) return
+    const { start, end } = bounds
+    autoScrollMsgIdRef.current = msgId
+    list.scrollTop = start
+    const startTime = performance.now()
+    const step = (now: number) => {
+      if (autoScrollMsgIdRef.current !== msgId) return
+      const t = Math.min(1, (now - startTime) / durationMs)
+      list.scrollTop = start + (end - start) * t
+      if (t < 1) {
+        scrollRafRef.current = requestAnimationFrame(step)
+      } else {
+        scrollRafRef.current = null
+      }
+    }
+    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
+    scrollRafRef.current = requestAnimationFrame(step)
+  }, [computeScrollBounds])
+
+  const startAudioAutoScroll = useCallback((msgId: number) => {
+    autoScrollMsgIdRef.current = msgId
+    const tick = () => {
+      const el = audioElRef.current
+      const msg = autoScrollMsgIdRef.current
+      if (!el || !msg) return
+      const dur = el.duration || 0
+      const t = el.currentTime || 0
+      if (dur > 0) {
+        scrollMessageProgress(msg, Math.max(0, Math.min(1, t / dur)))
+      }
+      scrollRafRef.current = requestAnimationFrame(tick)
+    }
+    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
+    scrollRafRef.current = requestAnimationFrame(tick)
+  }, [scrollMessageProgress])
+
+  const playAudio = useCallback((src: string, onEnded?: () => void, onError?: () => void, rate?: number, autoScrollMsgId?: number, enableMicAfter: boolean = true) => {
     if (!src) return
     lastAudioSrcRef.current = src
     lastAudioRateRef.current = typeof rate === 'number' && isFinite(rate) && rate > 0 ? rate : 1
@@ -168,24 +321,33 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     } catch {}
     el.onended = () => {
       setIsAudioPlaying(false)
+      stopAudioAutoScroll()
       // After bot stops speaking, it's user's turn again
-      setMicDesired(true)
+      if (enableMicAfter) setMicDesired(true)
       // If caller provided a callback, run it (e.g., to resume mic)
       if (onEnded) onEnded()
     }
     el.onerror = () => {
       setIsAudioPlaying(false)
+      stopAudioAutoScroll()
       // If an error handler is provided, use it; otherwise continue as ended
       if (onError) onError()
       else if (onEnded) onEnded()
     }
-    el.onplay = () => setIsAudioPlaying(true)
+    el.onplay = () => {
+      setIsAudioPlaying(true)
+      if (typeof autoScrollMsgId === 'number') {
+        const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0
+        if (d > 0) startTimedAudioAutoScroll(autoScrollMsgId, d * 1000)
+        else startAudioAutoScroll(autoScrollMsgId)
+      }
+    }
     el.onpause = () => setIsAudioPlaying(false)
     el.play().catch(() => setIsAudioPlaying(false))
-  }, [])
+  }, [startAudioAutoScroll, stopAudioAutoScroll])
 
   // Fallback TTS using the browser's SpeechSynthesis
-  const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void) => {
+  const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number) => {
     if (!text) { if (onEnded) onEnded(); return }
     const synth = (window as any).speechSynthesis as SpeechSynthesis | undefined
     if (!synth) { if (onEnded) onEnded(); return }
@@ -196,19 +358,29 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     setIsAudioPlaying(true)
     const utter = new SpeechSynthesisUtterance(text)
     utter.lang = lang === 'da' ? 'da-DK' : 'en-US'
-    // Apply the same slower rate for generated TTS fallback
-    utter.rate = GENERATED_SPEECH_RATE
+    // Slightly faster (5%) for browser TTS fallback only
+    utter.rate = BROWSER_TTS_RATE
+    if (typeof autoScrollMsgId === 'number') {
+      const total = Math.max(1, text.length)
+      utter.onboundary = (ev: any) => {
+        const idx = typeof ev?.charIndex === 'number' ? ev.charIndex : 0
+        const ratio = Math.max(0, Math.min(1, idx / total))
+        scrollMessageProgress(autoScrollMsgId, ratio)
+      }
+    }
     utter.onend = () => {
       setIsAudioPlaying(false)
+      stopAudioAutoScroll()
       setMicDesired(true)
       if (onEnded) onEnded()
     }
     utter.onerror = () => {
       setIsAudioPlaying(false)
+      stopAudioAutoScroll()
       if (onEnded) onEnded()
     }
     synth.speak(utter)
-  }, [])
+  }, [scrollMessageProgress, stopAudioAutoScroll])
 
   // Speech recognition setup per language
   useEffect(() => {
@@ -287,22 +459,32 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   // Removed proactive mic permission request on language change
 
   const startMic = useCallback(() => {
-    // external toggle: mark desired, controller effect will start
+    // Mark desired and try to start immediately (helps with iOS user-gesture rules)
     setMicDesired(true)
     setMicError(null)
-  }, [])
+    try {
+      if (isSpeechSupported && recognitionRef.current && !isAudioPlayingRef.current && !isLoadingRef.current) {
+        // Capture current input as base for interim/final appends
+        committedMicRef.current = (draft || '').trim()
+        recognitionRef.current.start()
+        setIsMicOn(true)
+      }
+    } catch {}
+  }, [draft, isSpeechSupported])
 
   const stopMic = useCallback(() => {
     // external toggle: mark undesired, controller effect will stop
     setMicDesired(false)
     setSttLive('')
+    try { recognitionRef.current?.stop?.() } catch {}
+    setIsMicOn(false)
   }, [])
 
   // When it's the user's turn, automatically focus the input
   useEffect(() => {
     if (!language) return
     const usersTurn = micDesired && !isAudioPlaying && !isLoading
-    if (usersTurn) {
+    if (usersTurn && keyboardEnabled) {
       const el = inputRef.current
       if (el) {
         try {
@@ -311,10 +493,11 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           const pos = val.length
           // place caret at end
           el.setSelectionRange?.(pos, pos)
+          resizeTextarea(el)
         } catch {}
       }
     }
-  }, [language, micDesired, isAudioPlaying, isLoading, draft])
+  }, [language, micDesired, isAudioPlaying, isLoading, draft, keyboardEnabled, resizeTextarea])
 
   // Mic controller: start/stop recognition based on desired state and turn
   useEffect(() => {
@@ -385,7 +568,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         const data = await res.json()
         const replyText = (data?.message || '').trim()
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
-        if (replyText) addMessage('bot', replyText)
         // After answering, ask if they'd like more (Question 2)
         const afterAnswer = () => {
           addMessage('bot', conf.question2)
@@ -397,9 +579,11 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         if (replyText && audioUrl) {
           const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
           // Slightly slower rate for generated audio
-          playAudio(resolved, afterAnswer, () => speakBrowserTTS(replyText, language, afterAnswer), GENERATED_SPEECH_RATE)
+          const msgId = addMessage('bot', replyText)
+          playAudio(resolved, afterAnswer, () => speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
         } else if (replyText) {
-          speakBrowserTTS(replyText, language, afterAnswer)
+          const msgId = addMessage('bot', replyText)
+          speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined)
         } else {
           addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
           setPhase('await_question')
@@ -431,7 +615,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       const data = await res.json()
       const replyText = (data?.message || '').trim()
       const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
-      if (replyText) addMessage('bot', replyText)
       // Handle audio sequencing and next prompt depending on phase/turn
       if (isMemoryTurn) {
         const conf = scripts[language]
@@ -461,9 +644,11 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         if (replyText && audioUrl) {
           const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
           // Slightly slower rate for generated audio
-          playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken), GENERATED_SPEECH_RATE)
+          const msgId = addMessage('bot', replyText)
+          playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
         } else if (replyText) {
-          speakBrowserTTS(replyText, language, afterAnswerSpoken)
+          const msgId = addMessage('bot', replyText)
+          speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
         } else {
           // No answer received; keep the session open and prompt to try again
           addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
@@ -526,19 +711,12 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [language, phase, messages, addMessage, playAudio])
 
   return (
-    <div className='relative z-10 w-[1000px] max-w-[95vw] px-6 py-8 text-xl'>
+    <div className='relative z-10 w-[1100px] max-w-[95vw] px-6 py-6 text-xl origin-top flex flex-col max-h-[90vh]' style={{ transform: 'scale(0.95)' }}>
       <audio ref={audioElRef} preload='auto' playsInline />
 
-      <div className='rounded-2xl bg-white/75 px-5 py-3 text-black shadow-lg backdrop-blur pointer-events-auto border border-black/10'>
-        <div className='flex items-center gap-3 justify-between'>
-          <h2 className='text-2xl md:text-3xl font-medium tracking-wide'>Bot de Continuonus</h2>
-          <button type='button' onClick={onChangeLanguage} className='rounded-full border border-black/60 px-4 py-2 text-xl text-black hover:bg-black hover:text-white'>
-            {language === 'da' ? 'Tilbage' : 'Return'}
-          </button>
-        </div>
-      </div>
+      {/* Header moved to Home and fixed to top of viewport */}
 
-      <div ref={chatListRef} className='mt-4 h-[62vh] overflow-y-auto no-scrollbar'>
+      <div ref={chatListRef} className='mt-3 flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col justify-end'>
         {micError && (
           <div className='mb-3 flex justify-start'>
             <div className='max-w-[80%] rounded-2xl px-5 py-4 text-2xl leading-relaxed border bg-white/80 text-black border-black/10'>
@@ -546,7 +724,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             </div>
           </div>
         )}
-        {/* Debug overlay */}
+        {/* Debug overlay (disabled)
         <div style={{
           position: 'fixed',
           top: 8,
@@ -565,8 +743,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           <div>Speech Supported: {isSpeechSupported ? 'YES' : 'NO'}</div>
           <div>Mic Error: {micError || 'none'}</div>
         </div>
+        */}
         {messages.map(m => (
-          <div key={m.id} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={m.id} data-msg-id={m.id} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[80%] rounded-2xl px-5 py-4 text-2xl leading-relaxed border ${m.role === 'user' ? 'bg-white text-black border-black/10' : 'bg-white/80 text-black border-black/10'}`}>
               {m.content}
             </div>
@@ -587,7 +766,38 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
       <form onSubmit={submit} className='mt-4 flex flex-col gap-3'>
         <label htmlFor='message' className='sr-only'>Message</label>
-        <input ref={inputRef} id='message' name='message' type='text' value={draft} onChange={e => { setDraft(e.target.value); stopMic() }} placeholder={language === 'da' ? 'Skriv her…' : 'Type here…'} className='rounded-full border border-black/30 bg-white/80 px-5 py-4 text-2xl text-black placeholder:text-black/50 shadow-sm focus:border-black focus:outline-none disabled:cursor-not-allowed disabled:opacity-60' disabled={isLoading} autoComplete='off' />
+        <div ref={inputWrapRef} className='relative' style={{ height: undefined as any }}>
+          <textarea
+            ref={inputRef}
+            id='message'
+            name='message'
+            rows={1}
+            value={draft}
+            onChange={e => { setDraft(e.target.value); stopMic(); resizeTextarea(e.currentTarget) }}
+            placeholder={language === 'da' ? '' : ''}
+            className='w-full rounded-3xl border border-black/30 bg-white pr-14 pl-5 py-4 text-2xl text-black placeholder:text-black/50 shadow-sm focus:border-black focus:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+            style={{ overflow: 'hidden', maxHeight: '40vh', transform: undefined as any }}
+            disabled={isLoading}
+            autoComplete='off'
+            readOnly={!keyboardEnabled}
+            inputMode={keyboardEnabled ? undefined : 'none'}
+          />
+          <button
+            type='button'
+            onMouseDown={startDeleteHold}
+            onMouseUp={stopDeleteHold}
+            onMouseLeave={stopDeleteHold}
+            onTouchStart={(e) => { e.preventDefault(); startDeleteHold() }}
+            onTouchEnd={stopDeleteHold}
+            onTouchCancel={stopDeleteHold}
+            disabled={!draft}
+            className='absolute right-2 rounded-2xl border border-black/40 bg-white px-3 py-1.5 text-base text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40'
+            style={{ bottom: `calc(var(--taOffset, 0px) + 8px)` }}
+            aria-label={language === 'da' ? 'Slet ord' : 'Delete word'}
+          >
+            ⌫
+          </button>
+        </div>
         <div className='flex items-center gap-3'>
           <button
             type='button'
@@ -611,7 +821,27 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             className='rounded-full border border-black/60 bg-white/70 px-5 py-3 text-xl text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50'>
             {isAudioPlaying ? 'Stop' : 'Go'}
           </button>
-          <button type='button' onClick={() => (micDesired ? stopMic() : startMic())} disabled={!isSpeechSupported} className={`rounded-full border px-5 py-3 text-xl transition ${micDesired ? 'border-black bg-black text-white' : 'border-black/60 bg-white/70 text-black hover:bg-black hover:text-white'} disabled:cursor-not-allowed disabled:opacity-50`}>
+          <button
+            type='button'
+            onClick={() => {
+              if (keyboardEnabled) {
+                // Turn keyboard off and resume mic
+                setKeyboardEnabled(false)
+                try { inputRef.current?.blur() } catch {}
+                startMic()
+              } else {
+                // Turn keyboard on and stop mic
+                setKeyboardEnabled(true)
+                stopMic()
+                // Focus to open keyboard (user gesture)
+                setTimeout(() => { try { inputRef.current?.focus() } catch {} }, 0)
+              }
+            }}
+            className={`rounded-full border px-5 py-3 text-xl transition ${keyboardEnabled ? 'border-black bg-black text-white' : 'border-black/60 bg-white/70 text-black hover:bg-black hover:text-white'}`}
+          >
+            {language === 'da' ? (keyboardEnabled ? 'Tastatur Til' : 'Tastatur Fra') : (keyboardEnabled ? 'Keyboard On' : 'Keyboard Off')}
+          </button>
+          <button type='button' onClick={() => (micDesired ? stopMic() : startMic())} disabled={!isSpeechSupported || isAudioPlaying} className={`rounded-full border px-5 py-3 text-xl transition ${micDesired ? 'border-black bg-black text-white' : 'border-black/60 bg-white/70 text-black hover:bg-black hover:text-white'} disabled:cursor-not-allowed disabled:opacity-50`}>
             {micDesired ? (language === 'da' ? 'Mic Til' : 'Mic On') : (language === 'da' ? 'Mic Fra' : 'Mic Off')}
           </button>
           {/* Skip button removed as requested */}

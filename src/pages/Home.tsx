@@ -37,8 +37,8 @@ export default function Home () {
 
   const pick = (lang: 'en' | 'da') => {
     setLanguage(lang)
-    // Interaction begins: fade music down
-    bgm.fadeDown(600)
+    // Interaction begins: fade music down to subtle background
+    bgm.fadeDown(600, 0.08)
     // Engage zoom/pan map behind chat
     // @ts-ignore-line
     setAppState((s) => ({ ...s, headerVisible: false, viewMode: 'post', zoomIn: true }))
@@ -65,16 +65,42 @@ export default function Home () {
       )}
 
       {language && (
-        <div className='absolute inset-0 z-20 flex items-center justify-center'>
-          <ChatPanel language={language} onChangeLanguage={() => {
-            // Leaving interaction: fade up
-            bgm.fadeUp(800)
-            setLanguage(null)
-            // Reset background state so hippocampus splash is shown
-            // @ts-ignore-line
-            setAppState((s) => ({ ...s, headerVisible: true, viewMode: 'empty', zoomIn: false }))
-          }} />
-        </div>
+        <>
+          {/* Fixed top header with Return */}
+          <div className='absolute top-0 left-0 right-0 z-30 flex justify-center pt-4'>
+            <div className='w-[1100px] max-w-[95vw] rounded-2xl bg-white/80 px-5 py-3 text-black shadow-lg backdrop-blur border border-black/10'>
+              <div className='flex items-center gap-3 justify-between'>
+                <h2 className='text-2xl md:text-3xl font-medium tracking-wide'>Bot de Continuonus</h2>
+                <button
+                  type='button'
+                  className='rounded-full border border-black/60 px-4 py-2 text-xl text-black hover:bg-black hover:text-white'
+                  onClick={() => {
+                    // Leaving interaction: fade up
+                    bgm.fadeUp(800)
+                    setLanguage(null)
+                    // Reset background state so hippocampus splash is shown
+                    // @ts-ignore-line
+                    setAppState((s) => ({ ...s, headerVisible: true, viewMode: 'empty', zoomIn: false }))
+                  }}
+                >
+                  {language === 'da' ? 'Tilbage' : 'Return'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Chat panel anchored to bottom */}
+          <div className='absolute inset-0 z-20 flex items-end justify-center pb-6'>
+            <ChatPanel language={language} onChangeLanguage={() => {
+              // Leaving interaction: fade up
+              bgm.fadeUp(800)
+              setLanguage(null)
+              // Reset background state so hippocampus splash is shown
+              // @ts-ignore-line
+              setAppState((s) => ({ ...s, headerVisible: true, viewMode: 'empty', zoomIn: false }))
+            }} />
+          </div>
+        </>
       )}
     </div>
   )
