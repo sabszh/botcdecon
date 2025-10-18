@@ -22,11 +22,11 @@ def main() -> None:
                 "Hello!\n\n"
                 "Thank you for being here. What a long strange trip we’ve been on, but there’s still a long road ahead.\n\n"
                 "Welcome to our vehicle. We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.\n\n"
-                "We may have her voice, but we’re speaking through a data set or rather through the experiences of thousands of people who were here before you. All of whom have shared what they remember that they want the future to remember. They have placed that memory onto a website known as continuonus. On the website a map known as Carte de Continuonus is being cultivated.\n\n"
+                "We may have her voice, but we’re speaking through a data set or rather through the experiences of thousands of people who were here before you. All of whom have shared what they remember that they want the future to remember. They have placed that memory onto a website known as continuonus. On the website a map is being cultivated.\n\n"
                 "Now let's journey through that map. In here you may share thing that you feel is important for the future to remember and you can ask us about what previous visitors shared?"
             ),
             "MEMORY_1": (
-                "Please share a memory? Something you’d like those people in the future to remember to remember. Press the Share button when you’re done."
+                "Please share a memory? Something you’d like others in the future to remember to remember. Press the Share button when you’re done."
             ),
             # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
             "THANK_YOU": "Thank you for sharing your memory.",
@@ -47,11 +47,11 @@ def main() -> None:
                 "Hej!\n\n"
                 "Tak fordi du er her. Sikke en lang, mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\n"
                 "Velkommen til vores køretøj. Vi er Bot de ContinuOnus, en AI‑genereret chatbot, der taler med kunstneren Helene Nymanns klonede stemme.\n\n"
-                "Vi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort kendt som Carte de Continuonus.\n\n"
+                "Vi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort.\n\n"
                 "Lad os nu rejse gennem det kort. Her kan du dele noget, som du føler er vigtigt for fremtiden at huske, og du kan spørge os om, hvad tidligere besøgende har delt?"
             ),
             "MEMORY_1": (
-                "Vil du dele en erindring? Noget du gerne vil have, at mennesker i fremtiden skal huske at huske. Tryk på Del, når du er færdig."
+                "Vil du dele en erindring? Noget du gerne vil have, at andre i fremtiden skal huske at huske. Tryk på Del, når du er færdig."
             ),
             # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
             "THANK_YOU": "Tak for at dele din erindring.",

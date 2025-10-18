@@ -38,9 +38,9 @@ export default function Home () {
   const pick = (lang: 'en' | 'da') => {
     setLanguage(lang)
     // Interaction begins: fade music down to subtle background
-    // Slightly lower than before: ~3 dB below 0.0357 (≈ 0.025)
-    // Net vs original 0.08 baseline is about −10 dB
-    bgm.fadeDown(600, 0.025)
+    // Increase chat BGM by +2 dB: 0.025 × 10^(2/20) ≈ 0.0315
+    // Net vs original 0.08 baseline is about −8 dB now
+    bgm.fadeDown(600, 0.0315)
     // Engage zoom/pan map behind chat
     // @ts-ignore-line
     setAppState((s) => ({ ...s, headerVisible: false, viewMode: 'post', zoomIn: true }))
