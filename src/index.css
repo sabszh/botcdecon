@@ -138,3 +138,6 @@ textarea, input, button {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Minimal, subtle scrollbar for scrollable containers */
+/* removed thin-scrollbar styles; reverted per request */
