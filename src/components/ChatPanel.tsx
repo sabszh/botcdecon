@@ -46,7 +46,7 @@ const scripts = {
 } as const
 
 export default function ChatPanel ({ language, onChangeLanguage }: Props) {
-  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+  const isIOS = (typeof navigator !== 'undefined') && /iPad|iPhone|iPod/i.test(navigator.userAgent)
   type Phase = 'intro' | 'await_memory' | 'await_question' | 'confirm_more' | 'explore'
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -792,7 +792,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       <div
         ref={chatListRef}
         className={`mt-3 flex-1 min-h-0 overflow-y-auto flex flex-col justify-end scroll-touch ${isIOS ? '' : 'no-scrollbar'}`}
-        style={{ WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain', touchAction: 'pan-y' as any }}
+        style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}
       >
         {micError && (
           <div className='mb-3 flex justify-start'>
