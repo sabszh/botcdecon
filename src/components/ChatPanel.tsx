@@ -78,6 +78,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const micDesiredRef = useRef(false) // Desired microphone state reference
   const isLoadingRef = useRef(false) // Loading state reference
   const committedMicRef = useRef('') // Committed microphone reference
+  // Auto-follow / scroll management
+  const autoFollowRef = useRef(true)
+  const [showFollow, setShowFollow] = useState(false)
+  const NEAR_BOTTOM_PX = 48
   // Repeating delete (backspace) support
   const deleteHoldTimeoutRef = useRef<number | null>(null)
   const deleteHoldIntervalRef = useRef<number | null>(null)
@@ -194,10 +198,35 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     // beginning of a long message isn't clipped off-screen.
     if (messages.length <= 1) {
       list.scrollTop = 0
-    } else {
+      return
+    }
+    // Only stick to bottom when auto-follow is enabled (i.e., user is near bottom)
+    if (autoFollowRef.current) {
       list.scrollTop = list.scrollHeight
     }
   }, [messages, isLoading])
+
+  // Track user scroll position and toggle auto-follow accordingly
+  useEffect(() => {
+    const list = chatListRef.current
+    if (!list) return
+    const onScroll = () => {
+      const atBottom = (list.scrollHeight - (list.scrollTop + list.clientHeight)) <= NEAR_BOTTOM_PX
+      autoFollowRef.current = atBottom
+      setShowFollow(!atBottom)
+      // If user left bottom, stop any running auto-follow loop
+      if (!atBottom && scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current)
+        scrollRafRef.current = null
+      }
+      // If user returned to bottom while audio is playing, resume follow
+      if (atBottom && isAudioPlayingRef.current && autoScrollMsgIdRef.current != null && !scrollRafRef.current) {
+        startAudioAutoScroll(autoScrollMsgIdRef.current)
+      }
+    }
+    list.addEventListener('scroll', onScroll, { passive: true })
+    return () => list.removeEventListener('scroll', onScroll)
+  }, [startAudioAutoScroll])
 
   // Autosize the text input as content grows
   const resizeTextarea = useCallback((el?: HTMLTextAreaElement | null) => {
@@ -275,6 +304,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     const startTime = performance.now()
     const step = (now: number) => {
       if (autoScrollMsgIdRef.current !== msgId) return
+      if (!autoFollowRef.current) { scrollRafRef.current = null; return }
       const t = Math.min(1, (now - startTime) / durationMs)
       list.scrollTop = start + (end - start) * t
       if (t < 1) {
@@ -290,9 +320,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const startAudioAutoScroll = useCallback((msgId: number) => {
     autoScrollMsgIdRef.current = msgId
     const tick = () => {
+      if (!autoFollowRef.current) { scrollRafRef.current = null; return }
       const el = audioElRef.current
       const msg = autoScrollMsgIdRef.current
-      if (!el || !msg) return
+      if (!el || !msg) { scrollRafRef.current = null; return }
       const dur = el.duration || 0
       const t = el.currentTime || 0
       if (dur > 0) {
@@ -374,7 +405,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
     el.onplay = () => {
       setIsAudioPlaying(true)
-      if (typeof autoScrollMsgId === 'number') {
+      if (typeof autoScrollMsgId === 'number' && autoFollowRef.current) {
         const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0
         if (d > 0) startTimedAudioAutoScroll(autoScrollMsgId, d * 1000)
         else startAudioAutoScroll(autoScrollMsgId)
@@ -809,6 +840,28 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           </div>
         )}
       </div>
+
+      {/* Follow button when user has scrolled up */}
+      {showFollow && (
+        <div className='pointer-events-none relative -mt-3 mb-1 flex justify-end'>
+          <button
+            type='button'
+            className='pointer-events-auto rounded-full border border-black/60 bg-white/90 px-4 py-1.5 text-base text-black shadow hover:bg-black hover:text-white'
+            onClick={() => {
+              const list = chatListRef.current
+              if (!list) return
+              list.scrollTop = list.scrollHeight
+              autoFollowRef.current = true
+              setShowFollow(false)
+              if (isAudioPlayingRef.current && autoScrollMsgIdRef.current != null && !scrollRafRef.current) {
+                startAudioAutoScroll(autoScrollMsgIdRef.current)
+              }
+            }}
+          >
+            {language === 'da' ? 'Følg bund' : 'Jump to latest'}
+          </button>
+        </div>
+      )}
 
       <form onSubmit={submit} className='mt-4 flex flex-col gap-3'>
         <label htmlFor='message' className='sr-only'>Message</label>
