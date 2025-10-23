@@ -46,6 +46,7 @@ const scripts = {
 } as const
 
 export default function ChatPanel ({ language, onChangeLanguage }: Props) {
+  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
   type Phase = 'intro' | 'await_memory' | 'await_question' | 'confirm_more' | 'explore'
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -187,8 +188,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [language])
 
   useEffect(() => {
-    if (chatListRef.current) {
-      chatListRef.current.scrollTop = chatListRef.current.scrollHeight
+    const list = chatListRef.current
+    if (!list) return
+    // If this is the very first message, show from the top so the
+    // beginning of a long message isn't clipped off-screen.
+    if (messages.length <= 1) {
+      list.scrollTop = 0
+    } else {
+      list.scrollTop = list.scrollHeight
     }
   }, [messages, isLoading])
 
@@ -746,12 +753,16 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [language, phase, messages, addMessage, playAudio])
 
   return (
-    <div className='relative z-10 w-[1100px] max-w-[95vw] px-6 py-6 text-xl origin-top flex flex-col max-h-[90vh]' style={{ transform: 'scale(0.95)' }}>
+    <div className='relative z-10 w-[1100px] max-w-[95vw] px-6 py-6 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
       <audio ref={audioElRef} preload='auto' playsInline />
 
       {/* Header moved to Home and fixed to top of viewport */}
 
-      <div ref={chatListRef} className='mt-3 flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col justify-end'>
+      <div
+        ref={chatListRef}
+        className={`mt-3 flex-1 min-h-0 overflow-y-auto flex flex-col justify-end scroll-touch ${isIOS ? '' : 'no-scrollbar'}`}
+        style={{ WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain', touchAction: 'pan-y' as any }}
+      >
         {micError && (
           <div className='mb-3 flex justify-start'>
             <div className='max-w-[80%] rounded-2xl px-5 py-4 text-2xl leading-relaxed border bg-white/80 text-black border-black/10'>

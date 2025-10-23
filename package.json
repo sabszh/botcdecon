@@ -11,26 +11,19 @@
     "restore:snapshot": "node scripts/restore.mjs"
   },
   "dependencies": {
-    "@react-spring/three": "^10.0.3",
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.3.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.3",
-    "react-transition-group": "^4.4.5",
-    "react-turnstile": "^1.1.0",
-    "react-type-animation": "^3.0.1",
     "three": "^0.180.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@types/react-transition-group": "^4.4.5",
     "@types/three": "^0.180.0",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.14",
     "postcss": "^8.4.22",
-    "qrcode": "^1.5.1",
     "tailwindcss": "^3.3.1",
     "vite": "^7.1.9"
   }

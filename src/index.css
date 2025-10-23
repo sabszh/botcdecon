@@ -80,22 +80,7 @@ textarea, input, button {
   -webkit-box-decoration-break: clone;
 }
 
-.fade-enter-active,
-.fade-exit-active,
-.fade-right-enter-active,
-.fade-right-exit-active {
-  @apply transition-all duration-300;
-}
-
-.fade-enter { @apply opacity-0; }
-.fade-enter-active { @apply opacity-100; }
-.fade-exit { @apply opacity-100; }
-.fade-exit-active { @apply opacity-0; }
-
-.fade-right-enter { @apply translate-x-1/2 opacity-0; }
-.fade-right-enter-active { @apply opacity-100 translate-x-0; }
-.fade-right-exit { @apply opacity-100 translate-x-0; }
-.fade-right-exit-active { @apply opacity-0 translate-x-1/2; }
+/* Removed legacy transition classes tied to react-transition-group usage */
 
 .prose {
   & h1, & h2, & h3, & h4, & h5, & h6 { @apply mb-4 font-bold; }
@@ -141,3 +126,8 @@ textarea, input, button {
 
 /* Minimal, subtle scrollbar for scrollable containers */
 /* removed thin-scrollbar styles; reverted per request */
+
+/* Enable smooth scrolling on iOS inside overflow containers */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+}

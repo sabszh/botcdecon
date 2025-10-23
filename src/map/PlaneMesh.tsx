@@ -1,150 +1,41 @@
 import { Mesh, PlaneGeometry, MeshStandardMaterial, SRGBColorSpace } from 'three'
-import { useRef, useEffect, useMemo, useContext, useState } from 'react'
-import { ThreeElements, useFrame, useThree } from '@react-three/fiber'
+import { useRef, useMemo, useState, useEffect } from 'react'
+import type { ThreeElements } from '@react-three/fiber'
 import { TextureLoader } from 'three/src/loaders/TextureLoader'
-import { Html } from '@react-three/drei'
-import { AppContext } from '../main'
-import Pin from './Pin'
 
-const apiBase: string = (import.meta.env.VITE_API_BASE as string)
-
+// Background-only plane: just render the large map with a neutral backdrop.
 export default function (props: ThreeElements['mesh']) {
-  const { appState, setAppState } = useContext(AppContext)
   const mesh = useRef<Mesh>(null!)
 
-  const useTexture = (url: string) => {
-    const texture = useMemo(() => new TextureLoader().load(url), [url])
-    return texture
-  }
+  const useTexture = (url: string) => useMemo(() => new TextureLoader().load(url), [url])
 
-  // const texture = useTexture('/layers/final-carte.jpg') // 7936 × 8000
-  // const texture = useTexture('/layers/carte-lg.jpg') // 14957 * 9656
-  // const texture = useTexture('/layers/map-compressed.jpg') // 14957 * 9656
-  const texture = useTexture('/layers/carte.jpg') // 14957 * 9656
-  // texture.encoding = sRGBEncoding
+  const texture = useTexture('/layers/carte.jpg')
   texture.colorSpace = SRGBColorSpace
   const geometry = useMemo(() => new PlaneGeometry(14957 / 3, 9656 / 3), [])
-  const material = useMemo(() => new MeshStandardMaterial({
-    map: texture,
-    // metalness: 0.1
-    // emissive: 0xffffff
-  }), [texture])
-
-  const labels = useMemo(() => {
-    return appState.emotions
-  }, [appState.emotions])
-  const showLabels = useMemo(() => {
-    const list = ['explore', 'pick', 'saved', 'filtered']
-    return list.includes(appState.viewMode)
-  }, [appState.viewMode])
-
-  useEffect(() => {
-    if (appState.emotions.length > 0) return
-
-    fetch(`${apiBase}/emotions`).then(res => res.json()).then((data) => {
-      // @ts-ignore-line
-      setAppState(state => ({ ...state, emotions: data }))
-    })
-  }, [])
-
-  const mapClick = (e: any) => {
-    if (appState.viewMode !== 'pick') return
-    if (e.delta > 2) return
-    if (appState.entryPoints.length >= 4) return
-
-    // @ts-ignore-line
-    setAppState((state) => ({ ...state, entryPoints: [...state.entryPoints, e.point] }))
-  }
-
-  const points = useMemo(() => appState.entryPoints, [appState.entryPoints])
+  const material = useMemo(() => new MeshStandardMaterial({ map: texture }), [texture])
 
   const bgtex = useTexture('/layers/white-px.jpg')
   const bggeometry = useMemo(() => new PlaneGeometry(100_000, 100_000), [])
   const bgmaterial = useMemo(() => new MeshStandardMaterial({ map: bgtex }), [bgtex])
 
-  const picking = useMemo(() => {
-    return appState.viewMode === 'pick' || appState.viewMode === 'saved'
-  }, [appState.viewMode])
-
-  const rmPin = (idx: number) => {
-    // @ts-ignore-line
-    setAppState((state) => ({ ...state, entryPoints: state.entryPoints.filter((_, i) => i !== idx) }))
-  }
-
   const [mapLoaded, setMapLoaded] = useState(false)
-
   useEffect(() => {
-    setTimeout(() => {
-      setMapLoaded(true)
-    }, 200)
+    const t = setTimeout(() => setMapLoaded(true), 200)
+    return () => clearTimeout(t)
   }, [texture])
-
-  const { camera } = useThree()
-  const [zoomLevel, setZoomLevel] = useState(camera.position.z)
-
-  useFrame(() => {
-    setZoomLevel(camera.position.z)
-  })
-
-  function calc (a: number) {
-    const max = 3400
-    const min = 1700
-    if (a > max) {
-        return 0
-    } else if (a <= min) {
-        return 1
-    } else {
-        return (max - a) / (max - min)
-    }
-  }
 
   return (
     <group>
-      <mesh
-        geometry={bggeometry}
-        material={bgmaterial}
-        position={[0, 0, -1]}
-        // onPointerDown={doneZoom}
-        onClick={mapClick}/>
-      {mapLoaded && (<mesh
-        geometry={geometry}
-        material={material}
-        ref={mesh}
-        position={[-582, 140, 0]}
-        {...props}/>
+      <mesh geometry={bggeometry} material={bgmaterial} position={[0, 0, -1]} />
+      {mapLoaded && (
+        <mesh
+          geometry={geometry}
+          material={material}
+          ref={mesh}
+          position={[-582, 140, 0]}
+          {...props}
+        />
       )}
-      {showLabels && labels.map((label, index) => {
-        return (
-          // <Label label={label} index={index} key={index}/>
-          <Html
-            key={index}
-            position={[Number(label.x), Number(label.y), Number(label.z)]}
-            center={true}
-            distanceFactor={1100} // ensures scaling with map layer
-            style={{
-              opacity: calc(zoomLevel),
-              pointerEvents: 'none',
-              zIndex: 0
-            }}
-            className='map-label'>
-            <p>{label.title}</p>
-          </Html>
-        )
-      })}
-      <group>
-        {picking && points.map((point, index) => {
-          return (
-            <Pin
-              rmPin={rmPin}
-              key={index}
-              idx={index}
-              // opacity={1}
-              position={point}
-              mult={0.8}
-            />
-          )
-        })}
-      </group>
     </group>
   )
 }

@@ -2,45 +2,96 @@
 class BackgroundMusicController {
   private audio: HTMLAudioElement | null = null
   private initialized = false
-  private fading = 0 as number | 0
-  private target = 1
   private original = 1
+
+  // Web Audio
+  private ctx: (AudioContext | null) = null
+  private source: MediaElementAudioSourceNode | null = null
+  private gain: GainNode | null = null
 
   init(src: string = '/audio/backgroundmusic.mp3', originalVolume = 1) {
     if (this.initialized) return
-    this.original = originalVolume
+    this.original = clamp01(originalVolume)
+
     const el = new Audio(src)
     el.loop = true
-    el.volume = originalVolume
-    // Hint to mobile browsers
+    // iOS ignores HTMLMediaElement.volume; we still set it as a fallback on desktop
+    el.volume = this.original
     // @ts-ignore
     el.playsInline = true
     el.preload = 'auto'
     this.audio = el
+
+    // Prepare Web Audio chain (gain control works on iOS)
+    this.ensureChain()
+
     this.initialized = true
-    // Try autoplay; also attach a one-time gesture resume to be safe
-    const startOnGesture = () => {
-      this.play().finally(() => {
+
+    const startOnGesture = async () => {
+      try {
+        await this.resumeCtx()
+        await this.play()
+      } finally {
         window.removeEventListener('pointerdown', startOnGesture)
         window.removeEventListener('keydown', startOnGesture)
         window.removeEventListener('touchstart', startOnGesture)
-      })
+      }
     }
     window.addEventListener('pointerdown', startOnGesture, { once: true, passive: true })
     window.addEventListener('keydown', startOnGesture, { once: true })
     window.addEventListener('touchstart', startOnGesture, { once: true, passive: true })
 
-    // Initial attempt (may be blocked, which is fine)
+    // Initial attempt (may be blocked)
     this.play().catch(() => {})
 
-    // When returning to tab, ensure music is playing
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.play().catch(() => {})
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        await this.resumeCtx().catch(() => {})
+        await this.play().catch(() => {})
+      }
     })
+  }
+
+  private ensureChain() {
+    if (!this.audio) return
+    if (!this.ctx) {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext
+      if (Ctx) this.ctx = new Ctx()
+    }
+    if (this.ctx && !this.source) {
+      try {
+        this.source = this.ctx.createMediaElementSource(this.audio)
+      } catch (_e) {
+        // If source already exists or failed, ignore
+      }
+    }
+    if (this.ctx && !this.gain) {
+      this.gain = this.ctx.createGain()
+      this.gain.gain.value = this.original
+    }
+    if (this.ctx && this.source && this.gain) {
+      try {
+        this.source.disconnect()
+      } catch {}
+      try {
+        this.gain.disconnect()
+      } catch {}
+      this.source.connect(this.gain)
+      this.gain.connect(this.ctx.destination)
+    }
+  }
+
+  private async resumeCtx() {
+    this.ensureChain()
+    if (this.ctx && this.ctx.state !== 'running') {
+      try { await this.ctx.resume() } catch {}
+    }
   }
 
   async play() {
     if (!this.audio) return
+    this.ensureChain()
+    await this.resumeCtx()
     try {
       await this.audio.play()
     } catch (e) {
@@ -48,44 +99,28 @@ class BackgroundMusicController {
     }
   }
 
-  private cancelFade() {
-    if (this.fading) {
-      cancelAnimationFrame(this.fading)
-      this.fading = 0 as number | 0
+  private rampTo(volume: number, durationMs = 600) {
+    const v = clamp01(volume)
+    if (this.gain && this.ctx) {
+      const now = this.ctx.currentTime
+      this.gain.gain.cancelScheduledValues(now)
+      this.gain.gain.setValueAtTime(this.gain.gain.value, now)
+      this.gain.gain.linearRampToValueAtTime(v, now + Math.max(0, durationMs) / 1000)
+    } else if (this.audio) {
+      // Fallback for non–Web Audio browsers
+      this.audio.volume = v
     }
-  }
-
-  private fadeTo(volume: number, duration = 600) {
-    if (!this.audio) return
-    this.cancelFade()
-    const el = this.audio
-    this.target = Math.max(0, Math.min(1, volume))
-    const start = el.volume
-    const delta = this.target - start
-    if (Math.abs(delta) < 0.001 || duration <= 0) {
-      el.volume = this.target
-      return
-    }
-    const startTime = performance.now()
-    const step = (now: number) => {
-      const t = Math.min(1, (now - startTime) / duration)
-      el.volume = start + delta * t
-      if (t < 1) {
-        this.fading = requestAnimationFrame(step)
-      } else {
-        this.fading = 0 as number | 0
-      }
-    }
-    this.fading = requestAnimationFrame(step)
   }
 
   fadeDown(duration = 600, to = 0.15) {
-    this.fadeTo(to, duration)
+    this.rampTo(to, duration)
   }
 
   fadeUp(duration = 600) {
-    this.fadeTo(this.original, duration)
+    this.rampTo(this.original, duration)
   }
 }
+
+function clamp01(x: number) { return Math.max(0, Math.min(1, x)) }
 
 export const bgm = new BackgroundMusicController()
