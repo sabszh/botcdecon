@@ -206,27 +206,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [messages, isLoading])
 
-  // Track user scroll position and toggle auto-follow accordingly
-  useEffect(() => {
-    const list = chatListRef.current
-    if (!list) return
-    const onScroll = () => {
-      const atBottom = (list.scrollHeight - (list.scrollTop + list.clientHeight)) <= NEAR_BOTTOM_PX
-      autoFollowRef.current = atBottom
-      setShowFollow(!atBottom)
-      // If user left bottom, stop any running auto-follow loop
-      if (!atBottom && scrollRafRef.current) {
-        cancelAnimationFrame(scrollRafRef.current)
-        scrollRafRef.current = null
-      }
-      // If user returned to bottom while audio is playing, resume follow
-      if (atBottom && isAudioPlayingRef.current && autoScrollMsgIdRef.current != null && !scrollRafRef.current) {
-        startAudioAutoScroll(autoScrollMsgIdRef.current)
-      }
-    }
-    list.addEventListener('scroll', onScroll, { passive: true })
-    return () => list.removeEventListener('scroll', onScroll)
-  }, [startAudioAutoScroll])
+  // moved: scroll position tracking effect is placed after startAudioAutoScroll definition
 
   // Autosize the text input as content grows
   const resizeTextarea = useCallback((el?: HTMLTextAreaElement | null) => {
@@ -334,6 +314,28 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
     scrollRafRef.current = requestAnimationFrame(tick)
   }, [scrollMessageProgress])
+
+  // Track user scroll position and toggle auto-follow accordingly
+  useEffect(() => {
+    const list = chatListRef.current
+    if (!list) return
+    const onScroll = () => {
+      const atBottom = (list.scrollHeight - (list.scrollTop + list.clientHeight)) <= NEAR_BOTTOM_PX
+      autoFollowRef.current = atBottom
+      setShowFollow(!atBottom)
+      // If user left bottom, stop any running auto-follow loop
+      if (!atBottom && scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current)
+        scrollRafRef.current = null
+      }
+      // If user returned to bottom while audio is playing, resume follow
+      if (atBottom && isAudioPlayingRef.current && autoScrollMsgIdRef.current != null && !scrollRafRef.current) {
+        startAudioAutoScroll(autoScrollMsgIdRef.current)
+      }
+    }
+    list.addEventListener('scroll', onScroll, { passive: true })
+    return () => list.removeEventListener('scroll', onScroll)
+  }, [startAudioAutoScroll])
 
   const playAudio = useCallback(async (src: string, onEnded?: () => void, onError?: () => void, rate?: number, autoScrollMsgId?: number, enableMicAfter: boolean = true) => {
     if (!src) return
