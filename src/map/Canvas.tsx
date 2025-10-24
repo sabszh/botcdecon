@@ -3,7 +3,7 @@ import { Vector3, MOUSE, TOUCH } from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import { useContext, useMemo, useEffect, useState, useRef } from 'react'
-import { AppContext, Emotion } from '../main'
+import { AppContext, Emotion } from '../context/AppContext'
 
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'

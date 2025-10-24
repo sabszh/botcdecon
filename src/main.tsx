@@ -3,56 +3,10 @@ import ReactDOM from 'react-dom/client'
 import './index.css'
 import Home from './pages/Home'
 import { bgm } from './lib/music'
+import { AppContext, Emotion, Entry, Point } from './context/AppContext'
 
-export type Emotion = {
-  slug: string
-  title: string
-  x: number
-  y: number
-  z: number
-}
-export type Entry = {
-  slug: string
-  name: string
-  location: string
-  text: string
-  date: string
-  points: Point[]
-  index: number
-}
-export type Point = {
-  id: number
-  x: number
-  y: number
-  emotion: string
-  distance: number
-  angle: number
-}
-
-type Context = {
-  appState: {
-    introStarted: boolean
-    introSeen: boolean
-    menuOpen: boolean
-    headerVisible: boolean
-    emotions: Emotion[]
-    entries: Entry[]
-    filteredEntries: Entry[]
-    myEntries: Entry[]
-    currentEntry: Entry | null
-    currentMarker: Point | null
-    viewMode: 'empty' | 'post' | 'pick' | 'saved' | 'explore' | 'filtered'
-    zoomIn: boolean
-    entryPoints: { x: number; y: number }[],
-    mvCam: any
-    onsite: number
-    x: number
-    y: number
-    z: number
-  }
-  setAppState: (state: Context['appState']) => void
-}
-const State: Context['appState'] = {
+import type { AppState } from './context/AppContext'
+const State: AppState = {
   introStarted: false,
   introSeen: false,
   menuOpen: false,
@@ -72,8 +26,6 @@ const State: Context['appState'] = {
   y: 0,
   z: 1000
 }
-
-export const AppContext = React.createContext<Context>(null!)
 
 // Chat-only app: render Home directly (no router/pages)
 

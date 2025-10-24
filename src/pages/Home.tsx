@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from 'react'
-import { AppContext } from '../main'
+import { AppContext } from '../context/AppContext'
 import ChatPanel from '../components/ChatPanel'
 import MapCanvas from '../map/Canvas'
 import { bgm } from '../lib/music'
