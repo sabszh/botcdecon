@@ -3,6 +3,7 @@ class BackgroundMusicController {
   private audio: HTMLAudioElement | null = null
   private initialized = false
   private original = 1
+  private unlocked = false
 
   // Web Audio
   private ctx: (AudioContext | null) = null
@@ -19,18 +20,32 @@ class BackgroundMusicController {
     el.volume = this.original
     // @ts-ignore
     el.playsInline = true
+    // Ensure attribute as well (some iOS builds check attribute form)
+    try { el.setAttribute('playsinline', 'true') } catch {}
     el.preload = 'auto'
     this.audio = el
 
-    // Prepare Web Audio chain (gain control works on iOS)
-    this.ensureChain()
+    // Do NOT eagerly create/resume AudioContext on iOS; wait for a gesture
+    // We still prepare the chain after unlocking to control gain reliably
 
     this.initialized = true
 
     const startOnGesture = async () => {
       try {
+        // Mark as unlocked so context/graph is created only after a gesture
+        this.unlocked = true
+        // Build WebAudio chain now that we have a user gesture
+        this.ensureChain()
+        // iOS autoplay policy: perform a muted play first to unlock the element
+        if (this.audio) {
+          try {
+            this.audio.muted = true
+            await this.audio.play().catch(() => {})
+            this.audio.muted = false
+          } catch {}
+        }
         await this.resumeCtx()
-        await this.play()
+        await this.play().catch(() => {})
       } finally {
         window.removeEventListener('pointerdown', startOnGesture)
         window.removeEventListener('keydown', startOnGesture)
@@ -41,7 +56,7 @@ class BackgroundMusicController {
     window.addEventListener('keydown', startOnGesture, { once: true })
     window.addEventListener('touchstart', startOnGesture, { once: true, passive: true })
 
-    // Initial attempt (may be blocked)
+    // Initial attempt (may be blocked on iOS; gesture handler above will recover)
     this.play().catch(() => {})
 
     document.addEventListener('visibilitychange', async () => {
@@ -54,7 +69,7 @@ class BackgroundMusicController {
 
   private ensureChain() {
     if (!this.audio) return
-    if (!this.ctx) {
+    if (!this.ctx && this.unlocked) {
       const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext
       if (Ctx) this.ctx = new Ctx()
     }
