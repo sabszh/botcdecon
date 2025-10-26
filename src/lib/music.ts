@@ -40,21 +40,29 @@ class BackgroundMusicController {
         if (this.audio) {
           try {
             this.audio.muted = true
-            await this.audio.play().catch(() => {})
+            const unlocked = await this.audio.play().then(() => true).catch(() => false)
             this.audio.muted = false
+            // Mark consent if unlock succeeded
+            try { if (unlocked) localStorage.setItem('audioAllowed', '1') } catch {}
           } catch {}
         }
         await this.resumeCtx()
-        await this.play().catch(() => {})
+        await this.play().then(() => {
+          try { localStorage.setItem('audioAllowed', '1') } catch {}
+        }).catch(() => {})
       } finally {
         window.removeEventListener('pointerdown', startOnGesture)
-        window.removeEventListener('keydown', startOnGesture)
+        window.removeEventListener('click', startOnGesture)
         window.removeEventListener('touchstart', startOnGesture)
+        window.removeEventListener('touchend', startOnGesture)
+        window.removeEventListener('keydown', startOnGesture)
       }
     }
     window.addEventListener('pointerdown', startOnGesture, { once: true, passive: true })
-    window.addEventListener('keydown', startOnGesture, { once: true })
+    window.addEventListener('click', startOnGesture, { once: true })
     window.addEventListener('touchstart', startOnGesture, { once: true, passive: true })
+    window.addEventListener('touchend', startOnGesture, { once: true })
+    window.addEventListener('keydown', startOnGesture, { once: true })
 
     // Initial attempt (may be blocked on iOS; gesture handler above will recover)
     this.play().catch(() => {})

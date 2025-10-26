@@ -41,6 +41,12 @@ function StoreProvider (props: React.PropsWithChildren) {
   React.useEffect(() => {
     // Initialize background music once at app start
     bgm.init('/audio/backgroundmusic.mp3', 1)
+    // If user previously allowed audio, attempt early autoplay
+    try {
+      if (localStorage.getItem('audioAllowed') === '1') {
+        bgm.play().catch(() => {})
+      }
+    } catch {}
   }, [])
 
   return (

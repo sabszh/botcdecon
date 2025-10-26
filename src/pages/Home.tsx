@@ -37,6 +37,8 @@ export default function Home () {
 
   const pick = (lang: 'en' | 'da') => {
     setLanguage(lang)
+    // Start background music on explicit user gesture (iOS unlock)
+    try { bgm.play() } catch {}
     // Interaction begins: fade music down to subtle background
     // Increase chat BGM by +2 dB: 0.025 × 10^(2/20) ≈ 0.0315
     // Net vs original 0.08 baseline is about −8 dB now

@@ -253,6 +253,46 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     list.scrollTo({ top: target, behavior: 'auto' })
   }, [])
 
+  // iOS/iPadOS: unlock the <audio> element on first user gesture
+  useEffect(() => {
+    const unlock = () => {
+      const el = audioElRef.current
+      if (!el) return cleanup()
+      try {
+        el.muted = true
+        const p = el.play()
+        if (p && typeof p.then === 'function') {
+          p.then(() => {
+            try { el.pause() } catch {}
+            try { el.currentTime = 0 } catch {}
+            el.muted = false
+            // Persist that audio was successfully unlocked
+            try { localStorage.setItem('audioAllowed', '1') } catch {}
+          }).catch(() => {
+            // ignore
+          })
+        } else {
+          try { el.pause() } catch {}
+          try { el.currentTime = 0 } catch {}
+          el.muted = false
+          try { localStorage.setItem('audioAllowed', '1') } catch {}
+        }
+      } catch {}
+      cleanup()
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('click', unlock)
+      window.removeEventListener('touchend', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+    window.addEventListener('pointerdown', unlock, { once: true, passive: true })
+    window.addEventListener('click', unlock, { once: true })
+    window.addEventListener('touchend', unlock, { once: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return cleanup
+  }, [])
+
   const stopAudioAutoScroll = useCallback(() => {
     autoScrollMsgIdRef.current = null
     if (scrollRafRef.current) {
