@@ -21,6 +21,19 @@ const AUDIO_FADE_MS = 300
 // Browser TTS (fallback) should be ~5% faster than generated
 const BROWSER_TTS_RATE = Math.min(2, GENERATED_SPEECH_RATE * 1.05)
 
+// Resolve audio URL from backend:
+// - Keep data:, blob:, and absolute http(s) URLs as-is
+// - Otherwise, treat as relative to apiBase
+function resolveAudioSrc (u: string | null | undefined): string | null {
+  if (!u) return null
+  const s = u.toString()
+  if (/^(data:|blob:|https?:\/\/)/i.test(s)) return s
+  if (!apiBase) return s
+  const left = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
+  const right = s.startsWith('/') ? s : `/${s}`
+  return `${left}${right}`
+}
+
 const THANK_YOU_TEXTS: Record<Language, string> = {
   en: 'Thank you for sharing.',
   da: 'Tak for at dele din erindring.'
@@ -64,6 +77,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   // No UI or persistence for speech rate; use a fixed constant for generated audio only
   // No follow-up question now; no need to track question count
   const [micError, setMicError] = useState<string | null>(null)
+  // Track whether we've started the intro flow (prevents double-start on iOS unlock)
+  const introStartedRef = useRef(false)
+  const introTimerRef = useRef<number | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const inputWrapRef = useRef<HTMLDivElement | null>(null)
   const inputBaseHeightRef = useRef<number>(0)
@@ -172,24 +188,61 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [])
 
+  // Start the scripted intro, with iOS unlock-aware gating
+  const startIntro = useCallback(() => {
+    if (!language) return
+    if (introStartedRef.current) return
+    introStartedRef.current = true
+    const conf = scripts[language]
+    addMessage('bot', conf.welcome)
+    playAudio(`/audio/${language}_WELCOME.mp3`, () => {
+      // chain Memory 1 prompt
+      const idM1 = addMessage('bot', conf.memory1)
+      // After the prompt audio finishes, enable mic automatically
+      playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
+        setPhase('await_memory')
+        setMicDesired(true)
+      }, undefined, GENERATED_SPEECH_RATE, idM1 ?? undefined, true)
+    }, undefined, GENERATED_SPEECH_RATE, undefined, false)
+  }, [language, addMessage, playAudio])
+
   useEffect(() => {
     if (!language) return
-    const conf = scripts[language]
-    const t = setTimeout(() => {
-      addMessage('bot', conf.welcome)
-      playAudio(`/audio/${language}_WELCOME.mp3`, () => {
-        // chain Memory 1 prompt
-        const idM1 = addMessage('bot', conf.memory1)
-        // After the prompt audio finishes, enable mic automatically
-        playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
-          setPhase('await_memory')
-          setMicDesired(true)
-        }, undefined, GENERATED_SPEECH_RATE, idM1 ?? undefined, true)
-      }, undefined, GENERATED_SPEECH_RATE, undefined, false)
-    }, INITIAL_AUDIO_DELAY_MS)
-    return () => clearTimeout(t)
+    // Clear any previous timer when language changes
+    if (introTimerRef.current) {
+      window.clearTimeout(introTimerRef.current)
+      introTimerRef.current = null
+    }
+    introStartedRef.current = false
+
+    // If audio was previously unlocked/allowed, start after the normal delay
+    let audioAllowed = false
+    try { audioAllowed = localStorage.getItem('audioAllowed') === '1' } catch {}
+
+    if (!isIOS || audioAllowed) {
+      introTimerRef.current = window.setTimeout(() => startIntro(), INITIAL_AUDIO_DELAY_MS)
+      return () => { if (introTimerRef.current) window.clearTimeout(introTimerRef.current) }
+    }
+
+    // iOS and not yet allowed: wait for first user gesture to both unlock and start
+    const onFirstGesture = () => {
+      // give the unlock handler a tick to run first
+      setTimeout(() => startIntro(), 0)
+      cleanup()
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointerdown', onFirstGesture)
+      window.removeEventListener('click', onFirstGesture)
+      window.removeEventListener('touchend', onFirstGesture)
+      window.removeEventListener('keydown', onFirstGesture)
+    }
+    window.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true })
+    window.addEventListener('click', onFirstGesture, { once: true })
+    window.addEventListener('touchend', onFirstGesture, { once: true })
+    window.addEventListener('keydown', onFirstGesture, { once: true })
+    return cleanup
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language])
+  }, [language, isIOS, startIntro])
 
   useEffect(() => {
     const list = chatListRef.current
@@ -692,10 +745,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           }, undefined, GENERATED_SPEECH_RATE)
         }
         if (replyText && audioUrl) {
-          const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
+          const resolved = resolveAudioSrc(audioUrl)
           // Slightly slower rate for generated audio
           const msgId = addMessage('bot', replyText)
-          playAudio(resolved, afterAnswer, () => speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
+          if (resolved) {
+            playAudio(resolved, afterAnswer, () => speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
+          } else {
+            speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined)
+          }
         } else if (replyText) {
           const msgId = addMessage('bot', replyText)
           speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined)
@@ -757,10 +814,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           }, undefined, GENERATED_SPEECH_RATE)
         }
         if (replyText && audioUrl) {
-          const resolved = audioUrl.startsWith('data:') ? audioUrl : `${apiBase}${audioUrl}`
+          const resolved = resolveAudioSrc(audioUrl)
           // Slightly slower rate for generated audio
           const msgId = addMessage('bot', replyText)
-          playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
+          if (resolved) {
+            playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
+          } else {
+            speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
+          }
         } else if (replyText) {
           const msgId = addMessage('bot', replyText)
           speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
