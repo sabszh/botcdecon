@@ -2,7 +2,7 @@ import type { ThreeElements } from '@react-three/fiber'
 import { Mesh } from 'three'
 import { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF, Float } from '@react-three/drei'
+import { useGLTF } from '@react-three/drei'
 
 const gltfSrc = '/models/hippocampus.gltf'
 // const gltfSrc = '/models/v002_6.gltf'
@@ -39,19 +39,14 @@ export default function (props: ThreeElements['mesh'] & { onObjLoaded: () => voi
   }, [])
 
   return (
-    <Float
-      rotationIntensity={0}
-      floatIntensity={0}
-      speed={0}
-      frustumCulled={true}>
-      <mesh ref={hippo}
-        geometry={nodes.Default.geometry}
-        material={nodes.Default.material}
-        position={[0, -50, 3600]}
-        scale={13}
-        {...props}>
-      </mesh>
-    </Float>
+    <mesh ref={hippo}
+      geometry={nodes.Default.geometry}
+      material={nodes.Default.material}
+      position={[0, -50, 3600]}
+      scale={13}
+      frustumCulled={true}
+      {...props}>
+    </mesh>
   )
 }
 
