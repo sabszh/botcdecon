@@ -1,7 +1,7 @@
 import { Mesh, PlaneGeometry, MeshStandardMaterial, SRGBColorSpace } from 'three'
 import { useRef, useMemo, useState, useEffect } from 'react'
 import type { ThreeElements } from '@react-three/fiber'
-import { TextureLoader } from 'three/src/loaders/TextureLoader'
+import { TextureLoader } from 'three'
 
 // Background-only plane: just render the large map with a neutral backdrop.
 export default function (props: ThreeElements['mesh']) {
