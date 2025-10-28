@@ -21,17 +21,36 @@ const AUDIO_FADE_MS = 300
 // Browser TTS (fallback) should be ~5% faster than generated
 const BROWSER_TTS_RATE = Math.min(2, GENERATED_SPEECH_RATE * 1.05)
 
+// Debug toggle: set localStorage.audioDebug = '1' to enable logs
+const AUDIO_DEBUG = (() => { try { return localStorage.getItem('audioDebug') === '1' } catch { return false } })()
+const dlog = (...args: any[]) => { if (AUDIO_DEBUG) console.log('[AUDIO]', ...args) }
+
 // Resolve audio URL from backend:
 // - Keep data:, blob:, and absolute http(s) URLs as-is
 // - Otherwise, treat as relative to apiBase
 function resolveAudioSrc (u: string | null | undefined): string | null {
   if (!u) return null
   const s = u.toString()
-  if (/^(data:|blob:|https?:\/\/)/i.test(s)) return s
-  if (!apiBase) return s
+  if (/^(data:|blob:|https?:\/\/)/i.test(s)) { dlog('resolve passthrough', s); return s }
+  if (!apiBase) { dlog('resolve no apiBase', s); return s }
   const left = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
   const right = s.startsWith('/') ? s : `/${s}`
-  return `${left}${right}`
+  const out = `${left}${right}`
+  dlog('resolve joined', { input: s, out })
+  return out
+}
+
+function isHttpUrl (s: string) {
+  return /^https?:\/\//i.test(s)
+}
+
+function sameOrigin (u: string) {
+  try {
+    const a = new URL(u, window.location.href)
+    return a.origin === window.location.origin
+  } catch {
+    return true
+  }
 }
 
 const THANK_YOU_TEXTS: Record<Language, string> = {
@@ -226,6 +245,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
     // iOS and not yet allowed: wait for first user gesture to both unlock and start
     const onFirstGesture = () => {
+      dlog('intro: first gesture received; starting intro')
       // give the unlock handler a tick to run first
       setTimeout(() => startIntro(), 0)
       cleanup()
@@ -312,13 +332,27 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       const el = audioElRef.current
       if (!el) return cleanup()
       try {
+        // Load and briefly play a tiny existing mp3 muted to satisfy iOS gesture policy
+        // Use a small, bundled file to keep latency low
+        const unlockSrc = '/audio/en_THANK_YOU.mp3'
+        const prevSrc = el.src
         el.muted = true
+        // Only swap in the unlock clip if there is no current src
+        if (!prevSrc) {
+          el.src = unlockSrc
+          try { el.load?.() } catch {}
+        }
         const p = el.play()
         if (p && typeof p.then === 'function') {
           p.then(() => {
             try { el.pause() } catch {}
             try { el.currentTime = 0 } catch {}
             el.muted = false
+            // Restore previous src if we changed it just for unlock
+            if (!prevSrc) {
+              try { el.removeAttribute('src') } catch {}
+              try { el.load?.() } catch {}
+            }
             // Persist that audio was successfully unlocked
             try { localStorage.setItem('audioAllowed', '1') } catch {}
           }).catch(() => {
@@ -328,6 +362,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           try { el.pause() } catch {}
           try { el.currentTime = 0 } catch {}
           el.muted = false
+          if (!prevSrc) {
+            try { el.removeAttribute('src') } catch {}
+            try { el.load?.() } catch {}
+          }
           try { localStorage.setItem('audioAllowed', '1') } catch {}
         }
       } catch {}
@@ -436,6 +474,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     lastAudioRateRef.current = typeof rate === 'number' && isFinite(rate) && rate > 0 ? rate : 1
     const el = audioElRef.current
     if (!el) return
+    dlog('playAudio start', { src, rate: lastAudioRateRef.current, autoScrollMsgId, enableMicAfter })
     // Stop mic while bot audio is playing, to prevent capture
     try { recognitionRef.current?.stop?.() } catch {}
     setIsMicOn(false)
@@ -470,7 +509,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       } catch {}
     }
     try { el.pause() } catch {}
+    // Set CORS mode for cross-origin streams (helps if we later route via WebAudio)
+    try { if (isHttpUrl(src) && !sameOrigin(src)) (el as any).crossOrigin = 'anonymous' } catch {}
     el.src = src
+    try { el.load?.() } catch {}
     // Apply playback rate ONLY when explicitly requested (for generated audio)
     try {
       if (typeof rate === 'number' && isFinite(rate) && rate > 0) {
@@ -484,6 +526,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     } catch {}
     try { el.volume = 0 } catch {}
     el.onended = () => {
+      dlog('audio ended')
       setIsAudioPlaying(false)
       stopAudioAutoScroll()
       // After bot stops speaking, it's user's turn again
@@ -492,6 +535,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       if (onEnded) onEnded()
     }
     el.onerror = () => {
+      dlog('audio onerror')
       setIsAudioPlaying(false)
       stopAudioAutoScroll()
       // If an error handler is provided, use it; otherwise continue as ended
@@ -499,6 +543,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       else if (onEnded) onEnded()
     }
     el.onplay = () => {
+      dlog('audio onplay')
       setIsAudioPlaying(true)
       if (typeof autoScrollMsgId === 'number' && autoFollowRef.current) {
         const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0
@@ -506,12 +551,41 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         else startAudioAutoScroll(autoScrollMsgId)
       }
     }
-    el.onpause = () => setIsAudioPlaying(false)
+    el.onpause = () => { dlog('audio onpause'); setIsAudioPlaying(false) }
+    const tryBlobFallback = async () => {
+      dlog('trying blob fallback', { src })
+      try {
+        // Fetch remote audio to a Blob and replay via blob: URL (iOS-friendly)
+        const resp = await fetch(src, { mode: 'cors' })
+        if (!resp.ok) throw new Error(`audio fetch ${resp.status}`)
+        const blob = await resp.blob()
+        const url = URL.createObjectURL(blob)
+        lastAudioSrcRef.current = url
+        el.src = url
+        try { el.load?.() } catch {}
+        await el.play()
+        fade(0, 1, AUDIO_FADE_MS)
+      } catch (e) {
+        console.warn('[AUDIO] blob fallback failed', e)
+        setIsAudioPlaying(false)
+        if (onError) onError()
+      }
+    }
+
     el.play()
       .then(() => {
         fade(0, 1, AUDIO_FADE_MS)
       })
-      .catch(() => setIsAudioPlaying(false))
+      .catch((_e) => {
+        console.warn('[AUDIO] play() rejected', _e)
+        // If remote absolute URL (e.g., ElevenLabs) failed, try blob fallback
+        if (isHttpUrl(src)) {
+          tryBlobFallback()
+        } else {
+          setIsAudioPlaying(false)
+          if (onError) onError()
+        }
+      })
   }, [startAudioAutoScroll, stopAudioAutoScroll])
 
   // Fallback TTS using the browser's SpeechSynthesis
@@ -736,6 +810,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         const data = await res.json()
         const replyText = (data?.message || '').trim()
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
+        dlog('api audioUrl (confirm_more)', audioUrl)
         // After answering, ask if they'd like more (Question 2)
         const afterAnswer = () => {
           addMessage('bot', conf.question2)
@@ -746,6 +821,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         }
         if (replyText && audioUrl) {
           const resolved = resolveAudioSrc(audioUrl)
+          dlog('resolved audio (confirm_more)', resolved)
           // Slightly slower rate for generated audio
           const msgId = addMessage('bot', replyText)
           if (resolved) {
@@ -787,6 +863,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       const data = await res.json()
       const replyText = (data?.message || '').trim()
       const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
+      dlog('api audioUrl', audioUrl)
       // Handle audio sequencing and next prompt depending on phase/turn
       if (isMemoryTurn) {
         const conf = scripts[language]
@@ -815,6 +892,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         }
         if (replyText && audioUrl) {
           const resolved = resolveAudioSrc(audioUrl)
+          dlog('resolved audio', resolved)
           // Slightly slower rate for generated audio
           const msgId = addMessage('bot', replyText)
           if (resolved) {
