@@ -42,27 +42,27 @@ export default function Home() {
   }, [language, setAppState])
 
   // Language selection — now iOS-safe for autoplay
+  // Home.tsx  — STEP 2: robust iOS unlock + start + fade
   const pick = async (lang: 'en' | 'da') => {
     setLanguage(lang)
 
     try {
-      // ✅ Unlock audio context on iOS before playing
+      // Make sure context is ready, then unlock, then play
+      await bgm.resumeCtx().catch(() => {})
       await bgm.unlockNow().catch(() => {})
-
-      // ✅ Start background music on explicit user gesture
       await bgm.play().catch(() => {})
 
-      // Fade music down to subtle background
-      // Increase chat BGM by +2 dB: 0.025 × 10^(2/20) ≈ 0.0315
+      // Subtle background level during chat (~ -30 dB)
       bgm.fadeDown(600, 0.0315)
     } catch (e) {
       console.warn('[BGM] Playback blocked or failed', e)
     }
 
-    // Engage zoom/pan map behind chat
-    // @ts-ignore-line
+    // Engage map / UI state
+    // @ts-ignore
     setAppState((s) => ({ ...s, headerVisible: false, viewMode: 'post', zoomIn: true }))
   }
+
 
   return (
     <div className='relative w-full h-screen'>

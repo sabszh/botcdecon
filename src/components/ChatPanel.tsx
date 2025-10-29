@@ -171,6 +171,24 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
   useEffect(() => () => stopDeleteHold(), [stopDeleteHold])
 
+  // ChatPanel.tsx  — STEP 3: one-time mic pre-warm (iOS friendly)
+  useEffect(() => {
+    const isiOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+    if (!isiOS) return
+
+    let cleaned = false
+    navigator.mediaDevices?.getUserMedia?.({ audio: true })
+      .then((stream) => {
+        if (cleaned) return
+        // immediately stop — just to grant permission
+        stream.getTracks().forEach(t => t.stop())
+      })
+      .catch(() => { /* ignore; user may deny, UI already handles */ })
+
+    return () => { cleaned = true }
+  }, [])
+
+
   // Very lightweight negation detection per language
   const isNegativeResponse = useCallback((text: string, lang: Language) => {
     const t = (text || '').toLowerCase().trim()
