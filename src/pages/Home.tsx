@@ -13,6 +13,19 @@ export default function Home() {
   const { setAppState } = useContext(AppContext)
   const inactivityTimer = useRef<number | undefined>(undefined)
 
+  // One-shot unlock+play helper kept as synchronous as possible for iOS
+  const unlockAndPlay = async () => {
+    try {
+      // Fire-and-forget to stay within gesture handling call stack
+      bgm.resumeCtx().catch(() => {})
+      bgm.unlockNow().catch(() => {})
+      await bgm.play().catch(() => {})
+      try { localStorage.setItem('audioAllowed', '1') } catch {}
+    } finally {
+      setNeedsAudioUnlock(false)
+    }
+  }
+
   // Reset to language selection after 3 minutes of no activity while in chat
   useEffect(() => {
     if (!language) return
@@ -68,23 +81,44 @@ export default function Home() {
     setAppState((s) => ({ ...s, headerVisible: false, viewMode: 'post', zoomIn: true }))
   }
 
+  // If audio previously allowed, ensure autoplay when landing on Home (language null)
+  useEffect(() => {
+    if (language === null) {
+      try {
+        if (localStorage.getItem('audioAllowed') === '1') {
+          bgm.resumeCtx().catch(() => {})
+          bgm.play().catch(() => {})
+        }
+      } catch {}
+    }
+  }, [language])
+
+  // Global “tap anywhere” handler on iOS for first visit to unlock & start audio
+  useEffect(() => {
+    if (!needsAudioUnlock) return
+    const isiOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+    if (!isiOS) return
+    const onFirstGesture = () => { unlockAndPlay() }
+    window.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true })
+    window.addEventListener('touchstart', onFirstGesture, { once: true, passive: true })
+    window.addEventListener('click', onFirstGesture, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', onFirstGesture)
+      window.removeEventListener('touchstart', onFirstGesture)
+      window.removeEventListener('click', onFirstGesture)
+    }
+  }, [needsAudioUnlock])
+
 
   return (
     <div className='relative w-full h-screen'>
       {/* iOS audio unlock gate — ensures immediate playback on load/reload */}
       {needsAudioUnlock && (
-        <button
-          type='button'
-          onClick={async () => {
-            try {
-              await bgm.resumeCtx().catch(() => {})
-              await bgm.unlockNow().catch(() => {})
-              await bgm.play().catch(() => {})
-              try { localStorage.setItem('audioAllowed', '1') } catch {}
-            } finally {
-              setNeedsAudioUnlock(false)
-            }
-          }}
+        <div
+          role='button'
+          onClick={unlockAndPlay}
+          onTouchStart={unlockAndPlay}
+          onPointerDown={unlockAndPlay}
           className='absolute inset-0 z-50 flex items-center justify-center bg-black/60 text-white'
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >
@@ -92,10 +126,10 @@ export default function Home() {
             <span className='block text-center'>Tap to enable sound</span>
             <span className='block text-center opacity-80 text-lg mt-1'>Tryk for at aktivere lyd</span>
           </div>
-        </button>
+        </div>
       )}
 
-      <div className='absolute inset-0 -z-10'>
+      <div className='absolute inset-0 -z-10' onPointerDown={() => { if (needsAudioUnlock) unlockAndPlay() }} onClick={() => { if (needsAudioUnlock) unlockAndPlay() }}>
         {/* Remount Canvas when language changes to reset camera/scene */}
         <MapCanvas key={language || 'splash'} onObjLoaded={() => {}} />
       </div>
