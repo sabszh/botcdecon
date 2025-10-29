@@ -44,6 +44,9 @@ function StoreProvider (props: React.PropsWithChildren) {
     // If user previously allowed audio, attempt early autoplay
     try {
       if (localStorage.getItem('audioAllowed') === '1') {
+        // Try to resume and unlock before playing to maximize iOS success on reload
+        bgm.resumeCtx().catch(() => {})
+        bgm.unlockNow().catch(() => {})
         bgm.play().catch(() => {})
       }
     } catch {}

@@ -6,6 +6,10 @@ import { bgm } from '../lib/music'
 
 export default function Home() {
   const [language, setLanguage] = useState<'en' | 'da' | null>(null)
+  const [needsAudioUnlock, setNeedsAudioUnlock] = useState<boolean>(() => {
+    const isiOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+    try { return isiOS && localStorage.getItem('audioAllowed') !== '1' } catch { return isiOS }
+  })
   const { setAppState } = useContext(AppContext)
   const inactivityTimer = useRef<number | undefined>(undefined)
 
@@ -67,6 +71,30 @@ export default function Home() {
 
   return (
     <div className='relative w-full h-screen'>
+      {/* iOS audio unlock gate — ensures immediate playback on load/reload */}
+      {needsAudioUnlock && (
+        <button
+          type='button'
+          onClick={async () => {
+            try {
+              await bgm.resumeCtx().catch(() => {})
+              await bgm.unlockNow().catch(() => {})
+              await bgm.play().catch(() => {})
+              try { localStorage.setItem('audioAllowed', '1') } catch {}
+            } finally {
+              setNeedsAudioUnlock(false)
+            }
+          }}
+          className='absolute inset-0 z-50 flex items-center justify-center bg-black/60 text-white'
+          style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
+          <div className='rounded-2xl border border-white/30 bg-white/10 px-6 py-4 text-2xl'>
+            <span className='block text-center'>Tap to enable sound</span>
+            <span className='block text-center opacity-80 text-lg mt-1'>Tryk for at aktivere lyd</span>
+          </div>
+        </button>
+      )}
+
       <div className='absolute inset-0 -z-10'>
         {/* Remount Canvas when language changes to reset camera/scene */}
         <MapCanvas key={language || 'splash'} onObjLoaded={() => {}} />
