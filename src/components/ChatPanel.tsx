@@ -207,6 +207,85 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [])
 
+  // --- FIXED: Define playAudio before startIntro ---
+  const playAudio = useCallback(async (
+    src: string,
+    onEnded?: () => void,
+    onError?: () => void,
+    rate?: number,
+    autoScrollMsgId?: number,
+    enableMicAfter: boolean = true
+  ) => {
+    if (!src) return
+    lastAudioSrcRef.current = src
+    lastAudioRateRef.current = rate && rate > 0 ? rate : 1
+    const el = audioElRef.current
+    if (!el) return
+
+    try { recognitionRef.current?.stop?.() } catch {}
+    setIsMicOn(false)
+    setIsAudioPlaying(true)
+
+    const fade = (from: number, to: number, duration: number) => {
+      const startTime = performance.now()
+      const step = (now: number) => {
+        const t = Math.min(1, (now - startTime) / duration)
+        // Clamp volume to [0, 1] to avoid IndexSizeError
+        el.volume = Math.min(1, Math.max(0, from + (to - from) * t))
+        if (t < 1) requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+    }
+
+
+
+    el.src = src
+    try { el.load?.() } catch {}
+    el.playbackRate = rate || 1
+    el.volume = 0
+    el.onplay = () => fade(0, 1, 400)
+    el.onended = () => {
+      setIsAudioPlaying(false)
+      if (enableMicAfter) setMicDesired(true)
+      if (onEnded) onEnded()
+    }
+    el.onerror = () => {
+      setIsAudioPlaying(false)
+      if (onError) onError()
+    }
+    el.play().catch(err => console.warn('[Audio play rejected]', err))
+  }, [])
+  // --- END FIX ---
+
+  // --- FIXED: iOS/Chrome Audio Unlock ---
+  useEffect(() => {
+    const unlockAudio = () => {
+      const el = audioElRef.current
+      if (!el) return
+      el.muted = true
+      el.src = '/audio/en_THANK_YOU.mp3'
+      el.play().then(() => {
+        el.pause()
+        el.currentTime = 0
+        el.muted = false
+        localStorage.setItem('audioAllowed', '1')
+      }).catch(() => {})
+      window.removeEventListener('pointerdown', unlockAudio)
+      window.removeEventListener('touchend', unlockAudio)
+      window.removeEventListener('click', unlockAudio)
+    }
+    window.addEventListener('pointerdown', unlockAudio, { once: true })
+    window.addEventListener('touchend', unlockAudio, { once: true })
+    window.addEventListener('click', unlockAudio, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio)
+      window.removeEventListener('touchend', unlockAudio)
+      window.removeEventListener('click', unlockAudio)
+    }
+  }, [])
+  // --- END FIX ---
+
+
   // Start the scripted intro, with iOS unlock-aware gating
   const startIntro = useCallback(() => {
     if (!language) return
@@ -467,126 +546,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     list.addEventListener('scroll', onScroll, { passive: true })
     return () => list.removeEventListener('scroll', onScroll)
   }, [startAudioAutoScroll])
-
-  const playAudio = useCallback(async (src: string, onEnded?: () => void, onError?: () => void, rate?: number, autoScrollMsgId?: number, enableMicAfter: boolean = true) => {
-    if (!src) return
-    lastAudioSrcRef.current = src
-    lastAudioRateRef.current = typeof rate === 'number' && isFinite(rate) && rate > 0 ? rate : 1
-    const el = audioElRef.current
-    if (!el) return
-    dlog('playAudio start', { src, rate: lastAudioRateRef.current, autoScrollMsgId, enableMicAfter })
-    // Stop mic while bot audio is playing, to prevent capture
-    try { recognitionRef.current?.stop?.() } catch {}
-    setIsMicOn(false)
-    // While audio plays, it's bot's turn; user speech not desired
-    setIsAudioPlaying(true)
-    if (audioFadeRafRef.current) cancelAnimationFrame(audioFadeRafRef.current)
-    const fade = (from: number, to: number, duration: number) => {
-      const startTime = performance.now()
-      const start = from
-      const delta = to - from
-      if (Math.abs(delta) < 0.001 || duration <= 0) {
-        el.volume = to
-        return
-      }
-      const step = (now: number) => {
-        const t = Math.min(1, (now - startTime) / duration)
-        el.volume = start + delta * t
-        if (t < 1) {
-          audioFadeRafRef.current = requestAnimationFrame(step)
-        } else {
-          audioFadeRafRef.current = null
-        }
-      }
-      audioFadeRafRef.current = requestAnimationFrame(step)
-    }
-
-    const wasPlaying = !el.paused && !el.ended && el.currentTime > 0
-    if (wasPlaying) {
-      try {
-        fade(el.volume ?? 1, 0, AUDIO_FADE_MS)
-        await new Promise<void>(resolve => setTimeout(resolve, AUDIO_FADE_MS))
-      } catch {}
-    }
-    try { el.pause() } catch {}
-    // Set CORS mode for cross-origin streams (helps if we later route via WebAudio)
-    try { if (isHttpUrl(src) && !sameOrigin(src)) (el as any).crossOrigin = 'anonymous' } catch {}
-    el.src = src
-    try { el.load?.() } catch {}
-    // Apply playback rate ONLY when explicitly requested (for generated audio)
-    try {
-      if (typeof rate === 'number' && isFinite(rate) && rate > 0) {
-        el.playbackRate = Math.max(0.5, Math.min(2, rate))
-        ;(el as any).preservesPitch = true
-        ;(el as any).mozPreservesPitch = true
-        ;(el as any).webkitPreservesPitch = true
-      } else {
-        el.playbackRate = 1
-      }
-    } catch {}
-    try { el.volume = 0 } catch {}
-    el.onended = () => {
-      dlog('audio ended')
-      setIsAudioPlaying(false)
-      stopAudioAutoScroll()
-      // After bot stops speaking, it's user's turn again
-      if (enableMicAfter) setMicDesired(true)
-      // If caller provided a callback, run it (e.g., to resume mic)
-      if (onEnded) onEnded()
-    }
-    el.onerror = () => {
-      dlog('audio onerror')
-      setIsAudioPlaying(false)
-      stopAudioAutoScroll()
-      // If an error handler is provided, use it; otherwise continue as ended
-      if (onError) onError()
-      else if (onEnded) onEnded()
-    }
-    el.onplay = () => {
-      dlog('audio onplay')
-      setIsAudioPlaying(true)
-      if (typeof autoScrollMsgId === 'number' && autoFollowRef.current) {
-        const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0
-        if (d > 0) startTimedAudioAutoScroll(autoScrollMsgId, d * 1000)
-        else startAudioAutoScroll(autoScrollMsgId)
-      }
-    }
-    el.onpause = () => { dlog('audio onpause'); setIsAudioPlaying(false) }
-    const tryBlobFallback = async () => {
-      dlog('trying blob fallback', { src })
-      try {
-        // Fetch remote audio to a Blob and replay via blob: URL (iOS-friendly)
-        const resp = await fetch(src, { mode: 'cors' })
-        if (!resp.ok) throw new Error(`audio fetch ${resp.status}`)
-        const blob = await resp.blob()
-        const url = URL.createObjectURL(blob)
-        lastAudioSrcRef.current = url
-        el.src = url
-        try { el.load?.() } catch {}
-        await el.play()
-        fade(0, 1, AUDIO_FADE_MS)
-      } catch (e) {
-        console.warn('[AUDIO] blob fallback failed', e)
-        setIsAudioPlaying(false)
-        if (onError) onError()
-      }
-    }
-
-    el.play()
-      .then(() => {
-        fade(0, 1, AUDIO_FADE_MS)
-      })
-      .catch((_e) => {
-        console.warn('[AUDIO] play() rejected', _e)
-        // If remote absolute URL (e.g., ElevenLabs) failed, try blob fallback
-        if (isHttpUrl(src)) {
-          tryBlobFallback()
-        } else {
-          setIsAudioPlaying(false)
-          if (onError) onError()
-        }
-      })
-  }, [startAudioAutoScroll, stopAudioAutoScroll])
 
   // Fallback TTS using the browser's SpeechSynthesis
   const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number) => {

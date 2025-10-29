@@ -16,56 +16,33 @@ class BackgroundMusicController {
 
     const el = new Audio(src)
     el.loop = true
-    // iOS ignores HTMLMediaElement.volume; we still set it as a fallback on desktop
     el.volume = this.original
+    // iOS requires both property and attribute for inline playback
     // @ts-ignore
     el.playsInline = true
-    // Ensure attribute as well (some iOS builds check attribute form)
     try { el.setAttribute('playsinline', 'true') } catch {}
     el.preload = 'auto'
     this.audio = el
 
-    // Do NOT eagerly create/resume AudioContext on iOS; wait for a gesture
-    // We still prepare the chain after unlocking to control gain reliably
-
     this.initialized = true
 
+    // Register gesture listeners to unlock audio context when user interacts
     const startOnGesture = async () => {
-      try {
-        // Mark as unlocked so context/graph is created only after a gesture
-        this.unlocked = true
-        // Build WebAudio chain now that we have a user gesture
-        this.ensureChain()
-        // iOS autoplay policy: perform a muted play first to unlock the element
-        if (this.audio) {
-          try {
-            this.audio.muted = true
-            const unlocked = await this.audio.play().then(() => true).catch(() => false)
-            this.audio.muted = false
-            // Mark consent if unlock succeeded
-            try { if (unlocked) localStorage.setItem('audioAllowed', '1') } catch {}
-          } catch {}
-        }
-        await this.resumeCtx()
-        await this.play().then(() => {
-          try { localStorage.setItem('audioAllowed', '1') } catch {}
-        }).catch(() => {})
-      } finally {
-        window.removeEventListener('pointerdown', startOnGesture)
-        window.removeEventListener('click', startOnGesture)
-        window.removeEventListener('touchstart', startOnGesture)
-        window.removeEventListener('touchend', startOnGesture)
-        window.removeEventListener('keydown', startOnGesture)
-      }
+      await this.unlockNow()
+      window.removeEventListener('pointerdown', startOnGesture)
+      window.removeEventListener('click', startOnGesture)
+      window.removeEventListener('touchstart', startOnGesture)
+      window.removeEventListener('touchend', startOnGesture)
+      window.removeEventListener('keydown', startOnGesture)
     }
+
     window.addEventListener('pointerdown', startOnGesture, { once: true, passive: true })
     window.addEventListener('click', startOnGesture, { once: true })
     window.addEventListener('touchstart', startOnGesture, { once: true, passive: true })
     window.addEventListener('touchend', startOnGesture, { once: true })
     window.addEventListener('keydown', startOnGesture, { once: true })
 
-    // Initial attempt (may be blocked on iOS; gesture handler above will recover)
-    this.play().catch(() => {})
+    // ⚠️ Removed eager autoplay attempt — it’s blocked on iOS anyway
 
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState === 'visible') {
@@ -73,6 +50,56 @@ class BackgroundMusicController {
         await this.play().catch(() => {})
       }
     })
+
+    // --- KEEP-ALIVE + VISIBILITY FIXES ---
+    // Prevent browsers (especially iOS) from suspending audio after idle
+    setInterval(() => {
+      if (this.ctx && this.ctx.state === 'running' && this.audio && !this.audio.paused) {
+        try {
+          this.gain?.gain.setValueAtTime(this.gain.gain.value, this.ctx.currentTime)
+        } catch {}
+      }
+    }, 15000)
+
+    // Ensure playback resumes when tab or screen becomes visible again
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          await this.resumeCtx()
+          if (this.audio && this.audio.paused) {
+            await this.audio.play().catch(() => {})
+          }
+        } catch {}
+      }
+    })
+    // --- END FIXES ---
+  }
+
+  /** Public helper: manually unlock audio context and playback (iOS fix) */
+  async unlockNow() {
+    if (this.unlocked) return
+    this.unlocked = true
+    this.ensureChain()
+
+    if (!this.audio) return
+
+    try {
+      // Build Web Audio graph now that gesture happened
+      this.ensureChain()
+
+      // Muted play to unlock HTMLMediaElement
+      this.audio.muted = true
+      await this.audio.play().catch(() => {})
+      this.audio.pause()
+      this.audio.muted = false
+
+      await this.resumeCtx()
+      await this.play().catch(() => {})
+
+      try { localStorage.setItem('audioAllowed', '1') } catch {}
+    } catch (e) {
+      console.warn('[BGM] unlockNow failed', e)
+    }
   }
 
   private ensureChain() {
@@ -84,8 +111,8 @@ class BackgroundMusicController {
     if (this.ctx && !this.source) {
       try {
         this.source = this.ctx.createMediaElementSource(this.audio)
-      } catch (_e) {
-        // If source already exists or failed, ignore
+      } catch {
+        // Ignore duplicate source errors
       }
     }
     if (this.ctx && !this.gain) {
@@ -93,12 +120,8 @@ class BackgroundMusicController {
       this.gain.gain.value = this.original
     }
     if (this.ctx && this.source && this.gain) {
-      try {
-        this.source.disconnect()
-      } catch {}
-      try {
-        this.gain.disconnect()
-      } catch {}
+      try { this.source.disconnect() } catch {}
+      try { this.gain.disconnect() } catch {}
       this.source.connect(this.gain)
       this.gain.connect(this.ctx.destination)
     }
@@ -130,7 +153,7 @@ class BackgroundMusicController {
       this.gain.gain.setValueAtTime(this.gain.gain.value, now)
       this.gain.gain.linearRampToValueAtTime(v, now + Math.max(0, durationMs) / 1000)
     } else if (this.audio) {
-      // Fallback for non–Web Audio browsers
+      // Fallback for browsers without Web Audio
       this.audio.volume = v
     }
   }
@@ -144,6 +167,8 @@ class BackgroundMusicController {
   }
 }
 
-function clamp01(x: number) { return Math.max(0, Math.min(1, x)) }
+function clamp01(x: number) {
+  return Math.max(0, Math.min(1, x))
+}
 
 export const bgm = new BackgroundMusicController()
