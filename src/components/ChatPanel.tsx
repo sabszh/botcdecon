@@ -275,35 +275,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [])
   // --- END FIX ---
 
-  // --- FIXED: iOS/Chrome Audio Unlock ---
-  useEffect(() => {
-    const unlockAudio = () => {
-      const el = audioElRef.current
-      if (!el) return
-      el.muted = true
-      el.src = '/audio/en_THANK_YOU.mp3'
-      el.play().then(() => {
-        el.pause()
-        el.currentTime = 0
-        el.muted = false
-        localStorage.setItem('audioAllowed', '1')
-      }).catch(() => {})
-      window.removeEventListener('pointerdown', unlockAudio)
-      window.removeEventListener('touchend', unlockAudio)
-      window.removeEventListener('click', unlockAudio)
-    }
-    window.addEventListener('pointerdown', unlockAudio, { once: true })
-    window.addEventListener('touchend', unlockAudio, { once: true })
-    window.addEventListener('click', unlockAudio, { once: true })
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio)
-      window.removeEventListener('touchend', unlockAudio)
-      window.removeEventListener('click', unlockAudio)
-    }
-  }, [])
-  // --- END FIX ---
-
-
   // Start the scripted intro, with iOS unlock-aware gating
   const startIntro = useCallback(() => {
     if (!language) return
