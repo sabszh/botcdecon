@@ -9,14 +9,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   plugins: [react()],
   build: {
-    sourcemap: process.env.VITE_SOURCEMAP === 'true'
+    sourcemap: process.env.VITE_SOURCEMAP === 'true',
+    minify: process.env.VITE_DISABLE_MINIFY === 'true' ? false : 'esbuild'
   },
   resolve: {
     dedupe: ['three', 'react', 'react-dom', '@react-three/fiber', '@react-three/drei'],
-    alias: {
-      three: path.resolve(__dirname, 'node_modules/three'),
-      'stats-gl': path.resolve(__dirname, 'src/shims/empty.ts')
-    }
+    alias: [
+      { find: 'three', replacement: path.resolve(__dirname, 'node_modules/three') },
+      { find: /^three\/src\/.*/, replacement: 'three' },
+      { find: 'stats-gl', replacement: path.resolve(__dirname, 'src/shims/empty.ts') },
+      { find: '@react-three/drei/web/Stats', replacement: path.resolve(__dirname, 'src/shims/empty.ts') }
+    ]
   },
   optimizeDeps: {
     include: ['three', '@react-three/fiber', '@react-three/drei'],
