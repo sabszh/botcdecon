@@ -52,8 +52,9 @@ export default function Home() {
       await bgm.unlockNow().catch(() => {})
       await bgm.play().catch(() => {})
 
-      // Subtle background level during chat (~ -30 dB)
-      bgm.fadeDown(600, 0.0315)
+      // Subtle but clearly audible background level during chat (~ -22 dB)
+      // Previously 0.0315 was too quiet on many devices
+      bgm.fadeDown(600, 0.08)
     } catch (e) {
       console.warn('[BGM] Playback blocked or failed', e)
     }

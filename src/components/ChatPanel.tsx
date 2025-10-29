@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { preloadAudio, getCached, clearCache } from '../lib/audioCache'
 
 type Language = 'en' | 'da'
 
@@ -188,6 +189,25 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     return () => { cleaned = true }
   }, [])
 
+  // Preload scripted audio for the selected language to eliminate start lag
+  useEffect(() => {
+    if (!language) {
+      clearCache()
+      return
+    }
+    const clips = [
+      `/audio/${language}_WELCOME.mp3`,
+      `/audio/${language}_MEMORY_1.mp3`,
+      `/audio/${language}_QUESTION_1.mp3`,
+      `/audio/${language}_QUESTION_2.mp3`,
+      `/audio/${language}_FAREWELL.mp3`,
+      `/audio/${language}_THANK_YOU.mp3`,
+    ]
+    // Fire-and-forget preloads
+    clips.forEach(src => { preloadAudio(src).catch(() => {}) })
+    return () => { clearCache() }
+  }, [language])
+
 
   // Very lightweight negation detection per language
   const isNegativeResponse = useCallback((text: string, lang: Language) => {
@@ -235,6 +255,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     enableMicAfter: boolean = true
   ) => {
     if (!src) return
+    // Swap to cached blob URL if preloaded (removes network/decode lag)
+    const cached = getCached(src)
+    const chosenSrc = cached || src
     lastAudioSrcRef.current = src
     lastAudioRateRef.current = rate && rate > 0 ? rate : 1
     const el = audioElRef.current
@@ -256,8 +279,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
 
 
-
-    el.src = src
+    el.src = chosenSrc
     try { el.load?.() } catch {}
     el.playbackRate = rate || 1
     el.volume = 0
@@ -1037,7 +1059,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
               } else if (lastAudioSrcRef.current) {
                 const last = lastAudioSrcRef.current
                 const cur = el.src || ''
-                const canResume = !!last && cur.includes(last) && el.currentTime > 0 && !el.ended
+                // With preloaded blob URLs, el.src won't match the logical path; resume if we have a currentTime
+                const canResume = el.currentTime > 0 && !el.ended
                 if (canResume) {
                   el.play().catch(() => {})
                 } else {
