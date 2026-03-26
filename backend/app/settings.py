@@ -25,7 +25,13 @@ class Settings:
 
   huggingface_api_key: Optional[str] = os.getenv('HUGGINGFACE_API_KEY')
   pinecone_api_key: Optional[str] = os.getenv('PINECONE_API_KEY')
+  retriever_provider: str = os.getenv('RETRIEVER_PROVIDER', 'local').lower()
+  data_json_path: str = os.getenv('DATA_JSON_PATH', 'data/all.json')
+  llm_provider: str = os.getenv('LLM_PROVIDER', 'mistral').lower()
+  mistral_api_key: Optional[str] = os.getenv('MISTRAL_API_KEY')
+  mistral_model: str = os.getenv('MISTRAL_MODEL', 'mistral-small-latest')
   elevenlabs_api_key: Optional[str] = os.getenv('ELEVENLABS_API_KEY')
+  tts_provider: str = os.getenv('TTS_PROVIDER', 'elevenlabs').lower()
   voice_id: str = os.getenv('VOICE_ID', '4PzN60Ir6O2U6RzaQ5fm')
   model_id: str = os.getenv('MODEL_ID', 'eleven_multilingual_v2')
   llm_repo_id: Optional[str] = os.getenv('LLM_REPO_ID')
@@ -34,11 +40,23 @@ class Settings:
 
   @property
   def has_llm_backends(self) -> bool:
-    return all([self.huggingface_api_key, self.pinecone_api_key])
+    return bool(self.mistral_api_key or self.huggingface_api_key)
+
+  @property
+  def has_pinecone(self) -> bool:
+    return self.pinecone_api_key is not None
+
+  @property
+  def has_mistral(self) -> bool:
+    return self.mistral_api_key is not None
+
+  @property
+  def has_elevenlabs(self) -> bool:
+    return self.elevenlabs_api_key is not None
 
   @property
   def has_tts(self) -> bool:
-    return self.elevenlabs_api_key is not None
+    return self.has_elevenlabs
 
 
 settings = Settings()

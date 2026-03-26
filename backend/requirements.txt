@@ -7,6 +7,7 @@ python-multipart==0.0.20
 # AI/ML APIs
 huggingface-hub==0.34.4
 elevenlabs==2.16.0
+mistralai==1.8.2
 
 # LangChain for embeddings
 langchain-huggingface==0.3.1

@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { preloadAudio, getCached, clearCache } from '../lib/audioCache'
 
 type Language = 'en' | 'da'
@@ -14,11 +14,18 @@ type Props = {
   onChangeLanguage: () => void
 }
 
-const apiBase: string = (import.meta.env.VITE_API_BASE as string) || ''
+const rawApiBase =
+  (import.meta.env.VITE_API_BASE as string) ||
+  (import.meta.env.VITE_API_BASE_URL as string) ||
+  ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://127.0.0.1:8000'
+    : '')
+const apiBase: string = rawApiBase.endsWith('/') ? rawApiBase.slice(0, -1) : rawApiBase
 const CHAT_ENDPOINT = `${apiBase}/api/chat`
-const INITIAL_AUDIO_DELAY_MS = 8000
+const CHAT_AUDIO_ENDPOINT = `${CHAT_ENDPOINT}/audio`
+const INTRO_START_MAX_WAIT_MS = 1500
+const INTRO_MIN_DELAY_MS = 300
 const GENERATED_SPEECH_RATE = 0.9 // Tad slower, still natural for all bot audio
-const AUDIO_FADE_MS = 300
 // Browser TTS (fallback) should be ~5% faster than generated
 const BROWSER_TTS_RATE = Math.min(2, GENERATED_SPEECH_RATE * 1.05)
 
@@ -41,22 +48,41 @@ function resolveAudioSrc (u: string | null | undefined): string | null {
   return out
 }
 
-function isHttpUrl (s: string) {
-  return /^https?:\/\//i.test(s)
-}
-
-function sameOrigin (u: string) {
-  try {
-    const a = new URL(u, window.location.href)
-    return a.origin === window.location.origin
-  } catch {
-    return true
-  }
-}
-
 const THANK_YOU_TEXTS: Record<Language, string> = {
   en: 'Thank you for sharing.',
   da: 'Tak for at dele din erindring.'
+}
+
+type BackendChatResponse = {
+  message?: string
+  audioUrl?: string | null
+  audio_url?: string | null
+  audioTurnId?: string | null
+  audio_turn_id?: string | null
+}
+
+function buildSessionId () {
+  return `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+}
+
+function buildHistoryPayload (history: ChatMessage[]) {
+  const noiseFragments = [
+    'Udforsk Carte de Continuonus',
+    'Explore Carte de Continuonus',
+    'Change language',
+    'Skift sprog'
+  ]
+
+  return history
+    .slice(-4)
+    .map((m) => {
+      let content = (m.content || '').trim()
+      if (!content) return null
+      if (noiseFragments.some((f) => content.includes(f))) return null
+      if (content.length > 200) content = content.slice(0, 200) + '…'
+      return { role: m.role, content }
+    })
+    .filter((v): v is { role: 'user' | 'bot'; content: string } => Boolean(v))
 }
 
 const scripts = {
@@ -94,6 +120,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const [micDesired, setMicDesired] = useState(false)
   const [phase, setPhase] = useState<Phase>('intro')
   const [hasSharedMemory, setHasSharedMemory] = useState(false)
+  const [introAssetsReady, setIntroAssetsReady] = useState(false)
   // No UI or persistence for speech rate; use a fixed constant for generated audio only
   // No follow-up question now; no need to track question count
   const [micError, setMicError] = useState<string | null>(null)
@@ -114,6 +141,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const micDesiredRef = useRef(false) // Desired microphone state reference
   const isLoadingRef = useRef(false) // Loading state reference
   const committedMicRef = useRef('') // Committed microphone reference
+  const sessionIdRef = useRef(buildSessionId())
+  const requestAbortRef = useRef<AbortController | null>(null)
+  const audioFetchAbortRef = useRef<AbortController | null>(null)
   // Auto-follow / scroll management
   const autoFollowRef = useRef(true)
   const [showFollow, setShowFollow] = useState(false)
@@ -126,6 +156,15 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
   useEffect(() => { micDesiredRef.current = micDesired }, [micDesired])
   useEffect(() => { isLoadingRef.current = isLoading }, [isLoading])
+  useEffect(() => {
+    sessionIdRef.current = buildSessionId()
+    requestAbortRef.current?.abort()
+    audioFetchAbortRef.current?.abort()
+  }, [language])
+  useEffect(() => () => {
+    requestAbortRef.current?.abort()
+    audioFetchAbortRef.current?.abort()
+  }, [])
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string) => {
     if (!content?.trim()) return null as number | null
@@ -192,9 +231,12 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   // Preload scripted audio for the selected language to eliminate start lag
   useEffect(() => {
     if (!language) {
+      setIntroAssetsReady(false)
       clearCache()
       return
     }
+    let cancelled = false
+    setIntroAssetsReady(false)
     const clips = [
       `/audio/${language}_WELCOME.mp3`,
       `/audio/${language}_MEMORY_1.mp3`,
@@ -203,9 +245,23 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       `/audio/${language}_FAREWELL.mp3`,
       `/audio/${language}_THANK_YOU.mp3`,
     ]
-    // Fire-and-forget preloads
-    clips.forEach(src => { preloadAudio(src).catch(() => {}) })
-    return () => { clearCache() }
+    const [welcomeClip, memoryClip] = clips
+    Promise.all([
+      preloadAudio(welcomeClip),
+      preloadAudio(memoryClip)
+    ]).then(() => {
+      if (!cancelled) setIntroAssetsReady(true)
+    }).catch(() => {
+      if (!cancelled) setIntroAssetsReady(true)
+    })
+
+    // Fire-and-forget the remaining preloads
+    clips.slice(2).forEach(src => { preloadAudio(src).catch(() => {}) })
+
+    return () => {
+      cancelled = true
+      clearCache()
+    }
   }, [language])
 
 
@@ -317,27 +373,48 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
   useEffect(() => {
     if (!language) return
-    // Clear any previous timer when language changes
+
+    // Clear any previous timer when language changes.
     if (introTimerRef.current) {
       window.clearTimeout(introTimerRef.current)
       introTimerRef.current = null
     }
     introStartedRef.current = false
+  }, [language])
 
-    // If audio was previously unlocked/allowed, start after the normal delay
+  useEffect(() => {
+    if (!language) return
+
     let audioAllowed = false
     try { audioAllowed = localStorage.getItem('audioAllowed') === '1' } catch {}
 
+    const cleanupTimers = (fallbackTimer?: number) => {
+      if (introTimerRef.current) {
+        window.clearTimeout(introTimerRef.current)
+        introTimerRef.current = null
+      }
+      if (fallbackTimer) window.clearTimeout(fallbackTimer)
+    }
+
     if (!isIOS || audioAllowed) {
-      introTimerRef.current = window.setTimeout(() => startIntro(), INITIAL_AUDIO_DELAY_MS)
-      return () => { if (introTimerRef.current) window.clearTimeout(introTimerRef.current) }
+      let started = false
+      const runIntro = () => {
+        if (started) return
+        started = true
+        startIntro()
+      }
+      if (introAssetsReady) {
+        introTimerRef.current = window.setTimeout(runIntro, INTRO_MIN_DELAY_MS)
+      }
+      const fallbackTimer = window.setTimeout(runIntro, INTRO_START_MAX_WAIT_MS)
+      return () => cleanupTimers(fallbackTimer)
     }
 
     // iOS and not yet allowed: wait for first user gesture to both unlock and start
     const onFirstGesture = () => {
       dlog('intro: first gesture received; starting intro')
-      // give the unlock handler a tick to run first
-      setTimeout(() => startIntro(), 0)
+      // Give the unlock handler a tick to run first.
+      window.setTimeout(() => startIntro(), INTRO_MIN_DELAY_MS)
       cleanup()
     }
     const cleanup = () => {
@@ -351,8 +428,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     window.addEventListener('touchend', onFirstGesture, { once: true })
     window.addEventListener('keydown', onFirstGesture, { once: true })
     return cleanup
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language, isIOS, startIntro])
+  }, [language, isIOS, startIntro, introAssetsReady])
 
   useEffect(() => {
     const list = chatListRef.current
@@ -729,10 +805,51 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [language, micDesired, isAudioPlaying, isLoading, isSpeechSupported, isMicOn, draft])
 
+  const requestChatTurn = useCallback(async (payload: Record<string, unknown>) => {
+    requestAbortRef.current?.abort()
+    const controller = new AbortController()
+    requestAbortRef.current = controller
+
+    const res = await fetch(CHAT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    })
+    const ct = res.headers.get('content-type') || ''
+    if (!ct.includes('application/json')) throw new Error('Non-JSON response')
+    return await res.json() as BackendChatResponse
+  }, [])
+
+  const resolveAudioTurn = useCallback(async (turnId: string): Promise<string | null> => {
+    if (!turnId) return null
+    audioFetchAbortRef.current?.abort()
+    const controller = new AbortController()
+    audioFetchAbortRef.current = controller
+    const deadline = Date.now() + 8000
+
+    while (Date.now() < deadline) {
+      const res = await fetch(`${CHAT_AUDIO_ENDPOINT}/${encodeURIComponent(turnId)}`, {
+        method: 'GET',
+        headers: { Accept: 'audio/mpeg' },
+        signal: controller.signal
+      })
+      if (res.status === 202) {
+        await new Promise(resolve => window.setTimeout(resolve, 250))
+        continue
+      }
+      if (!res.ok) return null
+      const blob = await res.blob()
+      return URL.createObjectURL(blob)
+    }
+    return null
+  }, [])
+
   const submit = useCallback(async (e: FormEvent) => {
     e.preventDefault()
     const text = (draft.trim() || sttBuffer.trim())
     if (!text || isLoading) return
+    audioFetchAbortRef.current?.abort()
     // Stop mic when sending
     stopMic()
     addMessage('user', text)
@@ -764,22 +881,19 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       // Otherwise treat this as the next question
       setIsLoading(true)
       try {
-        const historyPayload = messages.map(m => ({ role: m.role, content: m.content }))
-      const payload = {
-        sessionId: `session_${Date.now()}`,
-        message: text,
-        language,
-        userName: 'Visitor',
-        userLocation: 'Museum',
-        mode: 'question' as const,
-        history: historyPayload
-      }
-        const res = await fetch(CHAT_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-        const ct = res.headers.get('content-type') || ''
-        if (!ct.includes('application/json')) throw new Error('Non-JSON response')
-        const data = await res.json()
-        const replyText = (data?.message || '').trim()
+        const payload = {
+          sessionId: sessionIdRef.current,
+          message: text,
+          language,
+          userName: 'Visitor',
+          userLocation: 'Museum',
+          mode: 'question' as const,
+          history: buildHistoryPayload(messages)
+        }
+        const data = await requestChatTurn(payload)
+        const replyText = (data.message || '').trim()
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
+        const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
         dlog('api audioUrl (confirm_more)', audioUrl)
         // After answering, ask if they'd like more (Question 2)
         const afterAnswer = () => {
@@ -789,25 +903,35 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             setMicDesired(true)
           }, undefined, GENERATED_SPEECH_RATE)
         }
-        if (replyText && audioUrl) {
-          const resolved = resolveAudioSrc(audioUrl)
-          dlog('resolved audio (confirm_more)', resolved)
-          // Slightly slower rate for generated audio
+        if (replyText) {
           const msgId = addMessage('bot', replyText)
+          let turnAudioBlobUrl: string | null = null
+          if (audioTurnId) {
+            turnAudioBlobUrl = await resolveAudioTurn(audioTurnId).catch(() => null)
+          }
+          const resolved = turnAudioBlobUrl || resolveAudioSrc(audioUrl)
+          dlog('resolved audio (confirm_more)', resolved)
+          const cleanupTurnAudio = () => {
+            if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
+          }
           if (resolved) {
-            playAudio(resolved, afterAnswer, () => speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
+            playAudio(
+              resolved,
+              () => { cleanupTurnAudio(); afterAnswer() },
+              () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined) },
+              GENERATED_SPEECH_RATE,
+              msgId ?? undefined
+            )
           } else {
             speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined)
           }
-        } else if (replyText) {
-          const msgId = addMessage('bot', replyText)
-          speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined)
         } else {
           addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
           setPhase('await_question')
           setMicDesired(true)
         }
       } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return
         addMessage('bot', language === 'da' ? 'Noget gik galt. Prøv igen.' : 'Something went wrong. Please try again.')
       } finally {
         setIsLoading(false)
@@ -816,32 +940,26 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
     setIsLoading(true)
     try {
-      const historyPayload = messages.map(m => ({ role: m.role, content: m.content }))
       const isMemoryTurn = phase === 'await_memory' || !hasSharedMemory
       const payload = {
-        sessionId: `session_${Date.now()}`,
+        sessionId: sessionIdRef.current,
         message: text,
         language,
         userName: 'Visitor',
         userLocation: 'Museum',
         mode: isMemoryTurn ? 'memory' : 'question',
-        history: historyPayload
+        history: buildHistoryPayload(messages)
       }
-      const res = await fetch(CHAT_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      const ct = res.headers.get('content-type') || ''
-      if (!ct.includes('application/json')) throw new Error('Non-JSON response')
-      const data = await res.json()
-      const replyText = (data?.message || '').trim()
+      const data = await requestChatTurn(payload)
+      const replyText = (data.message || '').trim()
       const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
+      const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
       dlog('api audioUrl', audioUrl)
       // Handle audio sequencing and next prompt depending on phase/turn
       if (isMemoryTurn) {
         const conf = scripts[language]
         setHasSharedMemory(true)
-        // Ensure a visible thank-you message even if backend returned empty
-        if (!replyText) {
-          addMessage('bot', THANK_YOU_TEXTS[language])
-        }
+        addMessage('bot', replyText || THANK_YOU_TEXTS[language])
         // Always use the pre-generated static THANK_YOU audio, regardless of backend response
         playAudio(`/audio/${language}_THANK_YOU.mp3`, () => {
           addMessage('bot', conf.question1)
@@ -860,19 +978,28 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             setMicDesired(true)
           }, undefined, GENERATED_SPEECH_RATE)
         }
-        if (replyText && audioUrl) {
-          const resolved = resolveAudioSrc(audioUrl)
-          dlog('resolved audio', resolved)
-          // Slightly slower rate for generated audio
+        if (replyText) {
           const msgId = addMessage('bot', replyText)
+          let turnAudioBlobUrl: string | null = null
+          if (audioTurnId) {
+            turnAudioBlobUrl = await resolveAudioTurn(audioTurnId).catch(() => null)
+          }
+          const resolved = turnAudioBlobUrl || resolveAudioSrc(audioUrl)
+          dlog('resolved audio', resolved)
+          const cleanupTurnAudio = () => {
+            if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
+          }
           if (resolved) {
-            playAudio(resolved, afterAnswerSpoken, () => speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined), GENERATED_SPEECH_RATE, msgId ?? undefined)
+            playAudio(
+              resolved,
+              () => { cleanupTurnAudio(); afterAnswerSpoken() },
+              () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined) },
+              GENERATED_SPEECH_RATE,
+              msgId ?? undefined
+            )
           } else {
             speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
           }
-        } else if (replyText) {
-          const msgId = addMessage('bot', replyText)
-          speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
         } else {
           // No answer received; keep the session open and prompt to try again
           addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
@@ -881,11 +1008,12 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         }
       }
     } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return
       addMessage('bot', language === 'da' ? 'Noget gik galt. Prøv igen.' : 'Something went wrong. Please try again.')
     } finally {
       setIsLoading(false)
     }
-  }, [addMessage, draft, isLoading, language, messages, playAudio, stopMic, phase])
+  }, [addMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, onChangeLanguage, isNegativeResponse, isAffirmativeResponse, speakBrowserTTS, resolveAudioTurn, requestChatTurn])
 
   const skip = useCallback(() => {
     if (!language) return
@@ -947,7 +1075,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       >
         {micError && (
           <div className='mb-3 flex justify-start'>
-            <div className='max-w-[80%] rounded-2xl px-5 py-4 text-2xl leading-relaxed border bg-white/80 text-black border-black/10'>
+            <div className='surface-bubble max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
               {micError}
             </div>
           </div>
@@ -974,14 +1102,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         */}
         {messages.map(m => (
           <div key={m.id} data-msg-id={m.id} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] rounded-2xl px-5 py-4 text-2xl leading-relaxed border ${m.role === 'user' ? 'bg-white text-black border-black/10' : 'bg-white/80 text-black border-black/10'}`}>
+            <div className={`max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black ${m.role === 'user' ? 'surface-bubble-strong' : 'surface-bubble'}`}>
               {m.content}
             </div>
           </div>
         ))}
         {isLoading && (
           <div className='flex justify-start'>
-            <div className='rounded-2xl bg-white/80 px-5 py-4 text-2xl leading-relaxed text-black border border-black/10'>
+            <div className='surface-bubble rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
               <div className='typing-dots'>
                 <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
                 <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
@@ -997,7 +1125,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         <div className='pointer-events-none relative -mt-3 mb-1 flex justify-end'>
           <button
             type='button'
-            className='pointer-events-auto rounded-full border border-black/60 bg-white/90 px-4 py-1.5 text-base text-black shadow hover:bg-black hover:text-white'
+            className='surface-pill pointer-events-auto rounded-full px-4 py-1.5 text-base text-black transition hover:bg-white hover:text-black'
             onClick={() => {
               const list = chatListRef.current
               if (!list) return
@@ -1025,7 +1153,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             value={draft}
             onChange={e => { setDraft(e.target.value); stopMic(); resizeTextarea(e.currentTarget) }}
             placeholder={language === 'da' ? '' : ''}
-            className='w-full rounded-3xl border border-black/30 bg-white pr-14 pl-5 py-4 text-2xl text-black placeholder:text-black/50 shadow-sm focus:border-black focus:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+            className='surface-card w-full rounded-[2rem] pr-14 pl-5 py-4 text-2xl text-black placeholder:text-black/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60'
             style={{ overflow: 'hidden', maxHeight: '40vh', transform: undefined as any }}
             disabled={isLoading}
             autoComplete='off'
@@ -1041,7 +1169,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             onTouchEnd={stopDeleteHold}
             onTouchCancel={stopDeleteHold}
             disabled={!draft}
-            className='absolute right-2 rounded-2xl border border-black/40 bg-white px-3 py-1.5 text-base text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-40'
+            className='surface-pill absolute right-2 rounded-full px-3 py-1.5 text-base text-black transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
             style={{ bottom: `calc(var(--taOffset, 0px) + 8px)` }}
             aria-label={language === 'da' ? 'Slet ord' : 'Delete word'}
           >
@@ -1069,7 +1197,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
               }
             }}
             disabled={!isAudioPlaying && !lastAudioSrcRef.current}
-            className='rounded-full border border-black/60 bg-white/70 px-5 py-3 text-xl text-black hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50'>
+            className='surface-pill rounded-full px-5 py-3 text-xl text-black transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-50'>
             {isAudioPlaying ? 'Stop' : 'Go'}
           </button>
           <button
@@ -1088,15 +1216,15 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
                 setTimeout(() => { try { inputRef.current?.focus() } catch {} }, 0)
               }
             }}
-            className={`rounded-full border px-5 py-3 text-xl transition ${keyboardEnabled ? 'border-black bg-black text-white' : 'border-black/60 bg-white/70 text-black hover:bg-black hover:text-white'}`}
+            className={`rounded-full px-5 py-3 text-xl transition ${keyboardEnabled ? 'bg-black text-white shadow-[0_16px_30px_rgba(0,0,0,0.18)]' : 'surface-pill text-black hover:bg-white hover:text-black'}`}
           >
             {language === 'da' ? (keyboardEnabled ? 'Tastatur Til' : 'Tastatur Fra') : (keyboardEnabled ? 'Keyboard On' : 'Keyboard Off')}
           </button>
-          <button type='button' onClick={() => (micDesired ? stopMic() : startMic())} disabled={!isSpeechSupported || isAudioPlaying} className={`rounded-full border px-5 py-3 text-xl transition ${micDesired ? 'border-black bg-black text-white' : 'border-black/60 bg-white/70 text-black hover:bg-black hover:text-white'} disabled:cursor-not-allowed disabled:opacity-50`}>
+          <button type='button' onClick={() => (micDesired ? stopMic() : startMic())} disabled={!isSpeechSupported || isAudioPlaying} className={`rounded-full px-5 py-3 text-xl transition ${micDesired ? 'bg-black text-white shadow-[0_16px_30px_rgba(0,0,0,0.18)]' : 'surface-pill text-black hover:bg-white hover:text-black'} disabled:cursor-not-allowed disabled:opacity-50`}>
             {micDesired ? (language === 'da' ? 'Mic Til' : 'Mic On') : (language === 'da' ? 'Mic Fra' : 'Mic Off')}
           </button>
           {/* Skip button removed as requested */}
-          <button type='submit' disabled={isLoading || !draft.trim()} className='ml-auto rounded-full border border-black/60 bg-white px-7 py-4 text-2xl font-medium text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50'>
+          <button type='submit' disabled={isLoading || !draft.trim()} className='surface-pill ml-auto rounded-full px-7 py-4 text-2xl font-medium text-black transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-50'>
             {language === 'da' ? 'Del' : 'Share'}
           </button>
         </div>

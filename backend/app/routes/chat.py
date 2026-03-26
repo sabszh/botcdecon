@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
@@ -24,6 +25,7 @@ class ChatRequest(BaseModel):
   mode: Literal['question', 'memory'] = 'question'
   history: List[HistoryItem] = Field(default_factory=list)
   continuous_data: Optional[Dict[str, Any]] = Field(default=None, alias='continuousData')
+  include_history: bool = Field(False, alias='includeHistory')
 
   class Config:
     populate_by_name = True
@@ -36,6 +38,8 @@ class ChatResponse(BaseModel):
   error: Optional[str] = None
   debug: Optional[Dict[str, Any]] = None
   audio_url: Optional[str] = Field(default=None, alias='audioUrl')
+  audio_turn_id: Optional[str] = Field(default=None, alias='audioTurnId')
+  audio_status: str = Field(default='none', alias='audioStatus')
 
   class Config:
     populate_by_name = True
@@ -54,7 +58,8 @@ async def chat_endpoint(
     user_location=payload.user_location,
     mode=payload.mode,
     history=[item.dict() for item in payload.history],
-    continuous_data=payload.continuous_data
+    continuous_data=payload.continuous_data,
+    include_history=payload.include_history
   )
 
   return ChatResponse(
@@ -63,5 +68,28 @@ async def chat_endpoint(
     session_history=result.session_history,
     error=result.error,
     debug=result.debug,
-    audio_url=result.audio_url
+    audio_url=result.audio_url,
+    audio_turn_id=result.audio_turn_id,
+    audio_status=result.audio_status
+  )
+
+
+@router.get('/audio/{turn_id}')
+async def chat_audio_endpoint(
+  turn_id: str,
+  service: ChatService = Depends(get_chat_service)
+):
+  job = service.get_audio_job(turn_id)
+  if not job:
+    raise HTTPException(status_code=404, detail='audio_turn_not_found')
+  if job.status == 'pending':
+    return JSONResponse(status_code=202, content={'status': 'pending', 'turnId': turn_id})
+  if job.status == 'error':
+    return JSONResponse(status_code=424, content={'status': 'error', 'turnId': turn_id, 'error': job.error})
+  if not job.audio_bytes:
+    raise HTTPException(status_code=500, detail='audio_missing')
+  return Response(
+    content=job.audio_bytes,
+    media_type=job.content_type,
+    headers={'Cache-Control': 'no-store'}
   )

@@ -1,32 +1,24 @@
-// Simple singleton background music controller
+// Singleton background music controller.
+// Audio element creation is deferred until first real playback/unlock to avoid
+// downloading the full background track on initial page load.
 class BackgroundMusicController {
   private audio: HTMLAudioElement | null = null
   private initialized = false
   private original = 1
   private unlocked = false
+  private src = '/audio/backgroundmusic.mp3'
 
   // Web Audio
-  private ctx: (AudioContext | null) = null
+  private ctx: AudioContext | null = null
   private source: MediaElementAudioSourceNode | null = null
   private gain: GainNode | null = null
 
   init(src: string = '/audio/backgroundmusic.mp3', originalVolume = 1) {
     if (this.initialized) return
+    this.initialized = true
+    this.src = src
     this.original = clamp01(originalVolume)
 
-    const el = new Audio(src)
-    el.loop = true
-    el.volume = this.original
-    // iOS requires both property and attribute for inline playback
-    // @ts-ignore
-    el.playsInline = true
-    try { el.setAttribute('playsinline', 'true') } catch {}
-    el.preload = 'auto'
-    this.audio = el
-
-    this.initialized = true
-
-    // Register gesture listeners to unlock audio context when user interacts
     const startOnGesture = async () => {
       await this.unlockNow()
       window.removeEventListener('pointerdown', startOnGesture)
@@ -42,40 +34,25 @@ class BackgroundMusicController {
     window.addEventListener('touchend', startOnGesture, { once: true })
     window.addEventListener('keydown', startOnGesture, { once: true })
 
-    // ⚠️ Removed eager autoplay attempt — it’s blocked on iOS anyway
-
     document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState === 'visible') {
-        await this.resumeCtx().catch(() => {})
+      if (document.visibilityState !== 'visible') return
+      await this.resumeCtx().catch(() => {})
+      if (this.audio && this.audio.paused) {
         await this.play().catch(() => {})
       }
     })
 
-    // --- KEEP-ALIVE + VISIBILITY FIXES ---
-    // Prevent browsers (especially iOS) from suspending audio after idle
-    setInterval(() => {
+    // Keep-alive poke so long-running sessions are less likely to suspend audio.
+    window.setInterval(() => {
       if (this.ctx && this.ctx.state === 'running' && this.audio && !this.audio.paused) {
         try {
           this.gain?.gain.setValueAtTime(this.gain.gain.value, this.ctx.currentTime)
         } catch {}
       }
     }, 15000)
-
-    // Ensure playback resumes when tab or screen becomes visible again
-    document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState === 'visible') {
-        try {
-          await this.resumeCtx()
-          if (this.audio && this.audio.paused) {
-            await this.audio.play().catch(() => {})
-          }
-        } catch {}
-      }
-    })
-    // --- END FIXES ---
   }
 
-  /** Public helper: manually unlock audio context and playback (iOS fix) */
+  /** Public helper: manually unlock audio context and playback (iOS fix). */
   async unlockNow() {
     if (this.unlocked) return
     this.unlocked = true
@@ -84,10 +61,7 @@ class BackgroundMusicController {
     if (!this.audio) return
 
     try {
-      // Build Web Audio graph now that gesture happened
-      this.ensureChain()
-
-      // Muted play to unlock HTMLMediaElement
+      // Muted play unlocks HTMLMediaElement audio on iOS gesture stacks.
       this.audio.muted = true
       await this.audio.play().catch(() => {})
       this.audio.pause()
@@ -102,8 +76,24 @@ class BackgroundMusicController {
     }
   }
 
+  private ensureAudio() {
+    if (this.audio) return
+    const el = new Audio(this.src)
+    el.loop = true
+    el.volume = this.original
+    // iOS requires both property and attribute for inline playback.
+    // @ts-ignore
+    el.playsInline = true
+    try { el.setAttribute('playsinline', 'true') } catch {}
+    // Defer full download until playback is requested.
+    el.preload = 'none'
+    this.audio = el
+  }
+
   private ensureChain() {
+    this.ensureAudio()
     if (!this.audio) return
+
     if (!this.ctx && this.unlocked) {
       const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext
       if (Ctx) this.ctx = new Ctx()
@@ -112,7 +102,7 @@ class BackgroundMusicController {
       try {
         this.source = this.ctx.createMediaElementSource(this.audio)
       } catch {
-        // Ignore duplicate source errors
+        // Ignore duplicate source errors.
       }
     }
     if (this.ctx && !this.gain) {
@@ -127,7 +117,7 @@ class BackgroundMusicController {
     }
   }
 
-  private async resumeCtx() {
+  async resumeCtx() {
     this.ensureChain()
     if (this.ctx && this.ctx.state !== 'running') {
       try { await this.ctx.resume() } catch {}
@@ -135,14 +125,10 @@ class BackgroundMusicController {
   }
 
   async play() {
-    if (!this.audio) return
     this.ensureChain()
+    if (!this.audio) return
     await this.resumeCtx()
-    try {
-      await this.audio.play()
-    } catch (e) {
-      throw e
-    }
+    await this.audio.play()
   }
 
   private rampTo(volume: number, durationMs = 600) {
@@ -153,7 +139,6 @@ class BackgroundMusicController {
       this.gain.gain.setValueAtTime(this.gain.gain.value, now)
       this.gain.gain.linearRampToValueAtTime(v, now + Math.max(0, durationMs) / 1000)
     } else if (this.audio) {
-      // Fallback for browsers without Web Audio
       this.audio.volume = v
     }
   }

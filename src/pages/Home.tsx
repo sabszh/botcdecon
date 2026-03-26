@@ -1,8 +1,11 @@
-import React, { useContext, useEffect, useRef, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState, Suspense, lazy } from 'react'
 import { AppContext } from '../context/AppContext'
-import ChatPanel from '../components/ChatPanel'
-import MapCanvas from '../map/Canvas'
 import { bgm } from '../lib/music'
+import MapCanvas from '../map/Canvas'
+import SplashHippoCanvas from '../map/SplashHippoCanvas'
+
+const ChatPanel = lazy(() => import('../components/ChatPanel'))
+const ACTIVITY_RESET_THROTTLE_MS = 700
 
 export default function Home() {
   const [language, setLanguage] = useState<'en' | 'da' | null>(null)
@@ -12,6 +15,7 @@ export default function Home() {
   })
   const { setAppState } = useContext(AppContext)
   const inactivityTimer = useRef<number | undefined>(undefined)
+  const lastActivityRef = useRef(0)
 
   // One-shot unlock+play helper kept as synchronous as possible for iOS
   const unlockAndPlay = async () => {
@@ -42,19 +46,26 @@ export default function Home() {
       }, 180000) // 3 minutes
     }
 
+    const onActivity = () => {
+      const now = Date.now()
+      if (now - lastActivityRef.current < ACTIVITY_RESET_THROTTLE_MS) return
+      lastActivityRef.current = now
+      resetTimer()
+    }
+
     const events: (keyof WindowEventMap)[] = [
       'pointerdown',
-      'mousemove',
+      'pointermove',
       'keydown',
       'touchstart',
       'wheel'
     ]
-    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }))
+    events.forEach((ev) => window.addEventListener(ev, onActivity, { passive: true }))
     resetTimer()
 
     return () => {
       if (inactivityTimer.current) window.clearTimeout(inactivityTimer.current)
-      events.forEach((ev) => window.removeEventListener(ev, resetTimer as any))
+      events.forEach((ev) => window.removeEventListener(ev, onActivity))
     }
   }, [language, setAppState])
 
@@ -128,30 +139,34 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      <div className='absolute inset-0 -z-10' onPointerDown={() => { if (needsAudioUnlock) unlockAndPlay() }} onClick={() => { if (needsAudioUnlock) unlockAndPlay() }}>
-        {/* Remount Canvas when language changes to reset camera/scene */}
-        <MapCanvas key={language || 'splash'} onObjLoaded={() => {}} />
+      <div
+        className='absolute inset-0 -z-10 overflow-hidden'
+        onPointerDown={() => { if (needsAudioUnlock) unlockAndPlay() }}
+        onClick={() => { if (needsAudioUnlock) unlockAndPlay() }}
+      >
+        {language
+          ? <MapCanvas key={language} onObjLoaded={() => {}} />
+          : <SplashHippoCanvas />}
       </div>
       <div className='absolute inset-0 -z-5 bg-gradient-to-br from-white/20 via-white/10 to-white/20' />
 
       {!language && (
         <div className='absolute inset-0 flex items-center justify-center z-10'>
-          <div className='px-10 py-8 text-black'>
-            <p className='text-2xl uppercase tracking-widest text-black/80 text-center mb-4'>
+          <div className='surface-card rounded-[2rem] px-10 py-8 text-black'>
+            <p className='text-2xl uppercase tracking-[0.22em] text-black/80 text-center mb-5'>
               Select Language
             </p>
             <div className='flex gap-4 justify-center'>
               <button
                 type='button'
-                className='rounded-full border border-black px-8 py-4 text-2xl transition hover:bg-black hover:text-white'
+                className='surface-pill rounded-full px-8 py-4 text-2xl transition hover:bg-white hover:text-black'
                 onClick={() => pick('en')}
               >
                 English
               </button>
               <button
                 type='button'
-                className='rounded-full border border-black px-8 py-4 text-2xl transition hover:bg-black hover:text-white'
+                className='surface-pill rounded-full px-8 py-4 text-2xl transition hover:bg-white hover:text-black'
                 onClick={() => pick('da')}
               >
                 Dansk
@@ -165,14 +180,14 @@ export default function Home() {
         <>
           {/* Fixed top header with Return */}
           <div className='absolute top-0 left-0 right-0 z-30 flex justify-center pt-4'>
-            <div className='w-[1100px] max-w-[95vw] rounded-2xl bg-white/80 px-5 py-3 text-black shadow-lg backdrop-blur border border-black/10'>
+            <div className='surface-card w-[1100px] max-w-[95vw] rounded-[2rem] px-6 py-4 text-black'>
               <div className='flex items-center gap-3 justify-between'>
-                <h2 className='text-2xl md:text-3xl font-medium tracking-wide'>
+                <h2 className='text-2xl md:text-3xl font-medium tracking-[0.08em]'>
                   Bot de Continuonus
                 </h2>
                 <button
                   type='button'
-                  className='rounded-full border border-black/60 px-4 py-2 text-xl text-black hover:bg-black hover:text-white'
+                  className='surface-pill rounded-full px-4 py-2 text-xl text-black transition hover:bg-white hover:text-black'
                   onClick={() => {
                     // Leaving interaction: fade up
                     bgm.fadeUp(800)
@@ -195,22 +210,24 @@ export default function Home() {
 
           {/* Chat panel anchored to bottom */}
           <div className='absolute inset-0 z-20 flex items-end justify-center pb-6'>
-            <ChatPanel
-              language={language}
-              onChangeLanguage={() => {
-                // Leaving interaction: fade up
-                bgm.fadeUp(800)
-                setLanguage(null)
-                // Reset background state so hippocampus splash is shown
-                // @ts-ignore-line
-                setAppState((s) => ({
-                  ...s,
-                  headerVisible: true,
-                  viewMode: 'empty',
-                  zoomIn: false
-                }))
-              }}
-            />
+            <Suspense fallback={null}>
+              <ChatPanel
+                language={language}
+                onChangeLanguage={() => {
+                  // Leaving interaction: fade up
+                  bgm.fadeUp(800)
+                  setLanguage(null)
+                  // Reset background state so hippocampus splash is shown
+                  // @ts-ignore-line
+                  setAppState((s) => ({
+                    ...s,
+                    headerVisible: true,
+                    viewMode: 'empty',
+                    zoomIn: false
+                  }))
+                }}
+              />
+            </Suspense>
           </div>
         </>
       )}

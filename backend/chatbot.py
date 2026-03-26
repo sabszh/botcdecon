@@ -1,23 +1,37 @@
 # -*- coding: utf-8 -*-
 import os
 import json
+import re
 from datetime import datetime, timezone
+from pathlib import Path
+from collections import Counter
 from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
-from pinecone import Pinecone, ServerlessSpec, CloudProvider, AwsRegion
+try:
+    from pinecone import Pinecone, ServerlessSpec, CloudProvider, AwsRegion
+except Exception:  # pragma: no cover - optional dependency in local mode
+    Pinecone = None  # type: ignore
+    ServerlessSpec = None  # type: ignore
+    CloudProvider = None  # type: ignore
+    AwsRegion = None  # type: ignore
+from .app.services.llm import LLMProvider, get_llm_provider
+from .app.settings import settings
 
 load_dotenv()
 
 
 def _cloud_from_env():
+    if CloudProvider is None:
+        return None
     c = os.getenv("PINECONE_CLOUD", "AWS").upper()
     return getattr(CloudProvider, c, CloudProvider.AWS)
 
 
 def _region_from_env():
+    if AwsRegion is None:
+        return None
     r = os.getenv("PINECONE_REGION", "US_EAST_1").upper()
     return getattr(AwsRegion, r, AwsRegion.US_EAST_1)
 
@@ -31,36 +45,44 @@ class ChatBot:
         index_name_chat: str = None,
         language: str = "da",
     ):
-        # Use HuggingFace Endpoint for embeddings (no local model needed)
-        # Using sentence-transformers/all-mpnet-base-v2 (768 dims, reliable with API)
-        self.embeddings = HuggingFaceEndpointEmbeddings(
-            model="sentence-transformers/all-mpnet-base-v2",
-            huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_KEY")
-        )
-        print(f"[INIT] Using HuggingFace Endpoint for embeddings")
-        print(f"[INIT] Model: sentence-transformers/all-mpnet-base-v2 (768 dimensions)")
-        self.pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        self.retriever_provider = settings.retriever_provider
+        self.embeddings = None
+        self.pc = None
         self.cloud = _cloud_from_env()
         self.region = _region_from_env()
+        self._bot_docs: List[Dict[str, Any]] = []
+        self._chat_docs: List[Dict[str, Any]] = []
+        self._bot_doc_freq: Dict[str, int] = {}
 
         self.index_name_bot = index_name_bot or os.getenv("INDEX_NAME_BOT", "botcon")
         self.index_name_chat = index_name_chat or os.getenv("INDEX_NAME_CHAT", "bdc-interaction-data")
 
-        # ensure indexes exist - BAAI/bge-large-en-v1.5 uses 768 dimensions (same as original)
-        self._ensure_index(self.index_name_bot, dimension=768)
-        self._ensure_index(self.index_name_chat, dimension=768)
+        if self.retriever_provider == 'pinecone' and settings.has_pinecone and Pinecone is not None:
+            # Use HuggingFace Endpoint for embeddings (no local model needed)
+            self.embeddings = HuggingFaceEndpointEmbeddings(
+                model="sentence-transformers/all-mpnet-base-v2",
+                huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_KEY")
+            )
+            print("[INIT] Retriever provider: pinecone")
+            self.pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+            # ensure indexes exist
+            self._ensure_index(self.index_name_bot, dimension=768)
+            self._ensure_index(self.index_name_chat, dimension=768)
+        else:
+            self.retriever_provider = 'local'
+            self._load_local_corpus()
+            print(f"[INIT] Retriever provider: local ({len(self._bot_docs)} corpus entries)")
 
         self.repo_id = repo_id or os.getenv("LLM_REPO_ID")
         self.temperature = temperature
         self.language = language.lower()  # 'da' or 'en'
 
-        self.llm_client = InferenceClient(
-            provider="cerebras",
-            api_key=os.getenv("HUGGINGFACE_API_KEY"),
-        )
+        self.llm_provider: LLMProvider = get_llm_provider()
 
     # ---------- helpers ----------
     def _ensure_index(self, name: str, dimension: int):
+        if not self.pc or ServerlessSpec is None:
+            return
         try:
             existing = {ix["name"]: ix for ix in self.pc.list_indexes()}
             if name not in existing:
@@ -80,7 +102,125 @@ class ChatBot:
                 pass
 
     def _index(self, name: str):
+        if not self.pc:
+            raise RuntimeError('Pinecone index requested but client is not configured')
         return self.pc.Index(name)
+
+    @staticmethod
+    def _tokenize(text: str) -> List[str]:
+        return re.findall(r"\b[\w'-]{2,}\b", (text or '').lower())
+
+    def _load_local_corpus(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        data_path = Path(settings.data_json_path)
+        if not data_path.is_absolute():
+            data_path = root / data_path
+
+        if not data_path.exists():
+            print(f"[INIT] Local corpus not found at {data_path}")
+            self._bot_docs = []
+            self._bot_doc_freq = {}
+            return
+
+        with data_path.open('r', encoding='utf-8') as fh:
+            raw = json.load(fh)
+
+        seen: set[str] = set()
+        docs: List[Dict[str, Any]] = []
+        doc_freq: Counter[str] = Counter()
+
+        for idx, item in enumerate(raw if isinstance(raw, list) else []):
+            if not isinstance(item, dict):
+                continue
+            slug = str(item.get('slug') or '').strip()
+            text = str(item.get('text') or '').strip()
+            if not slug or not text:
+                continue
+            key = f"{slug}|{text}"
+            if key in seen:
+                continue
+            seen.add(key)
+
+            tokens = self._tokenize(text)
+            unique_tokens = set(tokens)
+            doc_freq.update(unique_tokens)
+
+            docs.append({
+                'id': slug or f'local-{idx}',
+                'score': 0.0,
+                'metadata': {
+                    'slug': slug,
+                    'name': str(item.get('name') or ''),
+                    'location': str(item.get('location') or ''),
+                    'date': str(item.get('date') or ''),
+                    'text': text,
+                },
+                'text': text,
+                '_tokens': tokens,
+            })
+
+        self._bot_docs = docs
+        self._bot_doc_freq = dict(doc_freq)
+
+    def _score_local_doc(self, query_tokens: List[str], tokens: List[str], total_docs: int) -> float:
+        if not query_tokens or not tokens or total_docs <= 0:
+            return 0.0
+        tf = Counter(tokens)
+        doc_len = len(tokens)
+        score = 0.0
+        for qt in query_tokens:
+            freq = tf.get(qt, 0)
+            if freq == 0:
+                continue
+            df = self._bot_doc_freq.get(qt, 0)
+            idf = 1.0 + (total_docs / (1.0 + df))
+            score += (freq / (doc_len + 1.0)) * idf
+        return score
+
+    def _retrieve_local_docs(self, query: str, index_name: str, excluded_session_id: Optional[str], k: int) -> List[Dict[str, Any]]:
+        if index_name == self.index_name_chat:
+            docs = []
+            for doc in self._chat_docs:
+                sid = str(doc.get('metadata', {}).get('session_id') or '')
+                if excluded_session_id and sid == excluded_session_id:
+                    continue
+                docs.append(doc)
+
+            # Session lookup path: query can be session id.
+            session_matches = [d for d in docs if str(d.get('metadata', {}).get('session_id') or '') == query]
+            if session_matches:
+                ordered = sorted(session_matches, key=lambda d: d.get('metadata', {}).get('date', ''), reverse=True)
+                return ordered[:k]
+
+            query_tokens = self._tokenize(query)
+            total_docs = max(1, len(docs))
+            ranked = []
+            for doc in docs:
+                tokens = self._tokenize(str(doc.get('text') or ''))
+                score = self._score_local_doc(query_tokens, tokens, total_docs)
+                if score > 0:
+                    ranked.append((score, doc))
+            ranked.sort(key=lambda x: x[0], reverse=True)
+            return [
+                {**doc, 'score': score}
+                for score, doc in ranked[:k]
+            ]
+
+        query_tokens = self._tokenize(query)
+        total_docs = max(1, len(self._bot_docs))
+        ranked = []
+        for doc in self._bot_docs:
+            score = self._score_local_doc(query_tokens, doc.get('_tokens', []), total_docs)
+            if score > 0:
+                ranked.append((score, doc))
+        ranked.sort(key=lambda x: x[0], reverse=True)
+
+        out: List[Dict[str, Any]] = []
+        for score, doc in ranked[:k]:
+            clean = {key: value for key, value in doc.items() if key != '_tokens'}
+            clean['score'] = score
+            out.append(clean)
+        return out
 
     # ---------- prompts ----------
     def default_prompt_sourcedata(self, chat_history: str, original_data: str, user_input: str, user_name: str):
@@ -155,6 +295,11 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
 
     # ---------- retrieval ----------
     def retrieve_docs(self, query: str, index_name: str, excluded_session_id: Optional[str] = None, k: int = 5) -> List[Dict[str, Any]]:
+        if self.retriever_provider == 'local':
+            docs = self._retrieve_local_docs(query, index_name, excluded_session_id, k)
+            print(f"[BOT] Local retrieval index='{index_name}' k={k} -> {len(docs)} docs")
+            return docs
+
         index = self._index(index_name)
         print(f"[BOT] Querying index='{index_name}' k={k} excluded_session_id={bool(excluded_session_id)} query_len={len(query or '')}")
 
@@ -230,24 +375,13 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
     # ---------- llm ----------
     def get_llm_response(self, prompt: str) -> str:
         try:
-            completion = self.llm_client.chat.completions.create(
-                model="meta-llama/Llama-3.1-8B-Instruct",
-                messages=[{"role": "user", "content": prompt}],
+            return self.llm_provider.generate(
+                prompt=prompt,
                 temperature=min(self.temperature, 0.4),
                 max_tokens=512,
             )
-            return completion.choices[0].message.content
-        except Exception:
-            try:
-                text = self.llm_client.text_generation(
-                    prompt,
-                    model=self.repo_id,
-                    max_new_tokens=512,
-                    temperature=min(self.temperature, 0.4),
-                )
-                return text
-            except Exception as e2:
-                return f"Error invoking LLM: {e2}"
+        except Exception as exc:
+            return f"Error invoking LLM: {exc}"
 
     # ---------- upsert ----------
     def upsert_vectorstore(
@@ -259,6 +393,26 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
         session_id: str,
         continuous_data: Optional[Dict[str, Any]] = None,
     ):
+        if self.retriever_provider == 'local':
+            ts_iso = datetime.now(timezone.utc).isoformat()
+            doc = {
+                "id": ts_iso,
+                "score": 1.0,
+                "metadata": {
+                    "user_question": user_input,
+                    "ai_output": ai_output,
+                    "user_name": user_name,
+                    "session_id": session_id,
+                    "date": ts_iso,
+                    "user_location": user_location,
+                    "text": f"User input: {user_input}\nAI output: {ai_output}",
+                    "continuous_data": json.dumps(continuous_data) if continuous_data else "",
+                },
+                "text": f"User input: {user_input}\nAI output: {ai_output}",
+            }
+            self._chat_docs.append(doc)
+            return
+
         index = self._index(self.index_name_chat)
         ts_iso = datetime.now(timezone.utc).isoformat()
 
@@ -295,7 +449,10 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
     def pipeline(self, user_input: str, user_name: str, session_id: str, user_location: str,
                  chat_history: Optional[str] = None,
                  continuous_data: Optional[Dict[str, Any]] = None,
-                 language: Optional[str] = None) -> Dict[str, Any]:
+                 language: Optional[str] = None,
+                 persist: bool = True,
+                 include_session_history: bool = False,
+                 retrieval_k: int = 8) -> Dict[str, Any]:
         import time
 
         # Update language if provided in this call
@@ -306,10 +463,10 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
 
         print(f"[BOT] Retrieving source documents...")
         t1 = time.time()
-        # Retrieve a wider set (k=20) so the model can select the most relevant items
-        source_data = self.retrieve_docs(user_input, self.index_name_bot, k=20)
+        source_data = self.retrieve_docs(user_input, self.index_name_bot, k=max(3, retrieval_k))
         formatted_source_data = self.format_context(source_data)
-        print(f"[BOT] Source retrieval took {time.time()-t1:.2f}s; showing up to 5 snippets:")
+        retrieval_ms = (time.time() - t1) * 1000
+        print(f"[BOT] Source retrieval took {retrieval_ms/1000:.2f}s; showing up to 5 snippets:")
         for i, d in enumerate(source_data[:5], start=1):
             txt = (d.get("text", "") or "").replace("\n", " ")
             print(f"  [SRC#{i}] {txt[:200]}{'...' if len(txt)>200 else ''}")
@@ -319,7 +476,8 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
         prompt1 = self.default_prompt_sourcedata(chat_history, formatted_source_data, user_input, user_name)
         print("[BOT] Prompt1:\n" + prompt1)
         resp1 = self.get_llm_response(prompt1)
-        print(f"[BOT] LLM response 1 took {time.time()-t2:.2f}s")
+        llm_ms = (time.time() - t2) * 1000
+        print(f"[BOT] LLM response 1 took {llm_ms/1000:.2f}s")
         print("[BOT] Resp1 snippet:\n" + (resp1[:400] if resp1 else ""))
 
         # Skipping past conversation context to focus on Carte (botcon) data only
@@ -327,20 +485,36 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
         # Do not truncate/cut off text; rely on prompt to keep it short
         ai_output = ai_output_raw
 
-        print(f"[BOT] Upserting to vectorstore (index='{self.index_name_chat}')...")
-        t5 = time.time()
-        self.upsert_vectorstore(user_input, ai_output, user_name, user_location, session_id, continuous_data)
-        print(f"[BOT] Upsert took {time.time()-t5:.2f}s")
+        upsert_ms = 0.0
+        if persist:
+            print(f"[BOT] Upserting to vectorstore (index='{self.index_name_chat}')...")
+            t5 = time.time()
+            self.upsert_vectorstore(user_input, ai_output, user_name, user_location, session_id, continuous_data)
+            upsert_ms = (time.time() - t5) * 1000
+            print(f"[BOT] Upsert took {upsert_ms/1000:.2f}s")
 
-        session_history = self.retrieve_session(session_id)
+        session_history = self.retrieve_session(session_id) if include_session_history else []
         return {
             "ai_output": ai_output,
             "source_data": source_data,
             "past_chat_context": [],
             "session_history": session_history,
+            "timings": {
+                "retrieval_ms": round(retrieval_ms, 2),
+                "llm_ms": round(llm_ms, 2),
+                "upsert_ms": round(upsert_ms, 2),
+            }
         }
 
     def retrieve_session(self, session_id: str, k: int = 20) -> List[Dict[str, Any]]:
+        if self.retriever_provider == 'local':
+            docs = [
+                d for d in self._chat_docs
+                if str(d.get('metadata', {}).get('session_id') or '') == session_id
+            ]
+            docs.sort(key=lambda d: d.get('metadata', {}).get('date', ''), reverse=True)
+            return docs[:k]
+
         docs = self.retrieve_docs(session_id, self.index_name_chat, excluded_session_id=None, k=k)
 
         def parse_dt(d):
@@ -351,4 +525,3 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
 
         docs.sort(key=lambda d: parse_dt(d["metadata"].get("date", "")), reverse=True)
         return docs
-
