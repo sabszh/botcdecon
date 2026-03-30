@@ -23,13 +23,13 @@ def main() -> None:
                 "Thank you for being here. What a long strange trip we’ve been on, but there’s still a long road ahead.\n\n"
                 "Welcome to our vehicle. We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.\n\n"
                 "We may have her voice, but we’re speaking through a data set or rather through the experiences of thousands of people who were here before you. All of whom have shared what they remember that they want the future to remember. They have placed that memory onto a website known as continuonus. On the website a map is being cultivated.\n\n"
-                "Now let's journey through that map. In here you may share thing that you feel is important for the future to remember and you can ask us about what previous visitors shared?"
+                "Now let's journey through that map. In here you may share something that you feel is important for the future to remember and you can ask us about what previous visitors shared?"
             ),
             "MEMORY_1": (
-                "Please share a memory? Something you’d like others in the future to remember to remember. Press the Share button when you’re done."
+                "Please share a memory? Something you’d like other's in the future to remember to remember. Press the Share button when you’re done."
             ),
             # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
-            "THANK_YOU": "Thank you for sharing your memory.",
+            "THANK_YOU": "Thank you for sharing.",
             "QUESTION_1": (
                 "Now would you ask us about what others have felt it was important for the future to remember to remember? You are in their future. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done."
             ),

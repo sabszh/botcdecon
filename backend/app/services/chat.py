@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from ...chatbot import ChatBot  # type: ignore
 from ..settings import settings
+from .archive_db import archive_is_available, get_archive_store
 from .tts import get_tts_service, TTSService
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ class ChatService:
     self._bot: Optional[ChatBot] = None
     self._init_error: Optional[str] = None
     self._tts: Optional[TTSService] = None
+    self._archive = get_archive_store()
     self._audio_jobs: Dict[str, AudioJob] = {}
     self._audio_job_ttl_sec = 600
 
@@ -91,6 +93,17 @@ class ChatService:
         if mode == 'memory':
           logger.info('[CHAT] MEMORY mode: enqueue upsert and return immediately')
           ai_output = self._handle_memory_mode(message, language)
+          await self._persist_archive_turn(
+            session_id=session_id,
+            language=language,
+            user_name=user_name,
+            user_location=user_location,
+            mode=mode,
+            user_message=message,
+            bot_message=ai_output,
+            error=None,
+            continuous_data=continuous_data
+          )
           asyncio.create_task(asyncio.to_thread(
             self._bot.upsert_vectorstore,
             message,
@@ -136,6 +149,17 @@ class ChatService:
           session_id,
           continuous_data
         ))
+        await self._persist_archive_turn(
+          session_id=session_id,
+          language=language,
+          user_name=user_name,
+          user_location=user_location,
+          mode=mode,
+          user_message=message,
+          bot_message=ai_output,
+          error=None,
+          continuous_data=continuous_data
+        )
 
         audio_turn_id = await self._queue_audio(ai_output, language)
         audio_status = 'pending' if audio_turn_id else 'none'
@@ -166,6 +190,17 @@ class ChatService:
       except Exception as exc:  # pragma: no cover - defensive
         logger.exception('Chat pipeline failed: %s', exc)
         fallback = self._fallback_reply(message, language)
+        await self._persist_archive_turn(
+          session_id=session_id,
+          language=language,
+          user_name=user_name,
+          user_location=user_location,
+          mode=mode,
+          user_message=message,
+          bot_message=fallback,
+          error=f'chat_pipeline_error: {exc}',
+          continuous_data=continuous_data
+        )
         audio_turn_id = await self._queue_audio(fallback, language)
         total_ms = (time.perf_counter() - t_start) * 1000
         return ChatResult(
@@ -179,6 +214,17 @@ class ChatService:
         )
 
     fallback = self._fallback_reply(message, language)
+    await self._persist_archive_turn(
+      session_id=session_id,
+      language=language,
+      user_name=user_name,
+      user_location=user_location,
+      mode=mode,
+      user_message=message,
+      bot_message=fallback,
+      error=self._init_error,
+      continuous_data=continuous_data
+    )
     audio_turn_id = await self._queue_audio(fallback, language)
     total_ms = (time.perf_counter() - t_start) * 1000
     return ChatResult(
@@ -228,6 +274,37 @@ class ChatService:
     for key in expired:
       self._audio_jobs.pop(key, None)
 
+  async def _persist_archive_turn(
+    self,
+    *,
+    session_id: str,
+    language: str,
+    user_name: str,
+    user_location: Optional[str],
+    mode: str,
+    user_message: str,
+    bot_message: str,
+    error: Optional[str],
+    continuous_data: Optional[Dict[str, Any]]
+  ) -> None:
+    if not archive_is_available():
+      return
+    try:
+      await asyncio.to_thread(
+        self._archive.persist_turn,
+        session_id=session_id,
+        language=language,
+        user_name=user_name,
+        user_location=user_location,
+        mode=mode,
+        user_message=user_message,
+        bot_message=bot_message,
+        error=error,
+        continuous_data=continuous_data
+      )
+    except Exception as exc:  # pragma: no cover - defensive
+      logger.exception('Archive persistence failed: %s', exc)
+
   @staticmethod
   def _serialise_history(history: List[Dict[str, Any]]) -> str:
     if not history:
@@ -254,18 +331,15 @@ class ChatService:
 
   @staticmethod
   def _fallback_reply(user_input: str, language: str) -> str:
-    trimmed = user_input.strip()
     if language == 'da':
-      prefix = 'Tak for din besked'
-      return f'{prefix}. Backend-svar er endnu ikke forbundet, men dette bliver snart aktivt.\n\nDu skrev: "{trimmed}"'
-    prefix = 'Thank you for your message'
-    return f'{prefix}. The full backend is not connected yet, but it will be available soon.\n\nYou wrote: "{trimmed}"'
+      return 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.'
+    return 'I could not fetch an answer right now. Please try again.'
 
   @staticmethod
   def _handle_memory_mode(user_input: str, language: str) -> str:
     if (language or '').lower() == 'da':
-      return "Tak for at dele din erindring. Den er nu en del af Carte de Continuonus."
-    return "Thank you for sharing your memory. It is now part of Carte de Continuonus."
+      return "Tak for at dele din erindring."
+    return "Thank you for sharing."
 
 
 @lru_cache

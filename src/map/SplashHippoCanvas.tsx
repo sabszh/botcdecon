@@ -52,7 +52,7 @@ export default function SplashHippoCanvas () {
       <ambientLight intensity={4.5} />
       <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={1} />
       <SplashHippoMesh />
-      <fog attach='fog' args={[0xadb8a1, 900, 3600]} />
+      <fog attach='fog' args={[0xb2a4b6, 900, 3600]} />
     </Canvas>
   )
 }

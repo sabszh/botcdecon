@@ -95,7 +95,7 @@ const scripts = {
     farewell: `Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future.`
   },
   da: {
-    welcome: `Hej!\n\nTak fordi du er her. Sikke en lang, mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\n Velkommen til vores køretøj. Vi er Bot de ContinuOnus, en AI‑genereret chatbot, der taler med kunstneren Helene Nymanns klonede stemme.\n\nVi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort.\n\nLad os nu rejse gennem det kort. Her kan du dele noget, som du føler er vigtigt for fremtiden at huske, og du kan spørge os om, hvad tidligere besøgende har delt?`,
+    welcome: `Hej!\n\nTak fordi du er her. Sikke en lang, mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\nVelkommen til vores køretøj. Vi er Bot de ContinuOnus, en AI‑genereret chatbot, der taler med kunstneren Helene Nymanns klonede stemme.\n\nVi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort.\n\nLad os nu rejse gennem det kort. Her kan du dele noget, som du føler er vigtigt for fremtiden at huske, og du kan spørge os om, hvad tidligere besøgende har delt?`,
     memory1: `Vil du dele en erindring? Noget du gerne vil have, at andre i fremtiden skal huske at huske. Tryk på Del, når du er færdig.`,
     question1: `Vil du nu spørge os om, hvad andre har følt var vigtigt for fremtiden at huske at huske? Du er i deres fremtid. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del, når du er færdig.`,
     question2: `Vil du spørge om noget mere, før vi fortsætter? Hvis du vil spørge mere, kan du gøre det nu; ellers sig “nej”. Tryk på Del, når du er færdig.`,
@@ -151,6 +151,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   // Repeating delete (backspace) support
   const deleteHoldTimeoutRef = useRef<number | null>(null)
   const deleteHoldIntervalRef = useRef<number | null>(null)
+  // Track which message should be auto-scrolled with the playing audio
+  const autoScrollMsgIdRef = useRef<number | null>(null)
+  const scrollRafRef = useRef<number | null>(null)
+  const audioFadeRafRef = useRef<number | null>(null)
 
   useEffect(() => { isMicOnRef.current = isMicOn }, [isMicOn])
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
@@ -210,6 +214,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [])
 
   useEffect(() => () => stopDeleteHold(), [stopDeleteHold])
+
+  const stopAudioAutoScroll = useCallback(() => {
+    autoScrollMsgIdRef.current = null
+    if (scrollRafRef.current) {
+      cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = null
+    }
+  }, [])
 
   // ChatPanel.tsx  — STEP 3: one-time mic pre-warm (iOS friendly)
   useEffect(() => {
@@ -340,17 +352,23 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     el.playbackRate = rate || 1
     el.volume = 0
     el.onplay = () => fade(0, 1, 400)
+    el.onpause = () => {
+      setIsAudioPlaying(false)
+      stopAudioAutoScroll()
+    }
     el.onended = () => {
       setIsAudioPlaying(false)
+      stopAudioAutoScroll()
       if (enableMicAfter) setMicDesired(true)
       if (onEnded) onEnded()
     }
     el.onerror = () => {
       setIsAudioPlaying(false)
+      stopAudioAutoScroll()
       if (onError) onError()
     }
     el.play().catch(err => console.warn('[Audio play rejected]', err))
-  }, [])
+  }, [stopAudioAutoScroll])
   // --- END FIX ---
 
   // Start the scripted intro, with iOS unlock-aware gating
@@ -475,11 +493,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
   useEffect(() => { resizeTextarea() }, [draft, resizeTextarea])
 
-  // Track which message should be auto-scrolled with the playing audio
-  const autoScrollMsgIdRef = useRef<number | null>(null)
-  const scrollRafRef = useRef<number | null>(null)
-  const audioFadeRafRef = useRef<number | null>(null)
-
   const scrollMessageProgress = useCallback((msgId: number, ratio: number) => {
     const list = chatListRef.current
     if (!list) return
@@ -548,14 +561,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     window.addEventListener('touchend', unlock, { once: true })
     window.addEventListener('keydown', unlock, { once: true })
     return cleanup
-  }, [])
-
-  const stopAudioAutoScroll = useCallback(() => {
-    autoScrollMsgIdRef.current = null
-    if (scrollRafRef.current) {
-      cancelAnimationFrame(scrollRafRef.current)
-      scrollRafRef.current = null
-    }
   }, [])
 
   const computeScrollBounds = useCallback((msgId: number) => {
@@ -1062,6 +1067,45 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
   }, [language, phase, messages, addMessage, playAudio])
 
+  const canSkipAhead = phase === 'intro' || phase === 'await_memory' || phase === 'await_question' || phase === 'explore'
+  const canType = phase === 'await_memory' || phase === 'await_question' || phase === 'confirm_more'
+  const hasDraftContent = draft.length > 0
+  const showPlaybackControl = isAudioPlaying || Boolean(lastAudioSrcRef.current)
+  const showVoiceCompose = canType && isSpeechSupported && !keyboardEnabled && !hasDraftContent && !isAudioPlaying
+  const showVoiceControl = canType && isSpeechSupported && !isAudioPlaying && !showVoiceCompose
+  const showSecondaryRow = canSkipAhead || showPlaybackControl || showVoiceControl
+  const inputPlaceholder = language === 'da'
+    ? 'Skriv her'
+    : 'Type here'
+  const isVoiceActive = micDesired || isMicOn
+  const voicePrompt = sttLive.trim() || (
+    language === 'da'
+      ? (isVoiceActive ? 'Lytter…' : 'Tal nu')
+      : (isVoiceActive ? 'Listening…' : 'Speak now')
+  )
+
+  const activateKeyboardInput = useCallback(() => {
+    if (!canType || isLoading) return
+    setKeyboardEnabled(true)
+    stopMic()
+    window.setTimeout(() => {
+      const el = inputRef.current
+      if (!el) return
+      try {
+        el.focus()
+        const pos = el.value.length
+        el.setSelectionRange?.(pos, pos)
+      } catch {}
+    }, 0)
+  }, [canType, isLoading, stopMic])
+
+  const activateVoiceInput = useCallback(() => {
+    if (!canType || isLoading || !isSpeechSupported) return
+    setKeyboardEnabled(false)
+    try { inputRef.current?.blur() } catch {}
+    startMic()
+  }, [canType, isLoading, isSpeechSupported, startMic])
+
   return (
     <div className='relative z-10 w-[1100px] max-w-[95vw] px-6 py-6 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
       <audio ref={audioElRef} preload='auto' playsInline />
@@ -1070,16 +1114,17 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
       <div
         ref={chatListRef}
-        className={`mt-3 flex-1 min-h-0 overflow-y-auto flex flex-col justify-end scroll-touch ${isIOS ? '' : 'no-scrollbar'}`}
+        className={`mt-3 flex-1 min-h-0 overflow-y-auto scroll-touch ${isIOS ? '' : 'no-scrollbar'}`}
         style={{ WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain', touchAction: 'pan-y' as any }}
       >
-        {micError && (
-          <div className='mb-3 flex justify-start'>
-            <div className='surface-bubble max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
-              {micError}
+        <div className='flex min-h-full flex-col justify-end'>
+          {micError && (
+            <div className='mb-3 flex justify-start'>
+              <div className='surface-bubble max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
+                {micError}
+              </div>
             </div>
-          </div>
-        )}
+          )}
         {/* Debug overlay (disabled)
         <div style={{
           position: 'fixed',
@@ -1100,24 +1145,25 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           <div>Mic Error: {micError || 'none'}</div>
         </div>
         */}
-        {messages.map(m => (
-          <div key={m.id} data-msg-id={m.id} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black ${m.role === 'user' ? 'surface-bubble-strong' : 'surface-bubble'}`}>
-              {m.content}
-            </div>
-          </div>
-        ))}
-        {isLoading && (
-          <div className='flex justify-start'>
-            <div className='surface-bubble rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
-              <div className='typing-dots'>
-                <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
+          {messages.map(m => (
+            <div key={m.id} data-msg-id={m.id} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black ${m.role === 'user' ? 'surface-bubble-strong' : 'surface-bubble'}`}>
+                {m.content}
               </div>
             </div>
-          </div>
-        )}
+          ))}
+          {isLoading && (
+            <div className='flex justify-start'>
+              <div className='surface-bubble rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
+                <div className='typing-dots'>
+                  <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
+                  <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
+                  <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Follow button when user has scrolled up */}
@@ -1142,92 +1188,152 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         </div>
       )}
 
-      <form onSubmit={submit} className='mt-4 flex flex-col gap-3'>
+      <form onSubmit={submit} className='mt-4 flex flex-col gap-2'>
+        {showVoiceCompose && (
+          <div className='flex items-center gap-2 px-2 pb-1 text-lg text-black/60'>
+            <span className={`voice-status-dot ${isVoiceActive ? 'is-live' : ''}`}/>
+            {voicePrompt}
+          </div>
+        )}
         <label htmlFor='message' className='sr-only'>Message</label>
-        <div ref={inputWrapRef} className='relative' style={{ height: undefined as any }}>
-          <textarea
-            ref={inputRef}
-            id='message'
-            name='message'
-            rows={1}
-            value={draft}
-            onChange={e => { setDraft(e.target.value); stopMic(); resizeTextarea(e.currentTarget) }}
-            placeholder={language === 'da' ? '' : ''}
-            className='surface-card w-full rounded-[2rem] pr-14 pl-5 py-4 text-2xl text-black placeholder:text-black/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60'
-            style={{ overflow: 'hidden', maxHeight: '40vh', transform: undefined as any }}
-            disabled={isLoading}
-            autoComplete='off'
-            readOnly={!keyboardEnabled}
-            inputMode={keyboardEnabled ? undefined : 'none'}
-          />
-          <button
-            type='button'
-            onMouseDown={startDeleteHold}
-            onMouseUp={stopDeleteHold}
-            onMouseLeave={stopDeleteHold}
-            onTouchStart={(e) => { e.preventDefault(); startDeleteHold() }}
-            onTouchEnd={stopDeleteHold}
-            onTouchCancel={stopDeleteHold}
-            disabled={!draft}
-            className='surface-pill absolute right-2 rounded-full px-3 py-1.5 text-base text-black transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
-            style={{ bottom: `calc(var(--taOffset, 0px) + 8px)` }}
-            aria-label={language === 'da' ? 'Slet ord' : 'Delete word'}
-          >
-            ⌫
-          </button>
-        </div>
-        <div className='flex items-center gap-3'>
-          <button
-            type='button'
-            onClick={() => {
-              const el = audioElRef.current
-              if (!el) return
-              if (isAudioPlaying) {
-                try { el.pause() } catch {}
-              } else if (lastAudioSrcRef.current) {
-                const last = lastAudioSrcRef.current
-                const cur = el.src || ''
-                // With preloaded blob URLs, el.src won't match the logical path; resume if we have a currentTime
-                const canResume = el.currentTime > 0 && !el.ended
-                if (canResume) {
-                  el.play().catch(() => {})
-                } else {
-                  playAudio(last, undefined, undefined, lastAudioRateRef.current || 1)
-                }
-              }
-            }}
-            disabled={!isAudioPlaying && !lastAudioSrcRef.current}
-            className='surface-pill rounded-full px-5 py-3 text-xl text-black transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-50'>
-            {isAudioPlaying ? 'Stop' : 'Go'}
-          </button>
-          <button
-            type='button'
-            onClick={() => {
-              if (keyboardEnabled) {
-                // Turn keyboard off and resume mic
-                setKeyboardEnabled(false)
-                try { inputRef.current?.blur() } catch {}
-                startMic()
-              } else {
-                // Turn keyboard on and stop mic
-                setKeyboardEnabled(true)
-                stopMic()
-                // Focus to open keyboard (user gesture)
-                setTimeout(() => { try { inputRef.current?.focus() } catch {} }, 0)
-              }
-            }}
-            className={`rounded-full px-5 py-3 text-xl transition ${keyboardEnabled ? 'bg-black text-white shadow-[0_16px_30px_rgba(0,0,0,0.18)]' : 'surface-pill text-black hover:bg-white hover:text-black'}`}
-          >
-            {language === 'da' ? (keyboardEnabled ? 'Tastatur Til' : 'Tastatur Fra') : (keyboardEnabled ? 'Keyboard On' : 'Keyboard Off')}
-          </button>
-          <button type='button' onClick={() => (micDesired ? stopMic() : startMic())} disabled={!isSpeechSupported || isAudioPlaying} className={`rounded-full px-5 py-3 text-xl transition ${micDesired ? 'bg-black text-white shadow-[0_16px_30px_rgba(0,0,0,0.18)]' : 'surface-pill text-black hover:bg-white hover:text-black'} disabled:cursor-not-allowed disabled:opacity-50`}>
-            {micDesired ? (language === 'da' ? 'Mic Til' : 'Mic On') : (language === 'da' ? 'Mic Fra' : 'Mic Off')}
-          </button>
-          {/* Skip button removed as requested */}
-          <button type='submit' disabled={isLoading || !draft.trim()} className='surface-pill ml-auto rounded-full px-7 py-4 text-2xl font-medium text-black transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-50'>
-            {language === 'da' ? 'Del' : 'Share'}
-          </button>
-        </div>
+        {showVoiceCompose ? (
+          <div className='surface-card rounded-[2rem] px-5 py-4'>
+            <div className='flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <button
+                type='button'
+                onClick={activateKeyboardInput}
+                className='text-sm text-black/55 underline-offset-4 transition hover:text-black hover:underline'
+              >
+                {language === 'da' ? 'Skriv i stedet' : 'Type instead'}
+              </button>
+              <div className='flex items-center gap-3 self-stretch sm:self-auto'>
+                <button
+                  type='button'
+                  onClick={() => ((micDesired || isMicOn) ? stopMic() : activateVoiceInput())}
+                  className={`shrink-0 rounded-full px-6 py-3 text-lg transition ${isVoiceActive ? 'surface-primary-action-live' : 'surface-primary-action'}`}
+                >
+                  {language === 'da' ? (isVoiceActive ? 'Stop' : 'Tal') : (isVoiceActive ? 'Stop' : 'Speak')}
+                </button>
+                <button
+                  type='submit'
+                  disabled={isLoading || !draft.trim()}
+                  className='surface-primary-action shrink-0 rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
+                >
+                  Share
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className='surface-card rounded-[2rem] px-4 py-3'>
+            <div className='flex items-end gap-3'>
+              <div ref={inputWrapRef} className='relative flex min-w-0 flex-1 items-center' style={{ height: undefined as any }}>
+                <textarea
+                  ref={inputRef}
+                  id='message'
+                  name='message'
+                  rows={1}
+                  value={draft}
+                  onChange={e => { setDraft(e.target.value); stopMic(); resizeTextarea(e.currentTarget) }}
+                  onPointerDown={(e) => {
+                    if (keyboardEnabled || !canType || isLoading) return
+                    e.preventDefault()
+                    activateKeyboardInput()
+                  }}
+                  onClick={() => {
+                    if (!keyboardEnabled && canType && !isLoading) activateKeyboardInput()
+                  }}
+                  placeholder={inputPlaceholder}
+                  className='w-full resize-none bg-transparent pr-12 pl-1 py-[0.95rem] text-2xl leading-[1.1] text-black placeholder:text-black/45 focus:outline-none focus:shadow-none focus-visible:shadow-none disabled:cursor-not-allowed disabled:opacity-60'
+                  style={{ overflow: 'hidden', maxHeight: '40vh', transform: undefined as any }}
+                  disabled={isLoading}
+                  autoComplete='off'
+                  readOnly={!keyboardEnabled}
+                  inputMode={keyboardEnabled ? undefined : 'none'}
+                />
+                <button
+                  type='button'
+                  onMouseDown={startDeleteHold}
+                  onMouseUp={stopDeleteHold}
+                  onMouseLeave={stopDeleteHold}
+                  onTouchStart={(e) => { e.preventDefault(); startDeleteHold() }}
+                  onTouchEnd={stopDeleteHold}
+                  onTouchCancel={stopDeleteHold}
+                  disabled={!hasDraftContent}
+                  className='surface-delete-action absolute right-1 top-1/2 -translate-y-1/2 rounded-full px-3 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-0'
+                  aria-label={language === 'da' ? 'Slet ord' : 'Delete word'}
+                >
+                  ⌫
+                </button>
+              </div>
+              <button
+                type='submit'
+                disabled={isLoading || !draft.trim()}
+                className='surface-primary-action shrink-0 rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
+              >
+                Share
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showSecondaryRow && (
+          <div className='flex flex-wrap items-center gap-2 px-1'>
+            {canSkipAhead && (
+              <button
+                type='button'
+                onClick={skip}
+                disabled={isLoading}
+                className='surface-utility rounded-full px-4 py-2 text-sm text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
+              >
+                {language === 'da' ? 'Næste' : 'Next'}
+              </button>
+            )}
+            {showPlaybackControl && (
+              <button
+                type='button'
+                onClick={() => {
+                  const el = audioElRef.current
+                  if (!el) return
+                  if (isAudioPlaying) {
+                    try { el.pause() } catch {}
+                  } else if (lastAudioSrcRef.current) {
+                    const last = lastAudioSrcRef.current
+                    const canResume = el.currentTime > 0 && !el.ended
+                    if (canResume) {
+                      el.play().catch(() => {})
+                    } else {
+                      playAudio(last, undefined, undefined, lastAudioRateRef.current || 1)
+                    }
+                  }
+                }}
+                disabled={!isAudioPlaying && !lastAudioSrcRef.current}
+                className='surface-utility rounded-full px-4 py-2 text-sm text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
+              >
+                {isAudioPlaying
+                  ? (language === 'da' ? 'Stop lyd' : 'Stop audio')
+                  : (language === 'da' ? 'Afspil lyd' : 'Play audio')}
+              </button>
+            )}
+            {showVoiceControl && (
+              <button
+                type='button'
+                onClick={() => {
+                  if (isVoiceActive) {
+                    stopMic()
+                  } else if (keyboardEnabled || hasDraftContent) {
+                    activateVoiceInput()
+                  } else {
+                    activateVoiceInput()
+                  }
+                }}
+                className={`rounded-full px-4 py-2 text-sm transition ${keyboardEnabled ? 'bg-black text-white shadow-[0_16px_30px_rgba(0,0,0,0.18)]' : 'surface-utility text-black/70 hover:text-black'}`}
+              >
+                {language === 'da' ? (isVoiceActive ? 'Stop tale' : 'Brug tale') : (isVoiceActive ? 'Stop voice' : 'Use voice')}
+              </button>
+            )}
+          </div>
+        )}
       </form>
 
       {/* removed in-app speed tester UI */}

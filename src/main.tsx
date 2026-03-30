@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import Home from './pages/Home'
+import AdminPage from './pages/Admin'
 import { bgm } from './lib/music'
 import { AppContext } from './context/AppContext'
 
@@ -29,6 +30,6 @@ function StoreProvider (props: React.PropsWithChildren) {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <StoreProvider>
-    <Home />
+    {window.location.pathname.startsWith('/admin') ? <AdminPage /> : <Home />}
   </StoreProvider>
 )
