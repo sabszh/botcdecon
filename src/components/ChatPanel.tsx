@@ -1080,8 +1080,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const isVoiceActive = micDesired || isMicOn
   const voicePrompt = sttLive.trim() || (
     language === 'da'
-      ? (isVoiceActive ? 'Lytter…' : 'Tal nu')
-      : (isVoiceActive ? 'Listening…' : 'Speak now')
+      ? (isVoiceActive ? 'Lytter…' : 'Tryk Tal')
+      : (isVoiceActive ? 'Listening…' : 'Press Speak')
   )
 
   const activateKeyboardInput = useCallback(() => {
@@ -1117,7 +1117,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         className={`mt-3 flex-1 min-h-0 overflow-y-auto scroll-touch ${isIOS ? '' : 'no-scrollbar'}`}
         style={{ WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain', touchAction: 'pan-y' as any }}
       >
-        <div className='flex min-h-full flex-col justify-end'>
+        <div className='flex min-h-full flex-col justify-end pb-3'>
           {micError && (
             <div className='mb-3 flex justify-start'>
               <div className='surface-bubble max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>

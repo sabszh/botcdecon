@@ -2,13 +2,18 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Vector3, MOUSE, TOUCH } from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef } from 'react'
 import { AppContext } from '../context/AppContext'
 
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'
 
-export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
+type Props = {
+  onObjLoaded: () => void
+  freezeMotion?: boolean
+}
+
+export default function MapCanvas ({ onObjLoaded, freezeMotion = false }: Props) {
   const { appState, setAppState } = useContext(AppContext)
 
   useEffect(() => {
@@ -23,7 +28,7 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
 
   return (
     <Canvas shadows='basic' onPointerDown={pointerDown}>
-      <CustomCamera/>
+      <CustomCamera freezeMotion={freezeMotion}/>
       <ambientLight intensity={5}/>
       <PlaneMesh receiveShadow/>
       <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
@@ -33,58 +38,62 @@ export default function ({ onObjLoaded }: { onObjLoaded: () => void }) {
   )
 }
 
-function CustomCamera () {
+function CustomCamera ({ freezeMotion = false }: { freezeMotion?: boolean }) {
   const { appState, setAppState } = useContext(AppContext)
   const controls = useRef<OrbitControlsImpl>(null)
-  const [zooming, setZooming] = useState(false)
-  const [timer, setTimer] = useState<number>()
-  const [x, setX] = useState(0)
-  const [y, setY] = useState(0)
-  const [z, setZ] = useState(1200)
-  const [angle, setAngle] = useState(0)
+  const zoomingRef = useRef(false)
+  const zoomTimerRef = useRef<number>()
+  const angleRef = useRef(0)
+  const zoomPosition = useRef(new Vector3(0, 0, 1200))
+  const zoomTarget = useRef(new Vector3(0, 0, 0))
+  const driftTarget = useRef(new Vector3())
 
-  const doneZoom = () => {
-    setZooming(false)
+  const doneZoom = useCallback(() => {
+    zoomingRef.current = false
     setAppState((state) => ({ ...state, zoomIn: false }))
-    setX(0)
-    setY(0)
-    setZ(1200)
-  }
+  }, [setAppState])
 
   useEffect(() => {
     if (appState.zoomIn) {
-      window.clearTimeout(timer)
-      setZooming(true)
-      setTimer(window.setTimeout(doneZoom, 2500))
+      if (zoomTimerRef.current) window.clearTimeout(zoomTimerRef.current)
+      zoomingRef.current = true
+      zoomTimerRef.current = window.setTimeout(doneZoom, 2500)
     } else {
-      window.clearTimeout(timer)
-      setZooming(false)
+      if (zoomTimerRef.current) window.clearTimeout(zoomTimerRef.current)
+      zoomingRef.current = false
     }
-  }, [appState.zoomIn])
+  }, [appState.zoomIn, doneZoom])
 
-  const vec = new Vector3()
-  useFrame((state) => {
+  useEffect(() => {
+    return () => {
+      if (zoomTimerRef.current) window.clearTimeout(zoomTimerRef.current)
+    }
+  }, [])
+
+  useFrame((state, delta) => {
     if (!state.camera) return
 
     if (appState.viewMode === 'post') {
-      setAngle((value) => (value + 0.0007) % (Math.PI * 2))
+      if (freezeMotion) return
+      angleRef.current = (angleRef.current + delta * 0.42) % (Math.PI * 2)
       const radius = 300
-      const cx = -150 + Math.cos(angle) * radius
-      const cy = Math.sin(angle) * radius
-      state.camera.position.lerp(vec.set(cx, cy, z), 0.03)
+      const cx = -150 + Math.cos(angleRef.current) * radius
+      const cy = Math.sin(angleRef.current) * radius
+      driftTarget.current.set(cx, cy, zoomPosition.current.z)
+      state.camera.position.lerp(driftTarget.current, 0.03)
       return
     }
 
-    if (!zooming) return
+    if (!zoomingRef.current) return
 
-    state.camera.position.lerp(vec.set(x, y, z), 0.03)
+    state.camera.position.lerp(zoomPosition.current, 0.03)
     state.camera.updateProjectionMatrix()
 
     if (controls.current) {
-      controls.current.target.lerp(vec.set(x, y, 0), 0.03)
+      controls.current.target.lerp(zoomTarget.current, 0.03)
     }
 
-    if (state.camera.position.distanceToSquared(vec.set(x, y, z)) < 1) {
+    if (state.camera.position.distanceToSquared(zoomPosition.current) < 1) {
       doneZoom()
     }
   })
