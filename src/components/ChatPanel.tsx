@@ -80,7 +80,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const introTimerRef = useRef<number | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const inputWrapRef = useRef<HTMLDivElement | null>(null)
-  const inputBaseHeightRef = useRef<number>(0)
   const chatListRef = useRef<HTMLDivElement | null>(null)
   const audioElRef = useRef<HTMLAudioElement | null>(null) // Keep audio element reference
   const messageIdRef = useRef(0) // Message ID reference
@@ -385,25 +384,16 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const resizeTextarea = useCallback((el?: HTMLTextAreaElement | null) => {
     const node = el || inputRef.current
     if (!node) return
-    // Measure content height
     node.style.height = 'auto'
     const max = Math.round(window.innerHeight * 0.4)
-    const h = Math.min(node.scrollHeight, max)
-    if (!inputBaseHeightRef.current) {
-      // Use the first measured single-line height as base
-      inputBaseHeightRef.current = h
-    }
-    const base = inputBaseHeightRef.current
-    const extra = Math.max(0, h - base)
-    // Set actual textarea height
-    node.style.height = h + 'px'
-    // Move it up so it visually expands upward
-    node.style.transform = `translateY(-${extra}px)`
-    // Fix outer wrapper height so siblings don't shift
+    const nextHeight = Math.min(node.scrollHeight, max)
+    node.style.height = `${nextHeight}px`
+    node.style.overflowY = node.scrollHeight > max ? 'auto' : 'hidden'
+
     const wrap = inputWrapRef.current
     if (wrap) {
-      wrap.style.height = base + 'px'
-      wrap.style.setProperty('--taOffset', extra + 'px')
+      wrap.style.removeProperty('height')
+      wrap.style.removeProperty('--taOffset')
     }
   }, [])
 

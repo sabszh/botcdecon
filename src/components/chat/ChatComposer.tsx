@@ -65,7 +65,7 @@ export default function ChatComposer ({
       <label htmlFor='message' className='sr-only'>Message</label>
       <div className='surface-card rounded-[2rem] px-4 py-3'>
         <div className='flex items-end gap-3'>
-          <div ref={inputWrapRef} className='relative flex min-w-0 flex-1 items-center' style={{ height: undefined as any }}>
+          <div ref={inputWrapRef} className='relative flex min-w-0 flex-1 items-end'>
             <textarea
               ref={inputRef}
               id='message'
@@ -75,7 +75,7 @@ export default function ChatComposer ({
               onChange={e => onDraftChange(e.target.value, e.currentTarget)}
               placeholder={inputPlaceholder}
               className='w-full resize-none bg-transparent pr-12 pl-1 py-[0.95rem] text-2xl leading-[1.1] text-black placeholder:text-black/45 focus:outline-none focus:shadow-none focus-visible:shadow-none disabled:cursor-not-allowed disabled:opacity-60'
-              style={{ overflow: 'hidden', maxHeight: '40vh', transform: undefined as any }}
+              style={{ overflowY: 'hidden', maxHeight: '40vh' }}
               disabled={isLoading}
               autoComplete='off'
               readOnly={!keyboardEnabled}
