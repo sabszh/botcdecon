@@ -50,6 +50,10 @@ function getSpeechErrorMessage (err: string, language: Language): string | null 
     : 'Voice input could not start. You can type instead.'
 }
 
+function normalizeSpeechText (value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
 
 export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
@@ -92,6 +96,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const micDesiredRef = useRef(false) // Desired microphone state reference
   const isLoadingRef = useRef(false) // Loading state reference
   const committedMicRef = useRef('') // Committed microphone reference
+  const speechSessionBaseRef = useRef('')
   const sessionIdRef = useRef(buildSessionId())
   const requestAbortRef = useRef<AbortController | null>(null)
   const audioFetchAbortRef = useRef<AbortController | null>(null)
@@ -115,6 +120,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     activeNarrationAdvanceRef.current = null
     activePlaybackKindRef.current = null
     speechReplayRef.current = null
+    speechSessionBaseRef.current = ''
     setHasSpeechReplay(false)
   }, [language])
   useEffect(() => () => {
@@ -577,30 +583,23 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       if (!micDesiredRef.current || isAudioPlayingRef.current || isLoadingRef.current) {
         return
       }
-      let finalText = ''
-      let interimText = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      const finalParts: string[] = []
+      const interimParts: string[] = []
+      for (let i = 0; i < event.results.length; i++) {
         const res = event.results[i]
-        const chunk = res[0].transcript
-        if (res.isFinal) finalText += chunk
-        else interimText += chunk
+        const chunk = normalizeSpeechText(res[0].transcript || '')
+        if (!chunk) continue
+        if (res.isFinal) finalParts.push(chunk)
+        else interimParts.push(chunk)
       }
-      // Append final recognized text into input
-      if (finalText) {
-        const sep = committedMicRef.current && !committedMicRef.current.endsWith(' ') ? ' ' : ''
-        committedMicRef.current = `${committedMicRef.current}${sep}${finalText}`.trim()
-        setDraft(committedMicRef.current)
-        setSttBuffer(committedMicRef.current)
-      }
-      // Show interim in input while listening
-      if (interimText) {
-        const sep2 = committedMicRef.current && interimText ? ' ' : ''
-        setDraft(`${committedMicRef.current}${sep2}${interimText}`.trim())
-      } else if (!finalText) {
-        // No interim and no final: keep committed text
-        setDraft(committedMicRef.current)
-      }
-      setSttLive(interimText)
+      const committed = normalizeSpeechText([speechSessionBaseRef.current, ...finalParts].filter(Boolean).join(' '))
+      const interim = normalizeSpeechText(interimParts.join(' '))
+      const visibleDraft = normalizeSpeechText([committed, interim].filter(Boolean).join(' '))
+
+      committedMicRef.current = committed
+      setSttBuffer(committed)
+      setSttLive(interim)
+      setDraft(visibleDraft || committed || speechSessionBaseRef.current)
     }
     rec.onerror = (ev: any) => {
       setIsMicOn(false)
@@ -620,6 +619,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       // Keep listening while desired and it's the user's turn
       const shouldListen = micDesiredRef.current && !isAudioPlayingRef.current && !isLoadingRef.current
       if (shouldListen) {
+        speechSessionBaseRef.current = normalizeSpeechText(committedMicRef.current)
         setTimeout(() => { try { rec.start() } catch {} }, 150)
       } else {
         setIsMicOn(false)
@@ -641,7 +641,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     try {
       if (isSpeechSupported && recognitionRef.current && !isAudioPlayingRef.current && !isLoadingRef.current) {
         // Capture current input as base for interim/final appends
-        committedMicRef.current = (draft || '').trim()
+        committedMicRef.current = normalizeSpeechText(draft || '')
+        speechSessionBaseRef.current = committedMicRef.current
+        setSttBuffer(committedMicRef.current)
+        setSttLive('')
         recognitionRef.current.start()
         setIsMicOn(true)
       }
@@ -683,7 +686,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     if (shouldListen && !isMicOn) {
       try {
         // Capture current input as base for interim/final appends
-        committedMicRef.current = (draft || '').trim()
+        committedMicRef.current = normalizeSpeechText(draft || '')
+        speechSessionBaseRef.current = committedMicRef.current
+        setSttBuffer(committedMicRef.current)
         recognitionRef.current.start()
         setIsMicOn(true)
       } catch {}
@@ -905,19 +910,15 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const canType = phase === 'await_memory' || phase === 'await_question' || phase === 'confirm_more'
   const hasDraftContent = draft.length > 0
   const showPlaybackControl = isAudioPlaying || Boolean(lastAudioSrcRef.current) || hasSpeechReplay
-  const showVoiceCompose = canType && isSpeechSupported && !keyboardEnabled && !isAudioPlaying
-  const showVoiceControl = canType && isSpeechSupported && !isAudioPlaying && !showVoiceCompose
-  const showSecondaryRow = canSkipAhead || showPlaybackControl || showVoiceControl
+  const showSecondaryRow = canSkipAhead || showPlaybackControl
   const inputPlaceholder = language === 'da'
     ? 'Skriv her'
     : 'Type here'
   const isVoiceActive = micDesired || isMicOn
-  const voiceCommittedText = sttBuffer.trim() || (!keyboardEnabled ? draft.trim() : '')
-  const voiceInterimText = sttLive.trim()
   const voiceStatusLabel = (
     language === 'da'
-      ? (isVoiceActive ? 'Lytter' : 'Taleinput')
-      : (isVoiceActive ? 'Listening' : 'Voice input')
+      ? (isVoiceActive ? 'Lytter…' : 'Taleinput klar')
+      : (isVoiceActive ? 'Listening…' : 'Voice input ready')
   )
 
   const activateKeyboardInput = useCallback(() => {
@@ -1009,18 +1010,15 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         inputPlaceholder={inputPlaceholder}
         keyboardEnabled={keyboardEnabled}
         canType={canType}
+        isSpeechSupported={isSpeechSupported}
         isLoading={isLoading}
-        showVoiceCompose={showVoiceCompose}
         showSecondaryRow={showSecondaryRow}
         showPlaybackControl={showPlaybackControl}
-        showVoiceControl={showVoiceControl}
         canSkipAhead={canSkipAhead}
         isVoiceActive={isVoiceActive}
         isAudioPlaying={isAudioPlaying}
         hasPlaybackSource={Boolean(lastAudioSrcRef.current)}
         micError={micError}
-        voiceCommittedText={voiceCommittedText}
-        voiceInterimText={voiceInterimText}
         voiceStatusLabel={voiceStatusLabel}
         inputRef={inputRef}
         inputWrapRef={inputWrapRef}
