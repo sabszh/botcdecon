@@ -39,7 +39,7 @@ body {
   /* background-color: #86c663; */
   /* background-color: #dd4c3b; */
   /* background-color: #a984ac; */
-  background-color: #e9dcec;
+  background-color: #b2a4b6;
   font-family: 'Lars-Regular', sans-serif;
 }
 
@@ -78,6 +78,92 @@ textarea, input, button {
   padding: 0.2em 1.3rem;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+}
+
+.surface-card {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.46);
+  box-shadow: 0 18px 50px rgba(70, 46, 72, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.surface-bubble {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  box-shadow: 0 16px 40px rgba(70, 46, 72, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.surface-bubble-strong {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 16px 40px rgba(70, 46, 72, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.surface-pill {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 12px 32px rgba(70, 46, 72, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.surface-utility {
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  box-shadow: 0 8px 24px rgba(70, 46, 72, 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.surface-primary-action {
+  color: white;
+  background: rgba(26, 19, 29, 0.92);
+  box-shadow: 0 18px 34px rgba(30, 18, 32, 0.24);
+}
+
+.surface-primary-action-live {
+  color: white;
+  background: rgba(18, 14, 22, 0.96);
+  box-shadow: 0 18px 34px rgba(30, 18, 32, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+}
+
+.surface-delete-action {
+  color: rgba(34, 22, 36, 0.72);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  box-shadow: 0 10px 24px rgba(70, 46, 72, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.surface-delete-action:hover {
+  color: rgba(0, 0, 0, 0.88);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.voice-status-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 9999px;
+  background: rgba(34, 22, 36, 0.28);
+  flex: 0 0 auto;
+}
+
+.voice-status-dot.is-live {
+  background: rgba(34, 22, 36, 0.72);
+  box-shadow: 0 0 0 0 rgba(34, 22, 36, 0.22);
+  animation: voice-pulse 1.6s ease-out infinite;
+}
+
+@keyframes voice-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 22, 36, 0.22); }
+  70% { box-shadow: 0 0 0 10px rgba(34, 22, 36, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 22, 36, 0); }
 }
 
 /* Removed legacy transition classes tied to react-transition-group usage */

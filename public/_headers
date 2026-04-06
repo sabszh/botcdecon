@@ -31,6 +31,12 @@
 /*.jpeg
   Cache-Control: public, max-age=31556952
 
+/*.webp
+  Cache-Control: public, max-age=31556952
+
+/*.avif
+  Cache-Control: public, max-age=31556952
+
 /*.vtt
   Cache-Control: public, max-age=31556952
 
@@ -38,4 +44,7 @@
   Cache-Control: public, max-age=31556952
 
 /*.gltf
+  Cache-Control: public, max-age=31556952
+
+/*.mp3
   Cache-Control: public, max-age=31556952
