@@ -57,7 +57,7 @@ function CustomCamera ({ freezeMotion = false }: { freezeMotion?: boolean }) {
     if (appState.zoomIn) {
       if (zoomTimerRef.current) window.clearTimeout(zoomTimerRef.current)
       zoomingRef.current = true
-      zoomTimerRef.current = window.setTimeout(doneZoom, 2500)
+      zoomTimerRef.current = window.setTimeout(doneZoom, 1500)
     } else {
       if (zoomTimerRef.current) window.clearTimeout(zoomTimerRef.current)
       zoomingRef.current = false
@@ -75,22 +75,22 @@ function CustomCamera ({ freezeMotion = false }: { freezeMotion?: boolean }) {
 
     if (appState.viewMode === 'post') {
       if (freezeMotion) return
-      angleRef.current = (angleRef.current + delta * 0.42) % (Math.PI * 2)
-      const radius = 300
+      angleRef.current = (angleRef.current + delta * 0.18) % (Math.PI * 2)
+      const radius = 260
       const cx = -150 + Math.cos(angleRef.current) * radius
       const cy = Math.sin(angleRef.current) * radius
       driftTarget.current.set(cx, cy, zoomPosition.current.z)
-      state.camera.position.lerp(driftTarget.current, 0.03)
+      state.camera.position.lerp(driftTarget.current, 0.015)
       return
     }
 
     if (!zoomingRef.current) return
 
-    state.camera.position.lerp(zoomPosition.current, 0.03)
+    state.camera.position.lerp(zoomPosition.current, 0.055)
     state.camera.updateProjectionMatrix()
 
     if (controls.current) {
-      controls.current.target.lerp(zoomTarget.current, 0.03)
+      controls.current.target.lerp(zoomTarget.current, 0.055)
     }
 
     if (state.camera.position.distanceToSquared(zoomPosition.current) < 1) {

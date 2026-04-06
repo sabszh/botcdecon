@@ -21,6 +21,7 @@ class ChatResult:
   message: str
   session_id: str
   session_history: List[Dict[str, Any]] = field(default_factory=list)
+  handoff_action: Optional[str] = None
   error: Optional[str] = None
   debug: Optional[Dict[str, Any]] = None
   audio_url: Optional[str] = None
@@ -67,6 +68,41 @@ class ChatService:
       logger.exception('Failed to initialise TTS service: %s', exc)
       self._tts = None
 
+  def _schedule_background(self, coro: asyncio.Future | asyncio.Task | Any, *, label: str) -> None:
+    async def runner() -> None:
+      try:
+        await coro
+      except Exception as exc:  # pragma: no cover - defensive
+        logger.exception('Background task failed (%s): %s', label, exc)
+
+    asyncio.create_task(runner())
+
+  async def _upsert_vectorstore_background(
+    self,
+    *,
+    user_input: str,
+    ai_output: str,
+    user_name: str,
+    user_location: Optional[str],
+    session_id: str,
+    continuous_data: Optional[Dict[str, Any]],
+    label: str,
+  ) -> None:
+    if not self._bot:
+      return
+    try:
+      await asyncio.to_thread(
+        self._bot.upsert_vectorstore,
+        user_input,
+        ai_output,
+        user_name,
+        user_location or 'Unknown',
+        session_id,
+        continuous_data
+      )
+    except Exception as exc:  # pragma: no cover - defensive
+      logger.exception('Vectorstore upsert failed (%s): %s', label, exc)
+
   async def chat(
     self,
     *,
@@ -91,28 +127,34 @@ class ChatService:
     if self._bot:
       try:
         if mode == 'memory':
-          logger.info('[CHAT] MEMORY mode: enqueue upsert and return immediately')
+          logger.info('[CHAT] MEMORY mode: return immediately and persist off-path')
           ai_output = self._handle_memory_mode(message, language)
-          await self._persist_archive_turn(
-            session_id=session_id,
-            language=language,
-            user_name=user_name,
-            user_location=user_location,
-            mode=mode,
-            user_message=message,
-            bot_message=ai_output,
-            error=None,
-            continuous_data=continuous_data
+          self._schedule_background(
+            self._persist_archive_turn(
+              session_id=session_id,
+              language=language,
+              user_name=user_name,
+              user_location=user_location,
+              mode=mode,
+              user_message=message,
+              bot_message=ai_output,
+              error=None,
+              continuous_data=continuous_data
+            ),
+            label='memory_archive_persist'
           )
-          asyncio.create_task(asyncio.to_thread(
-            self._bot.upsert_vectorstore,
-            message,
-            ai_output,
-            user_name,
-            user_location or 'Unknown',
-            session_id,
-            continuous_data
-          ))
+          self._schedule_background(
+            self._upsert_vectorstore_background(
+              user_input=message,
+              ai_output=ai_output,
+              user_name=user_name,
+              user_location=user_location,
+              session_id=session_id,
+              continuous_data=continuous_data,
+              label='memory_vector_upsert'
+            ),
+            label='memory_vector_upsert'
+          )
           total_ms = (time.perf_counter() - t_start) * 1000
           return ChatResult(
             message=ai_output,
@@ -120,6 +162,34 @@ class ChatService:
             session_history=[],
             audio_status='none',
             debug={'total_ms': round(total_ms, 2), 'mode': 'memory'}
+          )
+
+        if mode == 'handoff':
+          logger.info('[CHAT] HANDOFF mode: invoking agent decision')
+          handoff_action = await asyncio.to_thread(
+            self._bot.classify_handoff,
+            message,
+            language
+          )
+          await self._persist_archive_turn(
+            session_id=session_id,
+            language=language,
+            user_name=user_name,
+            user_location=user_location,
+            mode=mode,
+            user_message=message,
+            bot_message=handoff_action,
+            error=None,
+            continuous_data=continuous_data
+          )
+          total_ms = (time.perf_counter() - t_start) * 1000
+          return ChatResult(
+            message='',
+            session_id=session_id,
+            session_history=[],
+            handoff_action=handoff_action,
+            audio_status='none',
+            debug={'total_ms': round(total_ms, 2), 'mode': 'handoff'}
           )
 
         logger.info('[CHAT] QUESTION mode: invoking pipeline via thread executor')
@@ -134,7 +204,7 @@ class ChatService:
           language,
           False,  # persist off critical path
           include_history,
-          8
+          15
         )
         ai_output = response.get('ai_output', '')
         timings = response.get('timings', {}) or {}
@@ -207,6 +277,7 @@ class ChatService:
           message=fallback,
           session_id=session_id,
           session_history=[],
+          handoff_action='continue' if mode == 'handoff' else None,
           error=f'chat_pipeline_error: {exc}',
           audio_turn_id=audio_turn_id,
           audio_status='pending' if audio_turn_id else 'none',
@@ -231,6 +302,7 @@ class ChatService:
       message=fallback,
       session_id=session_id,
       session_history=[],
+      handoff_action='continue' if mode == 'handoff' else None,
       error=self._init_error,
       audio_turn_id=audio_turn_id,
       audio_status='pending' if audio_turn_id else 'none',

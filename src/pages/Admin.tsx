@@ -1,4 +1,5 @@
 import React from 'react'
+import { fetchJson } from '../lib/api'
 
 type SessionSummary = {
   sessionId: string
@@ -28,30 +29,10 @@ type SessionDetail = {
   turns: SessionTurn[]
 }
 
-const rawApiBase =
-  (import.meta.env.VITE_API_BASE as string) ||
-  (import.meta.env.VITE_API_BASE_URL as string) ||
-  ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://127.0.0.1:8000'
-    : '')
-const apiBase = rawApiBase.endsWith('/') ? rawApiBase.slice(0, -1) : rawApiBase
-
 function fmtDate(value: string) {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return value
   return d.toLocaleString()
-}
-
-async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${apiBase}${path}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include'
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `HTTP ${res.status}`)
-  }
-  return await res.json() as T
 }
 
 export default function AdminPage() {

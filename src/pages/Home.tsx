@@ -33,9 +33,7 @@ export default function Home() {
     languageCardTimer.current = window.setTimeout(() => {
       setShowLanguageCard(true)
     }, LANGUAGE_CARD_DELAY_MS)
-    // Reset background state so hippocampus splash is shown
-    // @ts-ignore-line
-    setAppState((s) => ({ ...s, headerVisible: true, viewMode: 'empty', zoomIn: false }))
+    setAppState((s) => ({ ...s, viewMode: 'empty', zoomIn: false }))
   }, [setAppState])
 
   const beginReturnToSplash = useCallback(() => {
@@ -117,9 +115,7 @@ export default function Home() {
       console.warn('[BGM] Playback blocked or failed', e)
     }
 
-    // Engage map / UI state
-    // @ts-ignore
-    setAppState((s) => ({ ...s, headerVisible: false, viewMode: 'post', zoomIn: true }))
+    setAppState((s) => ({ ...s, viewMode: 'post', zoomIn: true }))
   }
 
   // If audio previously allowed, ensure autoplay when landing on Home (language null)

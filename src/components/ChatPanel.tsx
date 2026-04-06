@@ -1,33 +1,17 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { preloadAudio, getCached, clearCache } from '../lib/audioCache'
-
-type Language = 'en' | 'da'
-
-type ChatMessage = {
-  id: number
-  role: 'user' | 'bot'
-  content: string
-}
+import { requestChatTurn as requestChatTurnRequest, resolveAudioTurn as resolveAudioTurnRequest } from './chat/backend'
+import { BROWSER_TTS_RATE, GENERATED_SPEECH_RATE, INTRO_MIN_DELAY_MS, INTRO_START_MAX_WAIT_MS, scripts, THANK_YOU_TEXTS } from './chat/config'
+import { resolveApiUrl } from '../lib/api'
+import ChatComposer from './chat/ChatComposer'
+import ChatTranscript from './chat/ChatTranscript'
+import { buildHistoryPayload, buildSessionId } from './chat/helpers'
+import type { ChatMessage, Language } from './chat/types'
 
 type Props = {
   language: Language
   onChangeLanguage: () => void
 }
-
-const rawApiBase =
-  (import.meta.env.VITE_API_BASE as string) ||
-  (import.meta.env.VITE_API_BASE_URL as string) ||
-  ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://127.0.0.1:8000'
-    : '')
-const apiBase: string = rawApiBase.endsWith('/') ? rawApiBase.slice(0, -1) : rawApiBase
-const CHAT_ENDPOINT = `${apiBase}/api/chat`
-const CHAT_AUDIO_ENDPOINT = `${CHAT_ENDPOINT}/audio`
-const INTRO_START_MAX_WAIT_MS = 1500
-const INTRO_MIN_DELAY_MS = 300
-const GENERATED_SPEECH_RATE = 0.9 // Tad slower, still natural for all bot audio
-// Browser TTS (fallback) should be ~5% faster than generated
-const BROWSER_TTS_RATE = Math.min(2, GENERATED_SPEECH_RATE * 1.05)
 
 // Debug toggle: set localStorage.audioDebug = '1' to enable logs
 const AUDIO_DEBUG = (() => { try { return localStorage.getItem('audioDebug') === '1' } catch { return false } })()
@@ -39,70 +23,33 @@ const dlog = (...args: any[]) => { if (AUDIO_DEBUG) console.log('[AUDIO]', ...ar
 function resolveAudioSrc (u: string | null | undefined): string | null {
   if (!u) return null
   const s = u.toString()
-  if (/^(data:|blob:|https?:\/\/)/i.test(s)) { dlog('resolve passthrough', s); return s }
-  if (!apiBase) { dlog('resolve no apiBase', s); return s }
-  const left = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
-  const right = s.startsWith('/') ? s : `/${s}`
-  const out = `${left}${right}`
+  const out = resolveApiUrl(s)
   dlog('resolve joined', { input: s, out })
   return out
 }
 
-const THANK_YOU_TEXTS: Record<Language, string> = {
-  en: 'Thank you for sharing.',
-  da: 'Tak for at dele din erindring.'
-}
-
-type BackendChatResponse = {
-  message?: string
-  audioUrl?: string | null
-  audio_url?: string | null
-  audioTurnId?: string | null
-  audio_turn_id?: string | null
-}
-
-function buildSessionId () {
-  return `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-}
-
-function buildHistoryPayload (history: ChatMessage[]) {
-  const noiseFragments = [
-    'Udforsk Carte de Continuonus',
-    'Explore Carte de Continuonus',
-    'Change language',
-    'Skift sprog'
-  ]
-
-  return history
-    .slice(-4)
-    .map((m) => {
-      let content = (m.content || '').trim()
-      if (!content) return null
-      if (noiseFragments.some((f) => content.includes(f))) return null
-      if (content.length > 200) content = content.slice(0, 200) + '…'
-      return { role: m.role, content }
-    })
-    .filter((v): v is { role: 'user' | 'bot'; content: string } => Boolean(v))
-}
-
-const scripts = {
-  en: {
-    welcome: `Hello!\n\nThank you for being here. What a long strange trip we’ve been on, but there’s still a long road ahead.\n\nWelcome to our vehicle. We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.\n\nWe may have her voice, but we’re speaking through a data set or rather through the experiences of thousands of people who were here before you. All of whom have shared what they remember that they want the future to remember. They have placed that memory onto a website known as continuonus. On the website a map is being cultivated.\n\nNow let's journey through that map. In here you may share something that you feel is important for the future to remember and you can ask us about what previous visitors shared?`,
-    memory1: `Please share a memory? Something you’d like other's in the future to remember to remember. Press the Share button when you’re done.`,
-    question1: `Now would you ask us about what others have felt it was important for the future to remember to remember? You are in their future. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done.`,
-    question2: `Would you like to ask something else before continuing on? If you want to ask more, you can do that now; otherwise say “no”. Press the Share button when you’re done.`,
-    explore: ``,
-    farewell: `Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future.`
-  },
-  da: {
-    welcome: `Hej!\n\nTak fordi du er her. Sikke en lang, mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\nVelkommen til vores køretøj. Vi er Bot de ContinuOnus, en AI‑genereret chatbot, der taler med kunstneren Helene Nymanns klonede stemme.\n\nVi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort.\n\nLad os nu rejse gennem det kort. Her kan du dele noget, som du føler er vigtigt for fremtiden at huske, og du kan spørge os om, hvad tidligere besøgende har delt?`,
-    memory1: `Vil du dele en erindring? Noget du gerne vil have, at andre i fremtiden skal huske at huske. Tryk på Del, når du er færdig.`,
-    question1: `Vil du nu spørge os om, hvad andre har følt var vigtigt for fremtiden at huske at huske? Du er i deres fremtid. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del, når du er færdig.`,
-    question2: `Vil du spørge om noget mere, før vi fortsætter? Hvis du vil spørge mere, kan du gøre det nu; ellers sig “nej”. Tryk på Del, når du er færdig.`,
-    explore: ``,
-    farewell: `Tak fordi du tog denne del af rejsen sammen med os. Du er nu også en del af continuOnus‑landskabet. Vi håber at se dig i fremtiden.`
+function getSpeechErrorMessage (err: string, language: Language): string | null {
+  if (!err || err === 'aborted' || err === 'no-speech') return null
+  if (err === 'not-allowed' || err === 'service-not-allowed') {
+    return language === 'da'
+      ? 'Mikrofonadgang er blokeret. Tillad adgang i browserens indstillinger.'
+      : 'Microphone access is blocked. Allow it in your browser settings.'
   }
-} as const
+  if (err === 'audio-capture') {
+    return language === 'da'
+      ? 'Mikrofonen er ikke tilgængelig lige nu. Du kan skrive i stedet.'
+      : 'Microphone is unavailable right now. You can type instead.'
+  }
+  if (err === 'network') {
+    return language === 'da'
+      ? 'Taleinput er midlertidigt utilgængeligt. Du kan skrive i stedet.'
+      : 'Voice input is temporarily unavailable. You can type instead.'
+  }
+  return language === 'da'
+    ? 'Taleinput kunne ikke starte. Du kan skrive i stedet.'
+    : 'Voice input could not start. You can type instead.'
+}
+
 
 export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
@@ -135,6 +82,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const messageIdRef = useRef(0) // Message ID reference
   const lastAudioSrcRef = useRef<string | null>(null) // Last audio source reference
   const lastAudioRateRef = useRef<number>(1) // Last audio rate reference
+  const activeNarrationAdvanceRef = useRef<(() => void) | null>(null)
+  const activePlaybackKindRef = useRef<'media' | 'speech' | null>(null)
+  const suppressSpeechOnEndRef = useRef(false)
+  const speechReplayRef = useRef<{ text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number } | null>(null)
   const recognitionRef = useRef<any>(null) // Speech recognition reference
   const isMicOnRef = useRef(false) // Microphone state reference
   const isAudioPlayingRef = useRef(false) // Audio playing state reference
@@ -147,14 +98,11 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   // Auto-follow / scroll management
   const autoFollowRef = useRef(true)
   const [showFollow, setShowFollow] = useState(false)
+  const [hasSpeechReplay, setHasSpeechReplay] = useState(false)
   const NEAR_BOTTOM_PX = 48
   // Repeating delete (backspace) support
   const deleteHoldTimeoutRef = useRef<number | null>(null)
   const deleteHoldIntervalRef = useRef<number | null>(null)
-  // Track which message should be auto-scrolled with the playing audio
-  const autoScrollMsgIdRef = useRef<number | null>(null)
-  const scrollRafRef = useRef<number | null>(null)
-  const audioFadeRafRef = useRef<number | null>(null)
 
   useEffect(() => { isMicOnRef.current = isMicOn }, [isMicOn])
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
@@ -164,6 +112,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     sessionIdRef.current = buildSessionId()
     requestAbortRef.current?.abort()
     audioFetchAbortRef.current?.abort()
+    activeNarrationAdvanceRef.current = null
+    activePlaybackKindRef.current = null
+    speechReplayRef.current = null
+    setHasSpeechReplay(false)
   }, [language])
   useEffect(() => () => {
     requestAbortRef.current?.abort()
@@ -214,14 +166,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [])
 
   useEffect(() => () => stopDeleteHold(), [stopDeleteHold])
-
-  const stopAudioAutoScroll = useCallback(() => {
-    autoScrollMsgIdRef.current = null
-    if (scrollRafRef.current) {
-      cancelAnimationFrame(scrollRafRef.current)
-      scrollRafRef.current = null
-    }
-  }, [])
 
   // ChatPanel.tsx  — STEP 3: one-time mic pre-warm (iOS friendly)
   useEffect(() => {
@@ -277,43 +221,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [language])
 
 
-  // Very lightweight negation detection per language
-  const isNegativeResponse = useCallback((text: string, lang: Language) => {
-    const t = (text || '').toLowerCase().trim()
-    if (!t) return false
-    if (lang === 'da') {
-      const negatives = [
-        'nej', 'nej tak', 'ikke', 'ingen', 'nej,', 'nej.', 'nej ', 'stop', 'slut', 'det er det', 'det var det',
-        'intet mere', 'ikke mere', 'nej tak,', 'nej tak.'
-      ]
-      return negatives.some(k => t.includes(k))
-    } else {
-      const negatives = [
-        'no', 'nope', 'nah', "don't", 'do not', 'not now', 'nothing', "that's all", 'stop', 'no,', 'no.',
-        'no thanks', 'no thank you', "that's it", 'nothing else', 'i am done', 'im done', "i'm done"
-      ]
-      return negatives.some(k => t.includes(k))
-    }
-  }, [])
-
-  // Lightweight affirmative detection per language
-  const isAffirmativeResponse = useCallback((text: string, lang: Language) => {
-    const t = (text || '').toLowerCase().trim()
-    if (!t) return false
-    if (lang === 'da') {
-      const affirm = [
-        'ja', 'ja tak', 'jo', 'jep', 'jeps', 'klart', 'sikkert', 'okay', 'ok', 'lad os', 'gerne'
-      ]
-      return affirm.some(k => t.startsWith(k) || t === k)
-    } else {
-      const affirm = [
-        'yes', 'yeah', 'yep', 'yup', 'sure', 'okay', 'ok', 'alright', 'please', 'go ahead'
-      ]
-      return affirm.some(k => t.startsWith(k) || t === k)
-    }
-  }, [])
-
-  // --- FIXED: Define playAudio before startIntro ---
   const playAudio = useCallback(async (
     src: string,
     onEnded?: () => void,
@@ -328,6 +235,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     const chosenSrc = cached || src
     lastAudioSrcRef.current = src
     lastAudioRateRef.current = rate && rate > 0 ? rate : 1
+    activePlaybackKindRef.current = 'media'
+    activeNarrationAdvanceRef.current = onEnded || null
+    speechReplayRef.current = null
+    setHasSpeechReplay(false)
     const el = audioElRef.current
     if (!el) return
 
@@ -354,22 +265,23 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     el.onplay = () => fade(0, 1, 400)
     el.onpause = () => {
       setIsAudioPlaying(false)
-      stopAudioAutoScroll()
     }
     el.onended = () => {
       setIsAudioPlaying(false)
-      stopAudioAutoScroll()
+      activePlaybackKindRef.current = null
+      const after = activeNarrationAdvanceRef.current
+      activeNarrationAdvanceRef.current = null
       if (enableMicAfter) setMicDesired(true)
-      if (onEnded) onEnded()
+      if (after) after()
     }
     el.onerror = () => {
       setIsAudioPlaying(false)
-      stopAudioAutoScroll()
+      activePlaybackKindRef.current = null
+      activeNarrationAdvanceRef.current = null
       if (onError) onError()
     }
     el.play().catch(err => console.warn('[Audio play rejected]', err))
-  }, [stopAudioAutoScroll])
-  // --- END FIX ---
+  }, [])
 
   // Start the scripted intro, with iOS unlock-aware gating
   const startIntro = useCallback(() => {
@@ -462,8 +374,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       list.scrollTop = list.scrollHeight
     }
   }, [messages, isLoading])
-
-  // moved: scroll position tracking effect is placed after startAudioAutoScroll definition
 
   // Autosize the text input as content grows
   const resizeTextarea = useCallback((el?: HTMLTextAreaElement | null) => {
@@ -563,60 +473,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     return cleanup
   }, [])
 
-  const computeScrollBounds = useCallback((msgId: number) => {
-    const list = chatListRef.current
-    if (!list) return null as { start: number; end: number } | null
-    const bubble = list.querySelector(`[data-msg-id="${msgId}"]`) as HTMLElement | null
-    if (!bubble) return null
-    const messageTop = bubble.offsetTop
-    const messageBottom = messageTop + bubble.scrollHeight
-    const start = Math.max(0, messageTop - 8)
-    const end = Math.max(0, messageBottom - list.clientHeight * 0.9)
-    return { start, end }
-  }, [])
-
-  const startTimedAudioAutoScroll = useCallback((msgId: number, durationMs: number) => {
-    const list = chatListRef.current
-    if (!list || !durationMs || durationMs <= 0) return
-    const bounds = computeScrollBounds(msgId)
-    if (!bounds) return
-    const { start, end } = bounds
-    autoScrollMsgIdRef.current = msgId
-    list.scrollTop = start
-    const startTime = performance.now()
-    const step = (now: number) => {
-      if (autoScrollMsgIdRef.current !== msgId) return
-      if (!autoFollowRef.current) { scrollRafRef.current = null; return }
-      const t = Math.min(1, (now - startTime) / durationMs)
-      list.scrollTop = start + (end - start) * t
-      if (t < 1) {
-        scrollRafRef.current = requestAnimationFrame(step)
-      } else {
-        scrollRafRef.current = null
-      }
-    }
-    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
-    scrollRafRef.current = requestAnimationFrame(step)
-  }, [computeScrollBounds])
-
-  const startAudioAutoScroll = useCallback((msgId: number) => {
-    autoScrollMsgIdRef.current = msgId
-    const tick = () => {
-      if (!autoFollowRef.current) { scrollRafRef.current = null; return }
-      const el = audioElRef.current
-      const msg = autoScrollMsgIdRef.current
-      if (!el || !msg) { scrollRafRef.current = null; return }
-      const dur = el.duration || 0
-      const t = el.currentTime || 0
-      if (dur > 0) {
-        scrollMessageProgress(msg, Math.max(0, Math.min(1, t / dur)))
-      }
-      scrollRafRef.current = requestAnimationFrame(tick)
-    }
-    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
-    scrollRafRef.current = requestAnimationFrame(tick)
-  }, [scrollMessageProgress])
-
   // Track user scroll position and toggle auto-follow accordingly
   useEffect(() => {
     const list = chatListRef.current
@@ -625,19 +481,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       const atBottom = (list.scrollHeight - (list.scrollTop + list.clientHeight)) <= NEAR_BOTTOM_PX
       autoFollowRef.current = atBottom
       setShowFollow(!atBottom)
-      // If user left bottom, stop any running auto-follow loop
-      if (!atBottom && scrollRafRef.current) {
-        cancelAnimationFrame(scrollRafRef.current)
-        scrollRafRef.current = null
-      }
-      // If user returned to bottom while audio is playing, resume follow
-      if (atBottom && isAudioPlayingRef.current && autoScrollMsgIdRef.current != null && !scrollRafRef.current) {
-        startAudioAutoScroll(autoScrollMsgIdRef.current)
-      }
     }
     list.addEventListener('scroll', onScroll, { passive: true })
     return () => list.removeEventListener('scroll', onScroll)
-  }, [startAudioAutoScroll])
+  }, [])
 
   // Fallback TTS using the browser's SpeechSynthesis
   const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number) => {
@@ -649,6 +496,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     try { recognitionRef.current?.stop?.() } catch {}
     setIsMicOn(false)
     setIsAudioPlaying(true)
+    activePlaybackKindRef.current = 'speech'
+    activeNarrationAdvanceRef.current = onEnded || null
+    speechReplayRef.current = { text, lang, onEnded, autoScrollMsgId }
+    setHasSpeechReplay(true)
     const utter = new SpeechSynthesisUtterance(text)
     utter.lang = lang === 'da' ? 'da-DK' : 'en-US'
     // Slightly faster (5%) for browser TTS fallback only
@@ -663,17 +514,48 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
     utter.onend = () => {
       setIsAudioPlaying(false)
-      stopAudioAutoScroll()
+      activePlaybackKindRef.current = null
+      if (suppressSpeechOnEndRef.current) {
+        suppressSpeechOnEndRef.current = false
+        return
+      }
+      const after = activeNarrationAdvanceRef.current
+      activeNarrationAdvanceRef.current = null
       setMicDesired(true)
-      if (onEnded) onEnded()
+      if (after) after()
     }
     utter.onerror = () => {
       setIsAudioPlaying(false)
-      stopAudioAutoScroll()
+      activePlaybackKindRef.current = null
+      if (suppressSpeechOnEndRef.current) {
+        suppressSpeechOnEndRef.current = false
+        return
+      }
+      activeNarrationAdvanceRef.current = null
       if (onEnded) onEnded()
     }
     synth.speak(utter)
-  }, [scrollMessageProgress, stopAudioAutoScroll])
+  }, [scrollMessageProgress])
+
+  const advanceCurrentNarration = useCallback(() => {
+    const after = activeNarrationAdvanceRef.current
+    activeNarrationAdvanceRef.current = null
+    if (activePlaybackKindRef.current === 'speech') {
+      const synth = (window as any).speechSynthesis as SpeechSynthesis | undefined
+      suppressSpeechOnEndRef.current = true
+      try { synth?.cancel() } catch {}
+      activePlaybackKindRef.current = null
+      setIsAudioPlaying(false)
+      if (after) after()
+      return
+    }
+
+    const el = audioElRef.current
+    try { el?.pause() } catch {}
+    activePlaybackKindRef.current = null
+    setIsAudioPlaying(false)
+    if (after) after()
+  }, [])
 
   // Speech recognition setup per language
   useEffect(() => {
@@ -724,12 +606,13 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       setIsMicOn(false)
       const err = (ev?.error || '').toString()
       if (err === 'not-allowed' || err === 'service-not-allowed') {
-        setMicError(language === 'da' ? 'Mikrofonadgang er blokeret. Tillad adgang i browserens indstillinger.' : 'Microphone access is blocked. Allow it in your browser settings.')
+        setMicError(getSpeechErrorMessage(err, language))
         setMicDesired(false)
-      } else if (err === 'no-speech') {
+      } else if (err === 'no-speech' || err === 'aborted') {
         // benign; will auto-restart via onend
       } else if (err) {
-        setMicError(err)
+        setMicError(getSpeechErrorMessage(err, language))
+        setMicDesired(false)
       }
     }
     rec.onend = () => {
@@ -814,16 +697,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     requestAbortRef.current?.abort()
     const controller = new AbortController()
     requestAbortRef.current = controller
-
-    const res = await fetch(CHAT_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    })
-    const ct = res.headers.get('content-type') || ''
-    if (!ct.includes('application/json')) throw new Error('Non-JSON response')
-    return await res.json() as BackendChatResponse
+    return await requestChatTurnRequest(payload, controller.signal)
   }, [])
 
   const resolveAudioTurn = useCallback(async (turnId: string): Promise<string | null> => {
@@ -831,23 +705,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     audioFetchAbortRef.current?.abort()
     const controller = new AbortController()
     audioFetchAbortRef.current = controller
-    const deadline = Date.now() + 8000
-
-    while (Date.now() < deadline) {
-      const res = await fetch(`${CHAT_AUDIO_ENDPOINT}/${encodeURIComponent(turnId)}`, {
-        method: 'GET',
-        headers: { Accept: 'audio/mpeg' },
-        signal: controller.signal
-      })
-      if (res.status === 202) {
-        await new Promise(resolve => window.setTimeout(resolve, 250))
-        continue
-      }
-      if (!res.ok) return null
-      const blob = await res.blob()
-      return URL.createObjectURL(blob)
-    }
-    return null
+    return await resolveAudioTurnRequest(turnId, controller.signal)
   }, [])
 
   const submit = useCallback(async (e: FormEvent) => {
@@ -855,6 +713,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     const text = (draft.trim() || sttBuffer.trim())
     if (!text || isLoading) return
     audioFetchAbortRef.current?.abort()
+    activeNarrationAdvanceRef.current = null
     // Stop mic when sending
     stopMic()
     addMessage('user', text)
@@ -865,25 +724,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     // Special handling: if we're confirming more questions, branch here
     if (phase === 'confirm_more') {
       const conf = scripts[language]
-      // If negative, say farewell and exit
-      if (isNegativeResponse(text, language)) {
-        addMessage('bot', conf.farewell)
-        playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
-          onChangeLanguage()
-        }, undefined, GENERATED_SPEECH_RATE)
-        return
-      }
-      // If explicitly affirmative (e.g., "yes"/"ja"), nudge them to ask the next question
-      if (isAffirmativeResponse(text, language)) {
-        const prompt = language === 'da'
-          ? 'Hvad vil du gerne spørge om?'
-          : 'What would you like to ask?'
-        addMessage('bot', prompt)
-        setPhase('await_question')
-        setMicDesired(true)
-        return
-      }
-      // Otherwise treat this as the next question
       setIsLoading(true)
       try {
         const payload = {
@@ -892,52 +732,29 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           language,
           userName: 'Visitor',
           userLocation: 'Museum',
-          mode: 'question' as const,
+          mode: 'handoff' as const,
           history: buildHistoryPayload(messages)
         }
         const data = await requestChatTurn(payload)
-        const replyText = (data.message || '').trim()
-        const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
-        const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
-        dlog('api audioUrl (confirm_more)', audioUrl)
-        // After answering, ask if they'd like more (Question 2)
-        const afterAnswer = () => {
-          addMessage('bot', conf.question2)
-          playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
-            setPhase('confirm_more')
-            setMicDesired(true)
+        const handoffAction = data.handoffAction || data.handoff_action || 'continue'
+        if (handoffAction === 'return') {
+          addMessage('bot', conf.farewell)
+          playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
+            onChangeLanguage()
           }, undefined, GENERATED_SPEECH_RATE)
-        }
-        if (replyText) {
-          const msgId = addMessage('bot', replyText)
-          let turnAudioBlobUrl: string | null = null
-          if (audioTurnId) {
-            turnAudioBlobUrl = await resolveAudioTurn(audioTurnId).catch(() => null)
-          }
-          const resolved = turnAudioBlobUrl || resolveAudioSrc(audioUrl)
-          dlog('resolved audio (confirm_more)', resolved)
-          const cleanupTurnAudio = () => {
-            if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
-          }
-          if (resolved) {
-            playAudio(
-              resolved,
-              () => { cleanupTurnAudio(); afterAnswer() },
-              () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined) },
-              GENERATED_SPEECH_RATE,
-              msgId ?? undefined
-            )
-          } else {
-            speakBrowserTTS(replyText, language, afterAnswer, msgId ?? undefined)
-          }
         } else {
-          addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
+          const prompt = language === 'da'
+            ? 'Hvad vil du gerne spørge om?'
+            : 'What would you like to ask?'
+          addMessage('bot', prompt)
           setPhase('await_question')
           setMicDesired(true)
         }
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') return
         addMessage('bot', language === 'da' ? 'Noget gik galt. Prøv igen.' : 'Something went wrong. Please try again.')
+        setPhase('await_question')
+        setMicDesired(true)
       } finally {
         setIsLoading(false)
       }
@@ -946,26 +763,11 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     setIsLoading(true)
     try {
       const isMemoryTurn = phase === 'await_memory' || !hasSharedMemory
-      const payload = {
-        sessionId: sessionIdRef.current,
-        message: text,
-        language,
-        userName: 'Visitor',
-        userLocation: 'Museum',
-        mode: isMemoryTurn ? 'memory' : 'question',
-        history: buildHistoryPayload(messages)
-      }
-      const data = await requestChatTurn(payload)
-      const replyText = (data.message || '').trim()
-      const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
-      const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
-      dlog('api audioUrl', audioUrl)
-      // Handle audio sequencing and next prompt depending on phase/turn
       if (isMemoryTurn) {
         const conf = scripts[language]
         setHasSharedMemory(true)
-        addMessage('bot', replyText || THANK_YOU_TEXTS[language])
-        // Always use the pre-generated static THANK_YOU audio, regardless of backend response
+        addMessage('bot', THANK_YOU_TEXTS[language])
+        setIsLoading(false)
         playAudio(`/audio/${language}_THANK_YOU.mp3`, () => {
           addMessage('bot', conf.question1)
           playAudio(`/audio/${language}_QUESTION_1.mp3`, () => {
@@ -973,44 +775,72 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
             setMicDesired(true)
           }, undefined, GENERATED_SPEECH_RATE)
         }, undefined, GENERATED_SPEECH_RATE)
-      } else {
-        // Question mode: speak the answer, then prompt for more (Question 2)
-        const conf = scripts[language]
-        const afterAnswerSpoken = () => {
-          addMessage('bot', conf.question2)
-          playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
-            setPhase('confirm_more')
-            setMicDesired(true)
-          }, undefined, GENERATED_SPEECH_RATE)
-        }
-        if (replyText) {
-          const msgId = addMessage('bot', replyText)
-          let turnAudioBlobUrl: string | null = null
-          if (audioTurnId) {
-            turnAudioBlobUrl = await resolveAudioTurn(audioTurnId).catch(() => null)
-          }
-          const resolved = turnAudioBlobUrl || resolveAudioSrc(audioUrl)
-          dlog('resolved audio', resolved)
-          const cleanupTurnAudio = () => {
-            if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
-          }
-          if (resolved) {
-            playAudio(
-              resolved,
-              () => { cleanupTurnAudio(); afterAnswerSpoken() },
-              () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined) },
-              GENERATED_SPEECH_RATE,
-              msgId ?? undefined
-            )
-          } else {
-            speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
-          }
-        } else {
-          // No answer received; keep the session open and prompt to try again
-          addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
-          setPhase('await_question')
+
+        requestChatTurn({
+          sessionId: sessionIdRef.current,
+          message: text,
+          language,
+          userName: 'Visitor',
+          userLocation: 'Museum',
+          mode: 'memory',
+          history: buildHistoryPayload(messages)
+        }).catch(err => {
+          if ((err as Error)?.name === 'AbortError') return
+          console.error('Memory persistence request failed', err)
+        })
+        return
+      }
+
+      const payload = {
+        sessionId: sessionIdRef.current,
+        message: text,
+        language,
+        userName: 'Visitor',
+        userLocation: 'Museum',
+        mode: 'question',
+        history: buildHistoryPayload(messages)
+      }
+      const data = await requestChatTurn(payload)
+      const replyText = (data.message || '').trim()
+      const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
+      const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
+      dlog('api audioUrl', audioUrl)
+      // Question mode: speak the answer, then prompt for more (Question 2)
+      const conf = scripts[language]
+      const afterAnswerSpoken = () => {
+        addMessage('bot', conf.question2)
+        playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
+          setPhase('confirm_more')
           setMicDesired(true)
+        }, undefined, GENERATED_SPEECH_RATE)
+      }
+      if (replyText) {
+        const msgId = addMessage('bot', replyText)
+        let turnAudioBlobUrl: string | null = null
+        if (audioTurnId) {
+          turnAudioBlobUrl = await resolveAudioTurn(audioTurnId).catch(() => null)
         }
+        const resolved = turnAudioBlobUrl || resolveAudioSrc(audioUrl)
+        dlog('resolved audio', resolved)
+        const cleanupTurnAudio = () => {
+          if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
+        }
+        if (resolved) {
+          playAudio(
+            resolved,
+            () => { cleanupTurnAudio(); afterAnswerSpoken() },
+            () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined) },
+            GENERATED_SPEECH_RATE,
+            msgId ?? undefined
+          )
+        } else {
+          speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
+        }
+      } else {
+        // No answer received; keep the session open and prompt to try again
+        addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
+        setPhase('await_question')
+        setMicDesired(true)
       }
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return
@@ -1018,10 +848,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     } finally {
       setIsLoading(false)
     }
-  }, [addMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, onChangeLanguage, isNegativeResponse, isAffirmativeResponse, speakBrowserTTS, resolveAudioTurn, requestChatTurn])
+  }, [addMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, onChangeLanguage, speakBrowserTTS, resolveAudioTurn, requestChatTurn])
 
   const skip = useCallback(() => {
     if (!language) return
+    if (isAudioPlayingRef.current && activeNarrationAdvanceRef.current) {
+      advanceCurrentNarration()
+      return
+    }
     // Stop any current audio immediately
     try { audioElRef.current?.pause() } catch {}
     setIsAudioPlaying(false)
@@ -1065,23 +899,25 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       }, undefined, GENERATED_SPEECH_RATE)
       return
     }
-  }, [language, phase, messages, addMessage, playAudio])
+  }, [language, phase, messages, addMessage, playAudio, advanceCurrentNarration])
 
   const canSkipAhead = phase === 'intro' || phase === 'await_memory' || phase === 'await_question' || phase === 'explore'
   const canType = phase === 'await_memory' || phase === 'await_question' || phase === 'confirm_more'
   const hasDraftContent = draft.length > 0
-  const showPlaybackControl = isAudioPlaying || Boolean(lastAudioSrcRef.current)
-  const showVoiceCompose = canType && isSpeechSupported && !keyboardEnabled && !hasDraftContent && !isAudioPlaying
+  const showPlaybackControl = isAudioPlaying || Boolean(lastAudioSrcRef.current) || hasSpeechReplay
+  const showVoiceCompose = canType && isSpeechSupported && !keyboardEnabled && !isAudioPlaying
   const showVoiceControl = canType && isSpeechSupported && !isAudioPlaying && !showVoiceCompose
   const showSecondaryRow = canSkipAhead || showPlaybackControl || showVoiceControl
   const inputPlaceholder = language === 'da'
     ? 'Skriv her'
     : 'Type here'
   const isVoiceActive = micDesired || isMicOn
-  const voicePrompt = sttLive.trim() || (
+  const voiceCommittedText = sttBuffer.trim() || (!keyboardEnabled ? draft.trim() : '')
+  const voiceInterimText = sttLive.trim()
+  const voiceStatusLabel = (
     language === 'da'
-      ? (isVoiceActive ? 'Lytter…' : 'Tryk Tal')
-      : (isVoiceActive ? 'Listening…' : 'Press Speak')
+      ? (isVoiceActive ? 'Lytter' : 'Taleinput')
+      : (isVoiceActive ? 'Listening' : 'Voice input')
   )
 
   const activateKeyboardInput = useCallback(() => {
@@ -1106,237 +942,98 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     startMic()
   }, [canType, isLoading, isSpeechSupported, startMic])
 
+  const handleFollowLatest = useCallback(() => {
+    const list = chatListRef.current
+    if (!list) return
+    list.scrollTop = list.scrollHeight
+    autoFollowRef.current = true
+    setShowFollow(false)
+  }, [])
+
+  const handleTogglePlayback = useCallback(() => {
+    if (isAudioPlaying) {
+      if (activePlaybackKindRef.current === 'speech') {
+        const synth = (window as any).speechSynthesis as SpeechSynthesis | undefined
+        suppressSpeechOnEndRef.current = true
+        try { synth?.cancel() } catch {}
+        activePlaybackKindRef.current = null
+        setIsAudioPlaying(false)
+        return
+      }
+      const el = audioElRef.current
+      if (!el) return
+      try { el.pause() } catch {}
+      return
+    }
+    if (hasSpeechReplay && speechReplayRef.current) {
+      const speech = speechReplayRef.current
+      speakBrowserTTS(speech.text, speech.lang, speech.onEnded, speech.autoScrollMsgId)
+      return
+    }
+    if (!lastAudioSrcRef.current) return
+    const el = audioElRef.current
+    if (!el) return
+    const last = lastAudioSrcRef.current
+    const canResume = el.currentTime > 0 && !el.ended
+    if (canResume) {
+      el.play().catch(() => {})
+    } else {
+      playAudio(last, undefined, undefined, lastAudioRateRef.current || 1)
+    }
+  }, [hasSpeechReplay, isAudioPlaying, playAudio, speakBrowserTTS])
+
+  const handleDraftChange = useCallback((value: string, el: HTMLTextAreaElement) => {
+    setDraft(value)
+    stopMic()
+    resizeTextarea(el)
+  }, [resizeTextarea, stopMic])
+
   return (
     <div className='relative z-10 w-[1100px] max-w-[95vw] px-6 py-6 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
       <audio ref={audioElRef} preload='auto' playsInline />
 
-      {/* Header moved to Home and fixed to top of viewport */}
+      <ChatTranscript
+        chatListRef={chatListRef}
+        isIOS={isIOS}
+        language={language}
+        messages={messages}
+        isLoading={isLoading}
+        showFollow={showFollow}
+        onFollowLatest={handleFollowLatest}
+      />
 
-      <div
-        ref={chatListRef}
-        className={`mt-3 flex-1 min-h-0 overflow-y-auto scroll-touch ${isIOS ? '' : 'no-scrollbar'}`}
-        style={{ WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain', touchAction: 'pan-y' as any }}
-      >
-        <div className='flex min-h-full flex-col justify-end pb-3'>
-          {micError && (
-            <div className='mb-3 flex justify-start'>
-              <div className='surface-bubble max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
-                {micError}
-              </div>
-            </div>
-          )}
-        {/* Debug overlay (disabled)
-        <div style={{
-          position: 'fixed',
-          top: 8,
-          right: 8,
-          zIndex: 9999,
-          background: 'rgba(0,0,0,0.7)',
-          color: '#fff',
-          padding: '8px 14px',
-          borderRadius: 8,
-          fontSize: 14,
-          pointerEvents: 'none'
-        }}>
-          <div>Mic: {isMicOn ? 'ON' : 'OFF'}</div>
-          <div>Mic Desired: {micDesired ? 'YES' : 'NO'}</div>
-          <div>Audio Playing: {isAudioPlaying ? 'YES' : 'NO'}</div>
-          <div>Speech Supported: {isSpeechSupported ? 'YES' : 'NO'}</div>
-          <div>Mic Error: {micError || 'none'}</div>
-        </div>
-        */}
-          {messages.map(m => (
-            <div key={m.id} data-msg-id={m.id} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black ${m.role === 'user' ? 'surface-bubble-strong' : 'surface-bubble'}`}>
-                {m.content}
-              </div>
-            </div>
-          ))}
-          {isLoading && (
-            <div className='flex justify-start'>
-              <div className='surface-bubble rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black'>
-                <div className='typing-dots'>
-                  <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                  <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                  <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Follow button when user has scrolled up */}
-      {showFollow && (
-        <div className='pointer-events-none relative -mt-3 mb-1 flex justify-end'>
-          <button
-            type='button'
-            className='surface-pill pointer-events-auto rounded-full px-4 py-1.5 text-base text-black transition hover:bg-white hover:text-black'
-            onClick={() => {
-              const list = chatListRef.current
-              if (!list) return
-              list.scrollTop = list.scrollHeight
-              autoFollowRef.current = true
-              setShowFollow(false)
-              if (isAudioPlayingRef.current && autoScrollMsgIdRef.current != null && !scrollRafRef.current) {
-                startAudioAutoScroll(autoScrollMsgIdRef.current)
-              }
-            }}
-          >
-            {language === 'da' ? 'Følg bund' : 'Jump to latest'}
-          </button>
-        </div>
-      )}
-
-      <form onSubmit={submit} className='mt-4 flex flex-col gap-2'>
-        {showVoiceCompose && (
-          <div className='flex items-center gap-2 px-2 pb-1 text-lg text-black/60'>
-            <span className={`voice-status-dot ${isVoiceActive ? 'is-live' : ''}`}/>
-            {voicePrompt}
-          </div>
-        )}
-        <label htmlFor='message' className='sr-only'>Message</label>
-        {showVoiceCompose ? (
-          <div className='surface-card rounded-[2rem] px-5 py-4'>
-            <div className='flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between'>
-              <button
-                type='button'
-                onClick={activateKeyboardInput}
-                className='text-sm text-black/55 underline-offset-4 transition hover:text-black hover:underline'
-              >
-                {language === 'da' ? 'Skriv i stedet' : 'Type instead'}
-              </button>
-              <div className='flex items-center gap-3 self-stretch sm:self-auto'>
-                <button
-                  type='button'
-                  onClick={() => ((micDesired || isMicOn) ? stopMic() : activateVoiceInput())}
-                  className={`shrink-0 rounded-full px-6 py-3 text-lg transition ${isVoiceActive ? 'surface-primary-action-live' : 'surface-primary-action'}`}
-                >
-                  {language === 'da' ? (isVoiceActive ? 'Stop' : 'Tal') : (isVoiceActive ? 'Stop' : 'Speak')}
-                </button>
-                <button
-                  type='submit'
-                  disabled={isLoading || !draft.trim()}
-                  className='surface-primary-action shrink-0 rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
-                >
-                  Share
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className='surface-card rounded-[2rem] px-4 py-3'>
-            <div className='flex items-end gap-3'>
-              <div ref={inputWrapRef} className='relative flex min-w-0 flex-1 items-center' style={{ height: undefined as any }}>
-                <textarea
-                  ref={inputRef}
-                  id='message'
-                  name='message'
-                  rows={1}
-                  value={draft}
-                  onChange={e => { setDraft(e.target.value); stopMic(); resizeTextarea(e.currentTarget) }}
-                  onPointerDown={(e) => {
-                    if (keyboardEnabled || !canType || isLoading) return
-                    e.preventDefault()
-                    activateKeyboardInput()
-                  }}
-                  onClick={() => {
-                    if (!keyboardEnabled && canType && !isLoading) activateKeyboardInput()
-                  }}
-                  placeholder={inputPlaceholder}
-                  className='w-full resize-none bg-transparent pr-12 pl-1 py-[0.95rem] text-2xl leading-[1.1] text-black placeholder:text-black/45 focus:outline-none focus:shadow-none focus-visible:shadow-none disabled:cursor-not-allowed disabled:opacity-60'
-                  style={{ overflow: 'hidden', maxHeight: '40vh', transform: undefined as any }}
-                  disabled={isLoading}
-                  autoComplete='off'
-                  readOnly={!keyboardEnabled}
-                  inputMode={keyboardEnabled ? undefined : 'none'}
-                />
-                <button
-                  type='button'
-                  onMouseDown={startDeleteHold}
-                  onMouseUp={stopDeleteHold}
-                  onMouseLeave={stopDeleteHold}
-                  onTouchStart={(e) => { e.preventDefault(); startDeleteHold() }}
-                  onTouchEnd={stopDeleteHold}
-                  onTouchCancel={stopDeleteHold}
-                  disabled={!hasDraftContent}
-                  className='surface-delete-action absolute right-1 top-1/2 -translate-y-1/2 rounded-full px-3 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-0'
-                  aria-label={language === 'da' ? 'Slet ord' : 'Delete word'}
-                >
-                  ⌫
-                </button>
-              </div>
-              <button
-                type='submit'
-                disabled={isLoading || !draft.trim()}
-                className='surface-primary-action shrink-0 rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
-              >
-                Share
-              </button>
-            </div>
-          </div>
-        )}
-
-        {showSecondaryRow && (
-          <div className='flex flex-wrap items-center gap-2 px-1'>
-            {canSkipAhead && (
-              <button
-                type='button'
-                onClick={skip}
-                disabled={isLoading}
-                className='surface-utility rounded-full px-4 py-2 text-sm text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
-              >
-                {language === 'da' ? 'Næste' : 'Next'}
-              </button>
-            )}
-            {showPlaybackControl && (
-              <button
-                type='button'
-                onClick={() => {
-                  const el = audioElRef.current
-                  if (!el) return
-                  if (isAudioPlaying) {
-                    try { el.pause() } catch {}
-                  } else if (lastAudioSrcRef.current) {
-                    const last = lastAudioSrcRef.current
-                    const canResume = el.currentTime > 0 && !el.ended
-                    if (canResume) {
-                      el.play().catch(() => {})
-                    } else {
-                      playAudio(last, undefined, undefined, lastAudioRateRef.current || 1)
-                    }
-                  }
-                }}
-                disabled={!isAudioPlaying && !lastAudioSrcRef.current}
-                className='surface-utility rounded-full px-4 py-2 text-sm text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
-              >
-                {isAudioPlaying
-                  ? (language === 'da' ? 'Stop lyd' : 'Stop audio')
-                  : (language === 'da' ? 'Afspil lyd' : 'Play audio')}
-              </button>
-            )}
-            {showVoiceControl && (
-              <button
-                type='button'
-                onClick={() => {
-                  if (isVoiceActive) {
-                    stopMic()
-                  } else if (keyboardEnabled || hasDraftContent) {
-                    activateVoiceInput()
-                  } else {
-                    activateVoiceInput()
-                  }
-                }}
-                className={`rounded-full px-4 py-2 text-sm transition ${keyboardEnabled ? 'bg-black text-white shadow-[0_16px_30px_rgba(0,0,0,0.18)]' : 'surface-utility text-black/70 hover:text-black'}`}
-              >
-                {language === 'da' ? (isVoiceActive ? 'Stop tale' : 'Brug tale') : (isVoiceActive ? 'Stop voice' : 'Use voice')}
-              </button>
-            )}
-          </div>
-        )}
-      </form>
-
-      {/* removed in-app speed tester UI */}
+      <ChatComposer
+        language={language}
+        draft={draft}
+        hasDraftContent={hasDraftContent}
+        inputPlaceholder={inputPlaceholder}
+        keyboardEnabled={keyboardEnabled}
+        canType={canType}
+        isLoading={isLoading}
+        showVoiceCompose={showVoiceCompose}
+        showSecondaryRow={showSecondaryRow}
+        showPlaybackControl={showPlaybackControl}
+        showVoiceControl={showVoiceControl}
+        canSkipAhead={canSkipAhead}
+        isVoiceActive={isVoiceActive}
+        isAudioPlaying={isAudioPlaying}
+        hasPlaybackSource={Boolean(lastAudioSrcRef.current)}
+        micError={micError}
+        voiceCommittedText={voiceCommittedText}
+        voiceInterimText={voiceInterimText}
+        voiceStatusLabel={voiceStatusLabel}
+        inputRef={inputRef}
+        inputWrapRef={inputWrapRef}
+        onSubmit={submit}
+        onDraftChange={handleDraftChange}
+        onActivateKeyboardInput={activateKeyboardInput}
+        onActivateVoiceInput={activateVoiceInput}
+        onStopMic={stopMic}
+        onStartDeleteHold={startDeleteHold}
+        onStopDeleteHold={stopDeleteHold}
+        onSkip={skip}
+        onTogglePlayback={handleTogglePlayback}
+      />
     </div>
   )
 }

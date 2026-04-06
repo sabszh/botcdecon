@@ -22,7 +22,7 @@ class ChatRequest(BaseModel):
   language: Literal['da', 'en'] = Field(settings.default_language, alias='language')
   user_name: str = Field('Visitor', alias='userName')
   user_location: Optional[str] = Field(None, alias='userLocation')
-  mode: Literal['question', 'memory'] = 'question'
+  mode: Literal['question', 'memory', 'handoff'] = 'question'
   history: List[HistoryItem] = Field(default_factory=list)
   continuous_data: Optional[Dict[str, Any]] = Field(default=None, alias='continuousData')
   include_history: bool = Field(False, alias='includeHistory')
@@ -35,6 +35,7 @@ class ChatResponse(BaseModel):
   message: str
   session_id: str = Field(..., alias='sessionId')
   session_history: List[Dict[str, Any]] = Field(default_factory=list, alias='sessionHistory')
+  handoff_action: Optional[Literal['continue', 'return']] = Field(default=None, alias='handoffAction')
   error: Optional[str] = None
   debug: Optional[Dict[str, Any]] = None
   audio_url: Optional[str] = Field(default=None, alias='audioUrl')
@@ -66,6 +67,7 @@ async def chat_endpoint(
     message=result.message,
     session_id=result.session_id,
     session_history=result.session_history,
+    handoff_action=result.handoff_action,
     error=result.error,
     debug=result.debug,
     audio_url=result.audio_url,

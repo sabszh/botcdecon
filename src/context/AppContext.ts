@@ -1,7 +1,6 @@
 import React from 'react'
 
 export type AppState = {
-  headerVisible: boolean
   viewMode: 'empty' | 'post'
   zoomIn: boolean
 }
@@ -12,4 +11,3 @@ export type Context = {
 }
 
 export const AppContext = React.createContext<Context>(null!)
-

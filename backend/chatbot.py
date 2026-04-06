@@ -5,10 +5,11 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import Counter
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal, Type, TypeVar
 
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
+from pydantic import BaseModel, Field, ValidationError
 try:
     from pinecone import Pinecone, ServerlessSpec, CloudProvider, AwsRegion
 except Exception:  # pragma: no cover - optional dependency in local mode
@@ -20,6 +21,13 @@ from .app.services.llm import LLMProvider, get_llm_provider
 from .app.settings import settings
 
 load_dotenv()
+
+
+class StructuredHandoffDecision(BaseModel):
+    decision: Literal["continue", "return"]
+
+
+ParsedModelT = TypeVar("ParsedModelT", bound=BaseModel)
 
 
 def _cloud_from_env():
@@ -154,6 +162,7 @@ class ChatBot:
                     'location': str(item.get('location') or ''),
                     'date': str(item.get('date') or ''),
                     'text': text,
+                    'points': item.get('points') if isinstance(item.get('points'), list) else [],
                 },
                 'text': text,
                 '_tokens': tokens,
@@ -226,39 +235,59 @@ class ChatBot:
     def default_prompt_sourcedata(self, chat_history: str, original_data: str, user_input: str, user_name: str):
         if self.language == "en":
             return f"""
+SYSTEM ROLE:
 You are a helpful assistant connected to the artwork "Carte de Continuonus".
 Your role is to connect this visitor with what other contributors have shared.
 
-Style: grounded, clear, warm. Use 3–5 sentences. Avoid poetic language.
-Anonymity: Do not use names; refer to others as "a contributor". Use at most five contributors.
-Quoting: Include 2–3 brief direct quotes in double quotes from contributors when possible.
-Connection: Connect contributors’ entries (how their ideas relate or differ) while staying factual and directly address the user's question in the first sentence.
-Relevance: Use only items clearly related to the user's question; omit anything unrelated.
-Vocabulary: Naturally vary your wording between "visitor", "contributor", "participant", or "guest" when referring to people (avoid repeating the same term).
+RESPONSE RULES:
+- grounded, clear, warm
+- avoid poetic language
+- final answer must be 3–5 sentences
+- directly answer the user's question in the first sentence
+- do not use names; refer to people as "a contributor", "visitor", "participant", or "guest"
+- you may analyse patterns across many retrieved entries, but mention at most five contributors directly
+- use only retrieved details that are relevant
+- when helpful, use map metadata such as emotions, distances, dates, locations, and point coordinates
+- weave 2–3 short direct quotes into the answer when they are relevant
+- mention recurring or contrasting emotions inside the answer when they help explain the pattern
 
-User asked: "{user_input}"
-What contributors said (up to five, quoted): {original_data}
-Conversation so far: {chat_history}
+INPUT:
+{{
+  "user_question": "{user_input}",
+  "conversation_so_far": "{chat_history}",
+  "retrieved_contributor_context": "{original_data}"
+}}
 
-IMPORTANT: Respond in English, be concise, and focus on connecting people.
+REQUIRED OUTPUT:
+Return only the final visitor-facing answer as plain text.
 """
         else:  # Danish
             return f"""
+SYSTEMROLLE:
 Du er en hjælpsom assistent forbundet til kunstværket "Carte de Continuonus".
 Din rolle er at forbinde denne besøgende med, hvad andre bidragydere har delt.
 
-Stil: jordnær, klar, varm. Brug 3–5 sætninger. Undgå poetisk sprog.
-Anonymitet: Brug ikke navne; henvis til andre som "en bidragyder". Brug højst fem bidrag.
-Citater: Medtag 2–3 korte direkte citater i dobbelte anførselstegn fra bidragydere, når det er muligt.
-Forbindelse: Forbind bidragydernes indlæg (hvordan idéerne hænger sammen eller adskiller sig) og svar direkte på brugerens spørgsmål i den første sætning.
-Relevans: Brug kun indhold, der tydeligt vedrører brugerens spørgsmål; udelad uvedkommende indhold.
-Ordvalg: Variér naturligt mellem "besøgende", "bidragyder", "deltager" eller "gæst", når du omtaler personer (undgå at gentage samme betegnelse).
+SVARREGLER:
+- jordnær, klar, varm
+- undgå poetisk sprog
+- det endelige svar skal være 3–5 sætninger
+- besvar brugerens spørgsmål direkte i den første sætning
+- brug ikke navne; omtæl folk som "en bidragyder", "besøgende", "deltager" eller "gæst"
+- du må gerne analysere mønstre på tværs af mange fund, men nævn højst fem bidragydere direkte
+- brug kun detaljer, der er relevante for spørgsmålet
+- brug gerne kortmetadata som følelser, afstande, datoer, lokationer og koordinater, når det styrker svaret
+- væv 2–3 korte direkte citater ind i selve svaret, når de er relevante
+- nævn tilbagevendende eller kontrasterende følelser inde i svaret, når det hjælper forklaringen
 
-Brugerens spørgsmål: "{user_input}"
-Hvad bidragydere sagde (op til fem, citeret): {original_data}
-Samtale indtil nu: {chat_history}
+INPUT:
+{{
+  "user_question": "{user_input}",
+  "conversation_so_far": "{chat_history}",
+  "retrieved_contributor_context": "{original_data}"
+}}
 
-VIGTIGT: Svar på dansk, vær præcis, og forbind folk.
+PÅKRÆVET OUTPUT:
+Returnér kun det endelige svar til den besøgende som almindelig tekst.
 """
 
     def default_prompt_conv(self, chat_history: str, user_input: str, llm_response: str, past_chat: str, user_name: str):
@@ -294,7 +323,7 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
 """
 
     # ---------- retrieval ----------
-    def retrieve_docs(self, query: str, index_name: str, excluded_session_id: Optional[str] = None, k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve_docs(self, query: str, index_name: str, excluded_session_id: Optional[str] = None, k: int = 15) -> List[Dict[str, Any]]:
         if self.retriever_provider == 'local':
             docs = self._retrieve_local_docs(query, index_name, excluded_session_id, k)
             print(f"[BOT] Local retrieval index='{index_name}' k={k} -> {len(docs)} docs")
@@ -353,9 +382,71 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
             result = ' '.join(words[:max_words]) + '…'
         return result
 
+    @staticmethod
+    def _format_points(points: Any) -> str:
+        if not isinstance(points, list) or not points:
+            return "none"
+        parts: List[str] = []
+        for point in points[:4]:
+            if not isinstance(point, dict):
+                continue
+            emotion = str(point.get("emotion") or "").strip() or "unknown"
+            distance = point.get("distance")
+            x = point.get("x")
+            y = point.get("y")
+            details = [f"emotion={emotion}"]
+            if distance is not None:
+                details.append(f"distance={distance}")
+            if x is not None and y is not None:
+                details.append(f"coords=({x},{y})")
+            parts.append(", ".join(details))
+        return " | ".join(parts) if parts else "none"
+
+    @staticmethod
+    def _extract_first_json_object(text: str) -> Optional[str]:
+        if not text:
+            return None
+        start = text.find("{")
+        if start < 0:
+            return None
+
+        depth = 0
+        in_string = False
+        escaped = False
+        for idx in range(start, len(text)):
+            ch = text[idx]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+
+            if ch == '"':
+                in_string = True
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:idx + 1]
+        return None
+
+    def _parse_llm_json(self, raw_text: str, model_type: Type[ParsedModelT]) -> Optional[ParsedModelT]:
+        payload = self._extract_first_json_object(raw_text or "")
+        if not payload:
+            return None
+        try:
+            data = json.loads(payload)
+            return model_type.model_validate(data)
+        except (json.JSONDecodeError, ValidationError, TypeError, ValueError):
+            return None
+
     def format_context(self, documents: List[Dict[str, Any]], chat: bool = False) -> str:
-        # Hard cap the number of items we include to five
-        documents = list(documents)[:5]
+        documents = list(documents)[:15]
         parts = []
         def _shorten(s: str, max_chars: int = 160) -> str:
             s = (s or "").replace("\n", " ").strip()
@@ -363,9 +454,13 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
         for idx, doc in enumerate(documents, start=1):
             md = doc["metadata"]
             if not chat:
-                content = _shorten(doc.get("text", ""), 160)
-                # Anonymise: avoid names and specifics; quote directly where possible
-                parts.append(f"A contributor said: \"{content}\"")
+                content = _shorten(doc.get("text", ""), 220)
+                location = _shorten(md.get("location", ""), 60) or "unknown"
+                date = _shorten(md.get("date", ""), 40) or "unknown"
+                points = self._format_points(md.get("points"))
+                parts.append(
+                    f'Contributor #{idx}: memory="{content}" | location={location} | date={date} | points={points}'
+                )
             else:
                 q = _shorten(md.get("user_question", "Unknown Question"), 120)
                 a = _shorten(md.get("ai_output", "Unknown Response"), 120)
@@ -373,15 +468,128 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
         return "\n".join(parts)
 
     # ---------- llm ----------
-    def get_llm_response(self, prompt: str) -> str:
+    def get_llm_response(
+        self,
+        prompt: str,
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: int = 512,
+    ) -> str:
         try:
             return self.llm_provider.generate(
                 prompt=prompt,
-                temperature=min(self.temperature, 0.4),
-                max_tokens=512,
+                temperature=min(self.temperature, 0.4) if temperature is None else temperature,
+                max_tokens=max_tokens,
             )
         except Exception as exc:
             return f"Error invoking LLM: {exc}"
+
+    @staticmethod
+    def _normalize_handoff_reply(user_input: str) -> str:
+        normalized = (user_input or "").strip().lower()
+        normalized = re.sub(r"\s+", " ", normalized)
+        normalized = re.sub(r"^[\"'“”‘’\s]+|[\"'“”‘’\s]+$", "", normalized)
+        normalized = re.sub(r"[.!]+$", "", normalized)
+        return normalized
+
+    def _quick_handoff_decision(self, user_input: str) -> Optional[str]:
+        normalized = self._normalize_handoff_reply(user_input)
+        if not normalized:
+            return "return"
+
+        if "?" in user_input:
+            return "continue"
+
+        if len(normalized.split()) > 6:
+            return None
+
+        if self.language == "da":
+            return_phrases = {
+                "nej", "nej tak", "ellers tak", "det var alt", "det er alt",
+                "jeg er færdig", "færdig", "slut", "videre",
+            }
+            continue_phrases = {
+                "ja", "ja tak", "gerne", "ok", "okay", "mere",
+                "et spørgsmål mere", "endnu et spørgsmål",
+            }
+        else:
+            return_phrases = {
+                "no", "no thanks", "no thank you", "i'm good", "im good",
+                "that's all", "thats all", "done", "finished", "stop",
+            }
+            continue_phrases = {
+                "yes", "yes please", "sure", "ok", "okay", "more",
+                "one more", "another question",
+            }
+
+        if normalized in return_phrases:
+            return "return"
+        if normalized in continue_phrases:
+            return "continue"
+        return None
+
+    def classify_handoff(self, user_input: str, language: Optional[str] = None) -> str:
+        if language:
+            self.language = language.lower()
+
+        quick_decision = self._quick_handoff_decision(user_input)
+        if quick_decision:
+            return quick_decision
+
+        if self.language == "da":
+            prompt = f"""
+Du afgør kun, om en museumsbesøgende vil fortsætte samtalen eller afslutte den.
+
+REGLER:
+- continue betyder, at personen vil stille et spørgsmål mere eller fortsætte samtalen
+- return betyder, at personen vil videre, afslutte eller ikke spørge mere
+- hvis svaret er uklart, men lyder som et nyt emne eller spørgsmål, vælg continue
+- hvis svaret er uklart, men lyder som afvisning, stop, nej, færdig eller afslutning, vælg return
+
+INPUT:
+{{
+  "visitor_reply": "{user_input}"
+}}
+
+PÅKRÆVET OUTPUT:
+Returnér præcis ét JSON-objekt og intet andet:
+{{
+  "decision": "continue" | "return"
+}}
+"""
+        else:
+            prompt = f"""
+Decide only whether a museum visitor wants to continue the conversation or end it.
+
+RULES:
+- continue means they want to ask something else or keep talking
+- return means they want to move on, stop, or ask nothing more
+- if the answer is ambiguous but sounds like a new topic or question, choose continue
+- if the answer is ambiguous but sounds like refusal, stopping, being done, or ending, choose return
+
+INPUT:
+{{
+  "visitor_reply": "{user_input}"
+}}
+
+REQUIRED OUTPUT:
+Return exactly one JSON object and nothing else:
+{{
+  "decision": "continue" | "return"
+}}
+"""
+
+        response = (self.get_llm_response(
+            prompt,
+            temperature=0.0,
+            max_tokens=16,
+        ) or '').strip()
+        parsed = self._parse_llm_json(response, StructuredHandoffDecision)
+        if parsed:
+            return parsed.decision
+        if 'RETURN' in response.upper():
+            return 'return'
+        return 'continue'
 
     # ---------- upsert ----------
     def upsert_vectorstore(
@@ -452,7 +660,7 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
                  language: Optional[str] = None,
                  persist: bool = True,
                  include_session_history: bool = False,
-                 retrieval_k: int = 8) -> Dict[str, Any]:
+                 retrieval_k: int = 15) -> Dict[str, Any]:
         import time
 
         # Update language if provided in this call
@@ -482,7 +690,6 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
 
         # Skipping past conversation context to focus on Carte (botcon) data only
         ai_output_raw = (resp1 or '').strip()
-        # Do not truncate/cut off text; rely on prompt to keep it short
         ai_output = ai_output_raw
 
         upsert_ms = 0.0

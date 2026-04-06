@@ -8,7 +8,6 @@ import { AppContext } from './context/AppContext'
 
 import type { AppState } from './context/AppContext'
 const State: AppState = {
-  headerVisible: true,
   viewMode: 'empty',
   zoomIn: false
 }
