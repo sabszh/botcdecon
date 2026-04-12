@@ -5,6 +5,22 @@ This project has:
 - A FastAPI backend.
 - Local retrieval by default (no Pinecone required) using `data/all.json`.
 
+## Documentation
+
+Primary documentation:
+
+- `docs/ARCHITECTURE.md`
+- `docs/FRONTEND.md`
+- `docs/BACKEND.md`
+- `docs/DEPLOYMENT.md`
+- `docs/TROUBLESHOOTING.md`
+
+Agent-facing repository guidance:
+
+- `.config/AGENT.md`
+- `.config/CODEX.md`
+- `.config/CLAUDE.md`
+
 ## Environment Variables
 
 Frontend:
@@ -30,6 +46,20 @@ Optional Pinecone mode:
 - `INDEX_NAME_CHAT`
 - `PINECONE_CLOUD`
 - `PINECONE_REGION`
+
+## Repository Structure
+
+Important paths:
+
+- `src/` frontend application
+- `src/components/chat/` chat UI building blocks
+- `src/map/` 3D and map rendering
+- `backend/app/` FastAPI app, routes, and services
+- `backend/chatbot.py` retrieval and prompt pipeline
+- `data/all.json` local corpus
+- `public/` stable-path media assets
+- `docs/` repository documentation
+- `.config/` agent workflow documentation
 
 ## Local Run (No Docker)
 
@@ -68,6 +98,12 @@ uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
 npm run dev
 ```
 
+Notes:
+
+- the frontend expects the backend at `VITE_API_BASE` unless you use same-origin proxying
+- the backend defaults to `LLM_PROVIDER=mistral`
+- generated audio is asynchronous and fetched through the audio polling endpoint
+
 ## Local Run (Docker Compose)
 
 Backend only:
@@ -88,6 +124,10 @@ docker compose --profile dev up --build
 - Fetch generated audio via `GET /api/chat/audio/{audioTurnId}`:
 - `202` while pending.
 - `200` with `audio/mpeg` when ready.
+
+Operational note:
+
+- pending audio jobs are stored in backend process memory, so the current backend is intended for a long-running service rather than serverless execution
 
 ## Hetzner Deployment (Single VM)
 
