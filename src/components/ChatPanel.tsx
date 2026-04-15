@@ -28,6 +28,32 @@ const dlog = (...args: unknown[]) => { if (AUDIO_DEBUG) console.log('[AUDIO]', .
 const MIC_DEBUG = (() => { try { return localStorage.getItem('micDebug') === '1' } catch { return false } })()
 const mlog = (...args: unknown[]) => { if (MIC_DEBUG) console.log('[MIC]', ...args) }
 
+function mergeTranscriptWithOverlap (finalText: string, interimText: string): string {
+  const finalNorm = normalizeSpeechText(finalText)
+  const interimNorm = normalizeSpeechText(interimText)
+  if (!finalNorm) return interimNorm
+  if (!interimNorm) return finalNorm
+
+  // Chrome often returns interim text that already contains finalized words.
+  // Prefer the fuller interim string in that case to avoid duplicated prefixes.
+  if (interimNorm.startsWith(finalNorm)) return interimNorm
+  if (finalNorm.startsWith(interimNorm)) return finalNorm
+
+  const finalTokens = finalNorm.split(' ')
+  const interimTokens = interimNorm.split(' ')
+  const maxOverlap = Math.min(finalTokens.length, interimTokens.length)
+
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    const finalTail = finalTokens.slice(finalTokens.length - overlap).join(' ')
+    const interimHead = interimTokens.slice(0, overlap).join(' ')
+    if (finalTail === interimHead) {
+      return `${finalNorm} ${interimTokens.slice(overlap).join(' ')}`.trim()
+    }
+  }
+
+  return `${finalNorm} ${interimNorm}`.trim()
+}
+
 export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
   type Phase = 'intro' | 'await_memory' | 'await_question' | 'confirm_more'
@@ -611,7 +637,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       speechSessionFinalRef.current = sessionFinal
       const committed = normalizeSpeechText([speechSessionBaseRef.current, sessionFinal].filter(Boolean).join(' '))
       const interim = normalizeSpeechText(latestInterim)
-      const visibleDraft = normalizeSpeechText([committed, interim].filter(Boolean).join(' '))
+      const sessionVisible = mergeTranscriptWithOverlap(sessionFinal, interim)
+      const visibleDraft = normalizeSpeechText([speechSessionBaseRef.current, sessionVisible].filter(Boolean).join(' '))
 
       mlog('result', {
         resultIndex: event.resultIndex,
