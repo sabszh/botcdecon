@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Optional, Protocol
 
 from elevenlabs.client import ElevenLabs
+from elevenlabs.types import VoiceSettings
 
 from ..settings import settings
 
@@ -25,26 +26,28 @@ class ElevenLabsProvider:
     self._model_id = settings.model_id
 
   def synthesize_bytes(self, *, text: str, language: str, speed: str = 'normal') -> Optional[bytes]:
-    voice_settings = {
-      'stability': 0.5,
-      'similarity_boost': 0.8,
-      'style': 0.5,
-      'use_speaker_boost': True
-    }
-    if speed == 'slow':
-      voice_settings['stability'] = 0.7
-      voice_settings['style'] = 0.3
+    stability = 0.7 if speed == 'slow' else 0.5
+    style = 0.3 if speed == 'slow' else 0.5
+    voice_settings = VoiceSettings(
+      stability=stability,
+      similarity_boost=0.8,
+      style=style,
+      use_speaker_boost=True,
+    )
 
     audio = self._client.text_to_speech.convert(
-      text=text,
       voice_id=self._voice_id,
+      text=text,
       model_id=self._model_id,
       output_format='mp3_44100_128',
-      voice_settings=voice_settings
+      voice_settings=voice_settings,
     )
     if isinstance(audio, (bytes, bytearray)):
       return bytes(audio)
-    return b''.join(audio)
+    chunks = b''.join(audio)
+    if not chunks:
+      raise RuntimeError('ElevenLabs returned empty audio')
+    return chunks
 
 
 @lru_cache

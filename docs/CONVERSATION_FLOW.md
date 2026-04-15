@@ -31,7 +31,7 @@ The backend is responsible for:
 - generating question answers
 - classifying short handoff intents like continue vs return
 - queuing TTS audio for generated replies
-- persisting/archive logging and vector upserts
+- archive logging and local session-memory storage
 
 ## Frontend State Model
 
@@ -41,15 +41,12 @@ The backend is responsible for:
 - `await_memory`
 - `await_question`
 - `confirm_more`
-- `explore`
 
 In practice, the normal flow uses:
 - `intro`
 - `await_memory`
 - `await_question`
 - `confirm_more`
-
-`explore` still exists, but it is mostly a leftover/skip-path state and is not part of the normal scripted flow anymore.
 
 The frontend also tracks these important runtime flags:
 
@@ -246,7 +243,7 @@ This is handled by `ChatService.chat(..., mode='memory')` in `backend/app/servic
 5. sanitize the returned text
 6. queue TTS audio for that reply
 7. persist archive data in the background
-8. upsert vectorstore data in the background
+8. store local session memory in the background
 9. return:
    - `message`
    - `audio_turn_id`
@@ -286,7 +283,7 @@ Backend path:
 - generates a concise answer
 - queues TTS audio
 - persists archive data
-- schedules vectorstore upsert
+- schedules local session memory storage
 
 ### 3. Frontend shows answer bubble
 When the backend response returns:
@@ -358,10 +355,6 @@ In both cases the effective closing flow is:
 2. play farewell scripted MP3
 3. call `onChangeLanguage()`
 4. parent resets back to language selection
-
-### 2. Legacy `explore` / skip path
-There is still older skip logic that can route into `explore` and then farewell.
-This is not the main path for normal conversational use anymore.
 
 ## Audio Behavior
 
@@ -482,6 +475,5 @@ These are important for future maintenance:
 
 - `updateMessage()` still exists in `ChatPanel.tsx`, but the current memory flow now adds one final combined message directly instead of progressively updating an earlier placeholder.
 - `isLoading` is the only thing driving the typing indicator right now.
-- `explore` is still present in the phase enum but is mostly legacy.
 - The backend memory-confirmation audio job store is in memory, so horizontal scaling or serverless deployment would break the current polling model.
 - Scripted MP3 text must be regenerated manually if `src/components/chat/config.ts` changes and you want spoken prompts to match the on-screen script.

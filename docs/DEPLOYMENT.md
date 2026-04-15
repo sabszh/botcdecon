@@ -106,7 +106,6 @@ Core backend variables:
 - `ELEVENLABS_API_KEY`
 - `VOICE_ID`
 - `MODEL_ID`
-- `RETRIEVER_PROVIDER=local`
 - `DATA_JSON_PATH=data/all.json`
 - `API_ALLOW_ORIGINS`
 

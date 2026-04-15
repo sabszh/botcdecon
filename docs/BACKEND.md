@@ -34,7 +34,6 @@ Important environment variables:
 - `MISTRAL_API_KEY`
 - `MISTRAL_MODEL`
 - `HUGGINGFACE_API_KEY`
-- `RETRIEVER_PROVIDER`
 - `DATA_JSON_PATH`
 - `ENTRIES_SOURCE_URL`
 - `SYNC_ENTRIES_ON_STARTUP`
@@ -135,12 +134,7 @@ Local retrieval behavior:
 - score candidate documents against the user query
 - build sourced prompts from the best matching entries
 
-Optional Pinecone behavior exists for:
-
-- bot corpus retrieval
-- chat interaction retrieval
-
-In local mode, chat-side retrieval memory is stored in process memory.
+Session memory is stored in process memory and local corpus retrieval always reads from `DATA_JSON_PATH`.
 
 ## TTS
 

@@ -10,13 +10,3 @@ psycopg[binary]==3.2.10
 huggingface-hub==0.34.4
 elevenlabs==2.16.0
 mistralai==1.8.2
-
-# LangChain for embeddings
-langchain-huggingface==0.3.1
-numpy
-
-# Vector database
-pinecone==7.3.0
-
-# Note: Using HuggingFace cloud embeddings (no local models/PyTorch needed)
-# Total size: ~50-100MB (vs 900MB+ with sentence-transformers)

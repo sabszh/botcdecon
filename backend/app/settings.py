@@ -31,8 +31,6 @@ class Settings:
   admin_password: Optional[str] = os.getenv('ADMIN_PASSWORD')
 
   huggingface_api_key: Optional[str] = os.getenv('HUGGINGFACE_API_KEY')
-  pinecone_api_key: Optional[str] = os.getenv('PINECONE_API_KEY')
-  retriever_provider: str = os.getenv('RETRIEVER_PROVIDER', 'local').lower()
   data_json_path: str = os.getenv('DATA_JSON_PATH', 'data/all.json')
   entries_source_url: Optional[str] = os.getenv('ENTRIES_SOURCE_URL', 'https://cc.n-kort.net/entries/all')
   sync_entries_on_startup: bool = os.getenv('SYNC_ENTRIES_ON_STARTUP', 'true').lower() == 'true'
@@ -51,10 +49,6 @@ class Settings:
   @property
   def has_llm_backends(self) -> bool:
     return bool(self.mistral_api_key or self.huggingface_api_key)
-
-  @property
-  def has_pinecone(self) -> bool:
-    return self.pinecone_api_key is not None
 
   @property
   def has_mistral(self) -> bool:

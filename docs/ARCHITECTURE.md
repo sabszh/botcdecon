@@ -94,7 +94,7 @@ Modes:
 `memory` mode:
 
 - returns quickly with a thank-you message
-- persists archive and vector updates off the critical path
+- persists archive data and local session memory off the critical path
 
 `question` mode:
 
@@ -140,7 +140,7 @@ Primary data sources:
 Persistence layers:
 
 - archive persistence is optional and driven by `DATABASE_URL`
-- vector/chat retrieval persistence is process-local in local mode
+- chat retrieval context is process-local
 
 Operational implication:
 

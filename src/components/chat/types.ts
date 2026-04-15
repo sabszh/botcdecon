@@ -5,5 +5,4 @@ export type ChatMessage = {
   role: 'user' | 'bot'
   content: string
   pending?: boolean
-  pendingLabel?: string
 }

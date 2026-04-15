@@ -7,6 +7,7 @@ import { AppContext } from '../context/AppContext'
 
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'
+import WebGLContextGuard from './WebGLContextGuard'
 
 function FpsThrottle ({ fps }: { fps: number }) {
   const { invalidate } = useThree()
@@ -38,12 +39,13 @@ export default function MapCanvas ({ onObjLoaded, freezeMotion = false, reducedP
 
   return (
     <Canvas
-      dpr={reducedPerformance ? [1, 1.1] : [1, 1.5]}
+      dpr={reducedPerformance ? [0.75, 1] : [1, 1.35]}
       frameloop={reducedPerformance ? 'demand' : 'always'}
       performance={{ min: 0.5 }}
-      gl={{ antialias: !reducedPerformance, alpha: true, powerPreference: reducedPerformance ? 'low-power' : 'high-performance' }}
+      gl={{ antialias: !reducedPerformance, alpha: true, depth: true, stencil: false, preserveDrawingBuffer: false, powerPreference: reducedPerformance ? 'low-power' : 'high-performance' }}
       onPointerDown={pointerDown}
     >
+      <WebGLContextGuard />
       {reducedPerformance && <FpsThrottle fps={30} />}
       <CustomCamera freezeMotion={freezeMotion} reducedPerformance={reducedPerformance}/>
       <ambientLight intensity={5}/>

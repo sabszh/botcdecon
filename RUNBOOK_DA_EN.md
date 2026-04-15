@@ -19,7 +19,6 @@ Create a .env file in the project root with:
 
 VITE_API_BASE=http://127.0.0.1:8000
 
-RETRIEVER_PROVIDER=local
 DATA_JSON_PATH=data/all.json
 
 LLM_PROVIDER=mistral
@@ -30,13 +29,6 @@ TTS_PROVIDER=elevenlabs
 ELEVENLABS_API_KEY=YOUR_ELEVENLABS_KEY
 VOICE_ID=4PzN60Ir6O2U6RzaQ5fm
 MODEL_ID=eleven_multilingual_v2
-
-Optional (if switching to Pinecone mode later):
-PINECONE_API_KEY=
-INDEX_NAME_BOT=botcon
-INDEX_NAME_CHAT=bdc-interaction-data
-PINECONE_CLOUD=AWS
-PINECONE_REGION=US_EAST_1
 
 ### 4. Local Run (No Docker)
 Step 1: Install frontend dependencies
@@ -98,7 +90,6 @@ Step 1: Prepare VM
 - Configure firewall for 80 and 443
 
 Step 2: Copy project and .env
-- Keep RETRIEVER_PROVIDER=local
 - Keep DATA_JSON_PATH=data/all.json
 
 Step 3: Start services
@@ -151,7 +142,6 @@ Opret en .env-fil i projektets rodmappe med:
 
 VITE_API_BASE=http://127.0.0.1:8000
 
-RETRIEVER_PROVIDER=local
 DATA_JSON_PATH=data/all.json
 
 LLM_PROVIDER=mistral
@@ -162,13 +152,6 @@ TTS_PROVIDER=elevenlabs
 ELEVENLABS_API_KEY=DIN_ELEVENLABS_NØGLE
 VOICE_ID=4PzN60Ir6O2U6RzaQ5fm
 MODEL_ID=eleven_multilingual_v2
-
-Valgfrit (hvis I senere skifter til Pinecone):
-PINECONE_API_KEY=
-INDEX_NAME_BOT=botcon
-INDEX_NAME_CHAT=bdc-interaction-data
-PINECONE_CLOUD=AWS
-PINECONE_REGION=US_EAST_1
 
 ### 4. Lokal kørsel (uden Docker)
 Trin 1: Installer frontend-afhængigheder
@@ -230,7 +213,6 @@ Trin 1: Klargør VM
 - Konfigurer firewall for 80 og 443
 
 Trin 2: Kopiér projekt og .env
-- Behold RETRIEVER_PROVIDER=local
 - Behold DATA_JSON_PATH=data/all.json
 
 Trin 3: Start services

@@ -1,29 +1,21 @@
-import { useMemo, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { PerspectiveCamera, useGLTF } from '@react-three/drei'
+import { PerspectiveCamera } from '@react-three/drei'
 import type { ThreeElements } from '@react-three/fiber'
 import { Group } from 'three'
-
-const gltfSrc = '/models/hippocampus.optimized.glb'
+import { useHippocampusModel } from './hippocampusModel'
+import WebGLContextGuard from './WebGLContextGuard'
 
 function SplashHippoMesh ({ reducedPerformance = false, ...props }: ThreeElements['mesh'] & { reducedPerformance?: boolean }) {
-  const { nodes, materials } = useGLTF(gltfSrc) as any
   const hippo = useRef<Group>(null!)
-  const model = useMemo(() => nodes?.Default?.clone(), [nodes])
-
-  useMemo(() => {
-    const mat = materials?.['Mat.2']
-    if (!mat) return
-    mat.transparent = true
-    mat.opacity = 0.92
-  }, [materials])
+  const { model, ready } = useHippocampusModel()
 
   useFrame((_state, delta) => {
-    if (!hippo.current) return
+    if (!hippo.current || !ready) return
     hippo.current.rotation.y += delta * (reducedPerformance ? 0.07 : 0.14)
   })
 
-  if (!model) return null
+  if (!ready || !model) return null
 
   return (
     <group
@@ -47,18 +39,16 @@ function FpsThrottle ({ fps }: { fps: number }) {
   }, [fps, invalidate])
   return null
 }
-
-useGLTF.preload(gltfSrc)
-
 export default function SplashHippoCanvas ({ reducedPerformance = false }: { reducedPerformance?: boolean }) {
   return (
     <Canvas
-      dpr={reducedPerformance ? [1, 1] : [1, 1.35]}
+      dpr={reducedPerformance ? [0.75, 1] : [1, 1.2]}
       frameloop={reducedPerformance ? 'demand' : 'always'}
       performance={{ min: 0.5 }}
-      gl={{ antialias: !reducedPerformance, alpha: true, powerPreference: 'low-power' }}
+      gl={{ antialias: !reducedPerformance, alpha: true, depth: true, stencil: false, preserveDrawingBuffer: false, powerPreference: 'low-power' }}
       className='pointer-events-none h-full w-full'
     >
+      <WebGLContextGuard />
       {reducedPerformance && <FpsThrottle fps={30} />}
       <PerspectiveCamera makeDefault position={[0, 0, 1600]} fov={32} near={4} far={12000} />
       <ambientLight intensity={4.2} />

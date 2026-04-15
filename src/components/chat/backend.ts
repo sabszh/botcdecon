@@ -59,7 +59,15 @@ export async function resolveAudioTurn (
       await new Promise(resolve => window.setTimeout(resolve, 250))
       continue
     }
-    if (!res.ok) return null
+    if (!res.ok) {
+      const ct = res.headers.get('content-type') || ''
+      if (ct.includes('application/json')) {
+        const payload = await res.json().catch(() => null) as { error?: string, detail?: string } | null
+        const message = payload?.error || payload?.detail || `Audio turn failed (${res.status})`
+        throw new Error(message)
+      }
+      throw new Error(`Audio turn failed (${res.status})`)
+    }
     const blob = await res.blob()
     return URL.createObjectURL(blob)
   }

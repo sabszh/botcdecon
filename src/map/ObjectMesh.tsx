@@ -1,40 +1,28 @@
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { Group } from 'three'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
 import type { ThreeElements } from '@react-three/fiber'
-
-const gltfSrc = '/models/hippocampus.optimized.glb'
+import { useHippocampusModel } from './hippocampusModel'
 
 export default function ObjectMesh(
   props: ThreeElements['mesh'] & { onObjLoaded: () => void, reducedPerformance?: boolean }
 ) {
-  const { nodes, materials } = useGLTF(gltfSrc) as any
   const hippo = useRef<Group>(null!)
   const { reducedPerformance = false, ...meshProps } = props
-  const model = useMemo(() => nodes?.Default?.clone(), [nodes])
-
-  const matKey = 'Mat.2'
-
-  useMemo(() => {
-    if (!materials?.[matKey]) return
-    const mat = materials[matKey]
-    mat.transparent = true
-    mat.opacity = 0.92
-  }, [materials])
+  const { model, ready } = useHippocampusModel()
 
   useFrame((_state, delta) => {
-    if (!hippo.current || !materials || !materials[matKey]) return
+    if (!hippo.current || !ready) return
     hippo.current.rotation.y += delta * (reducedPerformance ? 0.2 : 0.55)
   })
 
   useEffect(() => {
-    if (nodes && materials) {
+    if (ready) {
       props.onObjLoaded()
     }
-  }, [nodes, materials, props])
+  }, [props, ready])
 
-  if (!nodes || !materials || !materials[matKey] || !model) return null
+  if (!ready || !model) return null
 
   return (
     <group
@@ -48,5 +36,3 @@ export default function ObjectMesh(
     </group>
   )
 }
-
-useGLTF.preload(gltfSrc)

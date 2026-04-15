@@ -13,6 +13,8 @@ dist-ssr
 *.local
 .env
 snapshots/
+output/
+example
 
 # Editor directories and files
 .vscode/*
@@ -28,8 +30,3 @@ snapshots/
 __pycache__
 *.pyc
 .venv
-.env
-
-.env
-example
-output/

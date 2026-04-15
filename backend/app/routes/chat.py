@@ -63,6 +63,9 @@ async def chat_endpoint(
     include_history=payload.include_history
   )
 
+  if result.error:
+    return JSONResponse(status_code=503, content={'error': result.error})
+
   return ChatResponse(
     message=result.message,
     session_id=result.session_id,

@@ -3,7 +3,7 @@
 This project has:
 - A Vite frontend.
 - A FastAPI backend.
-- Local retrieval by default (no Pinecone required) using `data/all.json`.
+- Local retrieval using `data/all.json`.
 
 ## Documentation
 
@@ -32,7 +32,6 @@ Backend:
 - `MISTRAL_MODEL` optional, default `mistral-small-latest`.
 - `HUGGINGFACE_API_KEY` optional fallback if you explicitly switch to HuggingFace.
 - `LLM_REPO_ID` optional HuggingFace text-generation fallback model id.
-- `RETRIEVER_PROVIDER` default `local`.
 - `DATA_JSON_PATH` default `data/all.json`.
 - `TTS_PROVIDER` default `elevenlabs`.
 - `ELEVENLABS_API_KEY` required for ElevenLabs TTS.
@@ -43,14 +42,6 @@ Backend:
 - `ARCHIVE_DB_CONNECT_TIMEOUT_SEC` optional, default `2`.
 - `ARCHIVE_DB_INIT_MAX_ATTEMPTS` optional, default `1`.
 - `ARCHIVE_DB_RETRY_DELAY_SEC` optional, default `0.25`.
-
-Optional Pinecone mode:
-- `RETRIEVER_PROVIDER=pinecone`
-- `PINECONE_API_KEY`
-- `INDEX_NAME_BOT`
-- `INDEX_NAME_CHAT`
-- `PINECONE_CLOUD`
-- `PINECONE_REGION`
 
 ## Repository Structure
 
@@ -80,7 +71,6 @@ pip install -r backend/requirements.txt
 ```env
 VITE_API_BASE=http://127.0.0.1:8000
 
-RETRIEVER_PROVIDER=local
 DATA_JSON_PATH=data/all.json
 
 LLM_PROVIDER=mistral
@@ -147,7 +137,7 @@ Recommended baseline:
 
 Steps:
 1. Copy repository and `.env` to server.
-2. Keep `RETRIEVER_PROVIDER=local` and `DATA_JSON_PATH=data/all.json`.
+2. Keep `DATA_JSON_PATH=data/all.json`.
 3. Start services with `docker compose up --build -d`.
 4. Put Caddy/Nginx in front of backend/frontend.
 

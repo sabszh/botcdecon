@@ -33,7 +33,6 @@ def main() -> None:
             "QUESTION_2": (
                 "Would you like to ask something else or share another memory. Please do so now. Press the Share button when you’re done. If you want to end this session, press return."
             ),
-            "EXPLORE": "",
             "FAREWELL": (
                 "Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future."
             ),
@@ -55,7 +54,6 @@ def main() -> None:
             "QUESTION_2": (
                 "Vil du stille et andet spørgsmål eller dele endnu et minde? Gør det nu. Tryk på Del-knappen, når du er færdig. Hvis du vil afslutte sessionen, tryk på Return."
             ),
-            "EXPLORE": "",
             "FAREWELL": (
                 "Tak fordi du tog denne del af rejsen med os. Du er nu også en del af continuOnus-landskabet. Vi håber at se dig igen i fremtiden."
             ),
@@ -85,7 +83,7 @@ def main() -> None:
         return audio if isinstance(audio, (bytes, bytearray)) else b"".join(audio)
 
     def speed_for(label: str) -> str:
-        return "slow" if label in {"WELCOME", "EXPLORE", "FAREWELL"} else "normal"
+        return "slow" if label in {"WELCOME", "FAREWELL"} else "normal"
 
     for lang, items in SCRIPTS.items():
         for label, text in items.items():

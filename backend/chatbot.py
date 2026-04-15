@@ -1,23 +1,24 @@
 # -*- coding: utf-8 -*-
-import os
-import json
-import re
-from datetime import datetime, timezone
-from pathlib import Path
-from collections import Counter
-from typing import List, Dict, Any, Optional, Literal, Type, TypeVar
+from typing import List, Dict, Any, Optional, Literal
 
 from dotenv import load_dotenv
-from langchain_huggingface import HuggingFaceEndpointEmbeddings
-from pydantic import BaseModel, Field, ValidationError
-try:
-    from pinecone import Pinecone, ServerlessSpec, CloudProvider, AwsRegion
-except Exception:  # pragma: no cover - optional dependency in local mode
-    Pinecone = None  # type: ignore
-    ServerlessSpec = None  # type: ignore
-    CloudProvider = None  # type: ignore
-    AwsRegion = None  # type: ignore
+from pydantic import BaseModel
 from .app.services.llm import LLMProvider, get_llm_provider
+from .app.services.chat_formatting import (
+    enforce_concise as enforce_concise_text,
+    extract_first_json_object,
+    format_context as format_retrieval_context,
+    format_points,
+    normalize_handoff_reply,
+    parse_llm_json,
+)
+from .app.services.chat_prompts import (
+    build_followup_prompt,
+    build_handoff_prompt,
+    build_memory_confirmation_prompt,
+    build_source_prompt,
+)
+from .app.services.local_retrieval import LocalCorpus
 from .app.settings import settings
 
 load_dotenv()
@@ -31,23 +32,6 @@ class StructuredFollowupDecision(BaseModel):
     decision: Literal["question", "memory", "continue", "return"]
 
 
-ParsedModelT = TypeVar("ParsedModelT", bound=BaseModel)
-
-
-def _cloud_from_env():
-    if CloudProvider is None:
-        return None
-    c = os.getenv("PINECONE_CLOUD", "AWS").upper()
-    return getattr(CloudProvider, c, CloudProvider.AWS)
-
-
-def _region_from_env():
-    if AwsRegion is None:
-        return None
-    r = os.getenv("PINECONE_REGION", "US_EAST_1").upper()
-    return getattr(AwsRegion, r, AwsRegion.US_EAST_1)
-
-
 class ChatBot:
     def __init__(
         self,
@@ -57,486 +41,55 @@ class ChatBot:
         index_name_chat: str = None,
         language: str = "da",
     ):
-        self.retriever_provider = settings.retriever_provider
-        self.embeddings = None
-        self.pc = None
-        self.cloud = _cloud_from_env()
-        self.region = _region_from_env()
-        self._bot_docs: List[Dict[str, Any]] = []
-        self._chat_docs: List[Dict[str, Any]] = []
-        self._bot_doc_freq: Dict[str, int] = {}
+        self.source_index_name = index_name_bot or "local-source"
+        self.session_index_name = index_name_chat or "local-session"
+        self._local_corpus = LocalCorpus(settings.data_json_path)
+        print(f"[INIT] Retriever provider: local ({self._local_corpus.entry_count} corpus entries)")
 
-        self.index_name_bot = index_name_bot or os.getenv("INDEX_NAME_BOT", "botcon")
-        self.index_name_chat = index_name_chat or os.getenv("INDEX_NAME_CHAT", "bdc-interaction-data")
-
-        if self.retriever_provider == 'pinecone' and settings.has_pinecone and Pinecone is not None:
-            # Use HuggingFace Endpoint for embeddings (no local model needed)
-            self.embeddings = HuggingFaceEndpointEmbeddings(
-                model="sentence-transformers/all-mpnet-base-v2",
-                huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_KEY")
-            )
-            print("[INIT] Retriever provider: pinecone")
-            self.pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-            # ensure indexes exist
-            self._ensure_index(self.index_name_bot, dimension=768)
-            self._ensure_index(self.index_name_chat, dimension=768)
-        else:
-            self.retriever_provider = 'local'
-            self._load_local_corpus()
-            print(f"[INIT] Retriever provider: local ({len(self._bot_docs)} corpus entries)")
-
-        self.repo_id = repo_id or os.getenv("LLM_REPO_ID")
+        self.repo_id = repo_id or settings.llm_repo_id
         self.temperature = temperature
         self.language = language.lower()  # 'da' or 'en'
 
         self.llm_provider: LLMProvider = get_llm_provider()
 
-    # ---------- helpers ----------
-    def _ensure_index(self, name: str, dimension: int):
-        if not self.pc or ServerlessSpec is None:
-            return
-        try:
-            existing = {ix["name"]: ix for ix in self.pc.list_indexes()}
-            if name not in existing:
-                self.pc.create_index(
-                    name=name,
-                    dimension=dimension,
-                    spec=ServerlessSpec(cloud=self.cloud, region=self.region),
-                )
-        except Exception:
-            try:
-                self.pc.create_index(
-                    name=name,
-                    dimension=dimension,
-                    spec=ServerlessSpec(cloud=self.cloud, region=self.region),
-                )
-            except Exception:
-                pass
-
-    def _index(self, name: str):
-        if not self.pc:
-            raise RuntimeError('Pinecone index requested but client is not configured')
-        return self.pc.Index(name)
-
-    @staticmethod
-    def _tokenize(text: str) -> List[str]:
-        return re.findall(r"\b[\w'-]{2,}\b", (text or '').lower())
-
-    def _load_local_corpus(self) -> None:
-        root = Path(__file__).resolve().parent.parent
-        data_path = Path(settings.data_json_path)
-        if not data_path.is_absolute():
-            data_path = root / data_path
-
-        if not data_path.exists():
-            print(f"[INIT] Local corpus not found at {data_path}")
-            self._bot_docs = []
-            self._bot_doc_freq = {}
-            return
-
-        with data_path.open('r', encoding='utf-8') as fh:
-            raw = json.load(fh)
-
-        seen: set[str] = set()
-        docs: List[Dict[str, Any]] = []
-        doc_freq: Counter[str] = Counter()
-
-        for idx, item in enumerate(raw if isinstance(raw, list) else []):
-            if not isinstance(item, dict):
-                continue
-            slug = str(item.get('slug') or '').strip()
-            text = str(item.get('text') or '').strip()
-            if not slug or not text:
-                continue
-            key = f"{slug}|{text}"
-            if key in seen:
-                continue
-            seen.add(key)
-
-            tokens = self._tokenize(text)
-            unique_tokens = set(tokens)
-            doc_freq.update(unique_tokens)
-
-            docs.append({
-                'id': slug or f'local-{idx}',
-                'score': 0.0,
-                'metadata': {
-                    'slug': slug,
-                    'name': str(item.get('name') or ''),
-                    'location': str(item.get('location') or ''),
-                    'date': str(item.get('date') or ''),
-                    'text': text,
-                    'points': item.get('points') if isinstance(item.get('points'), list) else [],
-                },
-                'text': text,
-                '_tokens': tokens,
-            })
-
-        self._bot_docs = docs
-        self._bot_doc_freq = dict(doc_freq)
-
-    def _score_local_doc(self, query_tokens: List[str], tokens: List[str], total_docs: int) -> float:
-        if not query_tokens or not tokens or total_docs <= 0:
-            return 0.0
-        tf = Counter(tokens)
-        doc_len = len(tokens)
-        score = 0.0
-        for qt in query_tokens:
-            freq = tf.get(qt, 0)
-            if freq == 0:
-                continue
-            df = self._bot_doc_freq.get(qt, 0)
-            idf = 1.0 + (total_docs / (1.0 + df))
-            score += (freq / (doc_len + 1.0)) * idf
-        return score
-
-    def _retrieve_local_docs(self, query: str, index_name: str, excluded_session_id: Optional[str], k: int) -> List[Dict[str, Any]]:
-        if index_name == self.index_name_chat:
-            docs = []
-            for doc in self._chat_docs:
-                sid = str(doc.get('metadata', {}).get('session_id') or '')
-                if excluded_session_id and sid == excluded_session_id:
-                    continue
-                docs.append(doc)
-
-            # Session lookup path: query can be session id.
-            session_matches = [d for d in docs if str(d.get('metadata', {}).get('session_id') or '') == query]
-            if session_matches:
-                ordered = sorted(session_matches, key=lambda d: d.get('metadata', {}).get('date', ''), reverse=True)
-                return ordered[:k]
-
-            query_tokens = self._tokenize(query)
-            total_docs = max(1, len(docs))
-            ranked = []
-            for doc in docs:
-                tokens = self._tokenize(str(doc.get('text') or ''))
-                score = self._score_local_doc(query_tokens, tokens, total_docs)
-                if score > 0:
-                    ranked.append((score, doc))
-            ranked.sort(key=lambda x: x[0], reverse=True)
-            return [
-                {**doc, 'score': score}
-                for score, doc in ranked[:k]
-            ]
-
-        query_tokens = self._tokenize(query)
-        total_docs = max(1, len(self._bot_docs))
-        ranked = []
-        for doc in self._bot_docs:
-            score = self._score_local_doc(query_tokens, doc.get('_tokens', []), total_docs)
-            if score > 0:
-                ranked.append((score, doc))
-        ranked.sort(key=lambda x: x[0], reverse=True)
-
-        out: List[Dict[str, Any]] = []
-        for score, doc in ranked[:k]:
-            clean = {key: value for key, value in doc.items() if key != '_tokens'}
-            clean['score'] = score
-            out.append(clean)
-        return out
-
     # ---------- prompts ----------
     def default_prompt_sourcedata(self, chat_history: str, original_data: str, user_input: str, user_name: str):
-        if self.language == "en":
-            return f"""
-SYSTEM ROLE:
-You are a helpful assistant connected to the artwork "Carte de Continuonus".
-Your role is to connect this visitor with what other contributors have shared.
-
-RESPONSE RULES:
-- grounded, clear, warm
-- avoid poetic language
-- final answer must be 3–5 sentences
-- directly answer the user's question in the first sentence
-- make the answer feel connected to real people in the world
-- if a retrieved entry includes a name, use that name
-- if both name and location are available, prefer phrasing like "Sara from Denmark said..."
-- if there is no name, use phrasing like "someone said" or "another person said"
-- only mention a location when it is explicitly available in the retrieved entry
-- do not invent names or locations
-- you may analyse patterns across many retrieved entries, but mention at most five contributors directly
-- use only retrieved details that are relevant
-- when helpful, use map metadata such as emotions, distances, dates, locations, and point coordinates
-- weave 2–3 short direct quotes into the answer when they are relevant
-- mention recurring or contrasting emotions inside the answer when they help explain the pattern
-
-INPUT:
-{{
-  "user_question": "{user_input}",
-  "conversation_so_far": "{chat_history}",
-  "retrieved_contributor_context": "{original_data}"
-}}
-
-REQUIRED OUTPUT:
-Return only the final visitor-facing answer as plain text.
-"""
-        else:  # Danish
-            return f"""
-SYSTEMROLLE:
-Du er en hjælpsom assistent forbundet til kunstværket "Carte de Continuonus".
-Din rolle er at forbinde denne besøgende med, hvad andre bidragydere har delt.
-
-SVARREGLER:
-- jordnær, klar, varm
-- undgå poetisk sprog
-- det endelige svar skal være 3–5 sætninger
-- besvar brugerens spørgsmål direkte i den første sætning
-- få svaret til at føles forbundet med virkelige mennesker i verden
-- hvis et fund har et navn, så nævn navnet
-- hvis et fund har både navn og lokation, så foretræk formuleringer som "Sara fra Danmark sagde ..."
-- hvis der ikke er noget navn, så brug formuleringer som "nogen sagde" eller "en anden sagde"
-- nævn kun en lokation, hvis den faktisk findes i det fundne materiale
-- opfind ikke navne eller lokationer
-- du må gerne analysere mønstre på tværs af mange fund, men nævn højst fem bidragydere direkte
-- brug kun detaljer, der er relevante for spørgsmålet
-- brug gerne kortmetadata som følelser, afstande, datoer, lokationer og koordinater, når det styrker svaret
-- væv 2–3 korte direkte citater ind i selve svaret, når de er relevante
-- nævn tilbagevendende eller kontrasterende følelser inde i svaret, når det hjælper forklaringen
-
-INPUT:
-{{
-  "user_question": "{user_input}",
-  "conversation_so_far": "{chat_history}",
-  "retrieved_contributor_context": "{original_data}"
-}}
-
-PÅKRÆVET OUTPUT:
-Returnér kun det endelige svar til den besøgende som almindelig tekst.
-"""
-
-    def default_prompt_conv(self, chat_history: str, user_input: str, llm_response: str, past_chat: str, user_name: str):
-        if self.language == "en":
-            return f"""
-You are a helpful assistant for the "Carte de Continuonus" artwork.
-Connect the user's question with relevant insights from previous conversations.
-
-Tone: practical, kind, connecting people. Keep it short (1–3 sentences). If a name is available, use it. If both name and location are available, prefer "Name from Location said...". If no name is available, use "someone said" or "another person said". Never invent names or locations. Use at most five contributors.
-
-User asked: "{user_input}"
-Previous response: "{llm_response}"
-Relevant past conversations (up to five): {past_chat}
-Current session: {chat_history}
-
-IMPORTANT: Respond in English and do not include any personal identifiers.
-"""
-        else:  # Danish
-            return f"""
-Du er en hjælpsom assistent for kunstværket "Carte de Continuonus".
-Forbind brugerens spørgsmål med relevante indsigter fra tidligere samtaler.
-
-Tone: praktisk, venlig, forbinder mennesker. Hold det kort (1–3 sætninger). Hvis et navn findes, så brug det. Hvis både navn og lokation findes, så foretræk "Navn fra Lokation sagde ...". Hvis der ikke er noget navn, så brug "nogen sagde" eller "en anden sagde". Opfind aldrig navne eller lokationer. Brug højst fem bidrag.
-
-Bruger spurgte: "{user_input}"
-Tidligere svar: "{llm_response}"
-Relevante tidligere samtaler (op til fem): {past_chat}
-Nuværende session: {chat_history}
-
-VIGTIGT: Svar på dansk og undlad personlige oplysninger.
-"""
+        return build_source_prompt(self.language, chat_history, original_data, user_input)
 
     def default_prompt_memory_confirmation(self, original_data: str, user_input: str) -> str:
-        if self.language == "en":
-            return f"""
-You are writing a short confirmation after a museum visitor has shared a memory.
-
-GOAL:
-- acknowledge their contribution indirectly through similarity
-- connect it to one or two memories from previous contributors
-
-RULES:
-- 2 to 3 sentences
-- start with "Your memory reminds us of" or "Your memory is similar to"
-- mention one or two contributors only
-- if a contributor has a name, use that name
-- if both name and location are available, prefer phrasing like "Sara from Denmark also thought that..."
-- if there is no name, use phrasing like "someone also said" or "another person said"
-- only mention a location if it is actually available
-- do not invent names or locations
-- use plain, clear language
-- if helpful, include one short quote
-- do not mention missing data or the retrieval process
-- return only the final visitor-facing text
-
-INPUT:
-{{
-  "visitor_memory": "{user_input}",
-  "retrieved_contributor_context": "{original_data}"
-}}
-"""
-
-        return f"""
-Du skriver en kort bekræftelse, efter at en museumsbesøgende har delt en erindring.
-
-MÅL:
-- anerkend bidraget indirekte gennem lighed
-- forbind det med en eller to erindringer fra tidligere bidragydere
-
-REGLER:
-- 2 til 3 sætninger
-- begynd med "Dit minde minder os om" eller "Dit minde ligner"
-- nævn kun en eller to bidragydere
-- hvis en bidragyder har et navn, så brug navnet
-- hvis både navn og lokation findes, så foretræk formuleringer som "Sara fra Danmark tænkte også, at ..."
-- hvis der ikke er noget navn, så brug formuleringer som "nogen sagde også" eller "en anden sagde"
-- nævn kun en lokation, hvis den faktisk er tilgængelig
-- opfind ikke navne eller lokationer
-- brug et enkelt og klart sprog
-- brug gerne ét kort citat, hvis det hjælper
-- nævn ikke manglende data eller selve søgningen
-- returnér kun den endelige tekst til den besøgende
-
-INPUT:
-{{
-  "visitor_memory": "{user_input}",
-  "retrieved_contributor_context": "{original_data}"
-}}
-"""
+        return build_memory_confirmation_prompt(self.language, original_data, user_input)
 
     # ---------- retrieval ----------
     def retrieve_docs(self, query: str, index_name: str, excluded_session_id: Optional[str] = None, k: int = 15) -> List[Dict[str, Any]]:
-        if self.retriever_provider == 'local':
-            docs = self._retrieve_local_docs(query, index_name, excluded_session_id, k)
-            print(f"[BOT] Local retrieval index='{index_name}' k={k} -> {len(docs)} docs")
-            return docs
-
-        index = self._index(index_name)
-        print(f"[BOT] Querying index='{index_name}' k={k} excluded_session_id={bool(excluded_session_id)} query_len={len(query or '')}")
-
-        try:
-            query_vec = self.embeddings.embed_query(query)
-        except Exception as e:
-            print(f"[ERROR] Failed to generate query embedding: {e}")
-            print(f"[ERROR] This might be due to HuggingFace API issues or invalid API key")
-            # Return empty results if embedding fails
-            return []
-
-        metadata_filter = None
-        if index_name == self.index_name_chat and excluded_session_id:
-            metadata_filter = {"session_id": {"$ne": excluded_session_id}}
-
-        res = index.query(
-            vector=query_vec,
-            top_k=k,
-            include_metadata=True,
-            filter=metadata_filter,
+        docs = self._local_corpus.retrieve(
+            query,
+            index_name=index_name,
+            chat_index_name=self.session_index_name,
+            excluded_session_id=excluded_session_id,
+            k=k,
         )
-
-        docs = []
-        for m in res.get("matches", []):
-            md = m.get("metadata", {}) or {}
-            docs.append({
-                "id": m["id"],
-                "score": m["score"],
-                "metadata": md,
-                "text": md.get("text", "")
-            })
-        print(f"[BOT] Retrieved {len(docs)} docs from '{index_name}'")
+        print(f"[BOT] Local retrieval index='{index_name}' k={k} -> {len(docs)} docs")
         return docs
 
     # ---------- post-process ----------
     @staticmethod
     def enforce_concise(text: str, max_sentences: int = 5, max_words: int = 120) -> str:
-        if not text:
-            return ''
-        import re
-        # Remove stage directions / poetic parentheticals
-        text = re.sub(r"\([^\)]*\)", "", text)
-        # Split into sentences crudely on ., !, ?
-        sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-        sentences = [s.strip() for s in sentences if s.strip()]
-        sentences = sentences[:max_sentences]
-        result = ' '.join(sentences)
-        # Word cap
-        words = result.split()
-        if len(words) > max_words:
-            result = ' '.join(words[:max_words]) + '…'
-        return result
+        return enforce_concise_text(text, max_sentences=max_sentences, max_words=max_words)
 
     @staticmethod
     def _format_points(points: Any) -> str:
-        if not isinstance(points, list) or not points:
-            return "none"
-        parts: List[str] = []
-        for point in points[:4]:
-            if not isinstance(point, dict):
-                continue
-            emotion = str(point.get("emotion") or "").strip() or "unknown"
-            distance = point.get("distance")
-            x = point.get("x")
-            y = point.get("y")
-            details = [f"emotion={emotion}"]
-            if distance is not None:
-                details.append(f"distance={distance}")
-            if x is not None and y is not None:
-                details.append(f"coords=({x},{y})")
-            parts.append(", ".join(details))
-        return " | ".join(parts) if parts else "none"
+        return format_points(points)
 
     @staticmethod
     def _extract_first_json_object(text: str) -> Optional[str]:
-        if not text:
-            return None
-        start = text.find("{")
-        if start < 0:
-            return None
+        return extract_first_json_object(text)
 
-        depth = 0
-        in_string = False
-        escaped = False
-        for idx in range(start, len(text)):
-            ch = text[idx]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    in_string = False
-                continue
-
-            if ch == '"':
-                in_string = True
-                continue
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    return text[start:idx + 1]
-        return None
-
-    def _parse_llm_json(self, raw_text: str, model_type: Type[ParsedModelT]) -> Optional[ParsedModelT]:
-        payload = self._extract_first_json_object(raw_text or "")
-        if not payload:
-            return None
-        try:
-            data = json.loads(payload)
-            return model_type.model_validate(data)
-        except (json.JSONDecodeError, ValidationError, TypeError, ValueError):
-            return None
+    @staticmethod
+    def _parse_llm_json(raw_text: str, model_type: type[BaseModel]) -> Optional[BaseModel]:
+        return parse_llm_json(raw_text, model_type)
 
     def format_context(self, documents: List[Dict[str, Any]], chat: bool = False) -> str:
-        documents = list(documents)[:15]
-        parts = []
-        def _shorten(s: str, max_chars: int = 160) -> str:
-            s = (s or "").replace("\n", " ").strip()
-            return (s[:max_chars] + ('…' if len(s) > max_chars else ''))
-        for idx, doc in enumerate(documents, start=1):
-            md = doc["metadata"]
-            if not chat:
-                content = _shorten(doc.get("text", ""), 220)
-                name = _shorten(md.get("name", ""), 60) or "unknown"
-                location = _shorten(md.get("location", ""), 60) or "unknown"
-                date = _shorten(md.get("date", ""), 40) or "unknown"
-                points = self._format_points(md.get("points"))
-                parts.append(
-                    f'Contributor #{idx}: name={name} | location={location} | memory="{content}" | date={date} | points={points}'
-                )
-            else:
-                q = _shorten(md.get("user_question", "Unknown Question"), 120)
-                a = _shorten(md.get("ai_output", "Unknown Response"), 120)
-                parts.append(f'A contributor asked: "{q}" and received: "{a}"')
-        return "\n".join(parts)
+        return format_retrieval_context(documents, chat=chat)
 
     # ---------- llm ----------
     def get_llm_response(
@@ -546,22 +99,15 @@ INPUT:
         temperature: Optional[float] = None,
         max_tokens: int = 512,
     ) -> str:
-        try:
-            return self.llm_provider.generate(
-                prompt=prompt,
-                temperature=min(self.temperature, 0.4) if temperature is None else temperature,
-                max_tokens=max_tokens,
-            )
-        except Exception as exc:
-            return f"Error invoking LLM: {exc}"
+        return self.llm_provider.generate(
+            prompt=prompt,
+            temperature=min(self.temperature, 0.65) if temperature is None else temperature,
+            max_tokens=max_tokens,
+        )
 
     @staticmethod
     def _normalize_handoff_reply(user_input: str) -> str:
-        normalized = (user_input or "").strip().lower()
-        normalized = re.sub(r"\s+", " ", normalized)
-        normalized = re.sub(r"^[\"'“”‘’\s]+|[\"'“”‘’\s]+$", "", normalized)
-        normalized = re.sub(r"[.!]+$", "", normalized)
-        return normalized
+        return normalize_handoff_reply(user_input)
 
     def _quick_handoff_decision(self, user_input: str) -> Optional[str]:
         normalized = self._normalize_handoff_reply(user_input)
@@ -644,49 +190,7 @@ INPUT:
         if quick_decision:
             return quick_decision
 
-        if self.language == "da":
-            prompt = f"""
-Du afgør kun, om en museumsbesøgende vil fortsætte samtalen eller afslutte den.
-
-REGLER:
-- continue betyder, at personen vil stille et spørgsmål mere eller fortsætte samtalen
-- return betyder, at personen vil videre, afslutte eller ikke spørge mere
-- hvis svaret er uklart, men lyder som et nyt emne eller spørgsmål, vælg continue
-- hvis svaret er uklart, men lyder som afvisning, stop, nej, færdig eller afslutning, vælg return
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-PÅKRÆVET OUTPUT:
-Returnér præcis ét JSON-objekt og intet andet:
-{{
-  "decision": "continue" | "return"
-}}
-"""
-        else:
-            prompt = f"""
-Decide only whether a museum visitor wants to continue the conversation or end it.
-
-RULES:
-- continue means they want to ask something else or keep talking
-- return means they want to move on, stop, or ask nothing more
-- if the answer is ambiguous but sounds like a new topic or question, choose continue
-- if the answer is ambiguous but sounds like refusal, stopping, being done, or ending, choose return
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-REQUIRED OUTPUT:
-Return exactly one JSON object and nothing else:
-{{
-  "decision": "continue" | "return"
-}}
-"""
-
+        prompt = build_handoff_prompt(self.language, user_input)
         response = (self.get_llm_response(
             prompt,
             temperature=0.0,
@@ -707,65 +211,7 @@ Return exactly one JSON object and nothing else:
         if quick_decision:
             return quick_decision
 
-        if self.language == "da":
-            prompt = f"""
-Du afgør, hvad en museumsbesøgende prøver at gøre efter at have fået et svar.
-
-MULIGE BESLUTNINGER:
-- question: personen stiller et nyt spørgsmål
-- memory: personen deler et nyt minde eller en ny erindring
-- continue: personen vil fortsætte, men har endnu ikke delt et konkret spørgsmål eller minde
-- return: personen vil afslutte, videre eller stoppe
-
-REGLER:
-- vælg question ved tydelige spørgsmål eller undersøgende formuleringer
-- vælg memory ved udsagn, personlige minder eller oplevelser
-- vælg continue ved korte svar som ja, gerne, mere eller lignende uden konkret indhold
-- vælg return ved nej, stop, færdig, videre eller afslutning
-- hvis svaret er uklart, men lyder som en oplevelse eller erindring, vælg memory
-- hvis svaret er uklart, men lyder som noget man vil vide, vælg question
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-PÅKRÆVET OUTPUT:
-Returnér præcis ét JSON-objekt og intet andet:
-{{
-  "decision": "question" | "memory" | "continue" | "return"
-}}
-"""
-        else:
-            prompt = f"""
-Decide what a museum visitor is trying to do after receiving an answer.
-
-POSSIBLE DECISIONS:
-- question: they are asking a new question
-- memory: they are sharing a new memory
-- continue: they want to continue, but have not yet provided a concrete question or memory
-- return: they want to stop, move on, or end the session
-
-RULES:
-- choose question for clear questions or investigative phrasing
-- choose memory for statements, personal recollections, or experiences
-- choose continue for short replies like yes, sure, more, okay, without concrete content
-- choose return for no, stop, finished, move on, or ending language
-- if ambiguous but it sounds like a recollection or experience, choose memory
-- if ambiguous but it sounds like something they want to know, choose question
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-REQUIRED OUTPUT:
-Return exactly one JSON object and nothing else:
-{{
-  "decision": "question" | "memory" | "continue" | "return"
-}}
-"""
-
+        prompt = build_followup_prompt(self.language, user_input)
         response = (self.get_llm_response(
             prompt,
             temperature=0.0,
@@ -781,8 +227,8 @@ Return exactly one JSON object and nothing else:
                 return key.lower()
         return "continue"
 
-    # ---------- upsert ----------
-    def upsert_vectorstore(
+    # ---------- session memory ----------
+    def store_session_memory(
         self,
         user_input: str,
         ai_output: str,
@@ -791,57 +237,14 @@ Return exactly one JSON object and nothing else:
         session_id: str,
         continuous_data: Optional[Dict[str, Any]] = None,
     ):
-        if self.retriever_provider == 'local':
-            ts_iso = datetime.now(timezone.utc).isoformat()
-            doc = {
-                "id": ts_iso,
-                "score": 1.0,
-                "metadata": {
-                    "user_question": user_input,
-                    "ai_output": ai_output,
-                    "user_name": user_name,
-                    "session_id": session_id,
-                    "date": ts_iso,
-                    "user_location": user_location,
-                    "text": f"User input: {user_input}\nAI output: {ai_output}",
-                    "continuous_data": json.dumps(continuous_data) if continuous_data else "",
-                },
-                "text": f"User input: {user_input}\nAI output: {ai_output}",
-            }
-            self._chat_docs.append(doc)
-            return
-
-        index = self._index(self.index_name_chat)
-        ts_iso = datetime.now(timezone.utc).isoformat()
-
-        try:
-            embedding = self.embeddings.embed_documents([user_input + ai_output])[0]
-        except Exception as e:
-            print(f"[ERROR] Failed to generate embedding: {e}")
-            print(f"[ERROR] This might be due to HuggingFace API issues or invalid API key")
-            # Create a dummy embedding with correct dimensions to avoid breaking the flow
-            import random
-            embedding = [random.random() for _ in range(768)]
-            print(f"[WARNING] Using random embedding as fallback")
-
-        md = {
-            "user_question": user_input,
-            "ai_output": ai_output,
-            "user_name": user_name,
-            "session_id": session_id,
-            "date": ts_iso,
-            "user_location": user_location,
-            "text": f"User input: {user_input}\nAI output: {ai_output}",
-        }
-
-        if continuous_data:
-            md["continuous_data"] = json.dumps(continuous_data)
-
-        index.upsert(vectors=[{
-            "id": ts_iso,
-            "values": embedding,
-            "metadata": md
-        }])
+        self._local_corpus.add_chat_turn(
+            user_input=user_input,
+            ai_output=ai_output,
+            user_name=user_name,
+            user_location=user_location,
+            session_id=session_id,
+            continuous_data=continuous_data,
+        )
 
     # ---------- pipeline ----------
     def pipeline(self, user_input: str, user_name: str, session_id: str, user_location: str,
@@ -861,7 +264,7 @@ Return exactly one JSON object and nothing else:
 
         print(f"[BOT] Retrieving source documents...")
         t1 = time.time()
-        source_data = self.retrieve_docs(user_input, self.index_name_bot, k=max(3, retrieval_k))
+        source_data = self.retrieve_docs(user_input, self.source_index_name, k=max(3, retrieval_k))
         formatted_source_data = self.format_context(source_data)
         retrieval_ms = (time.time() - t1) * 1000
         print(f"[BOT] Source retrieval took {retrieval_ms/1000:.2f}s; showing up to 5 snippets:")
@@ -882,13 +285,13 @@ Return exactly one JSON object and nothing else:
         ai_output_raw = (resp1 or '').strip()
         ai_output = ai_output_raw
 
-        upsert_ms = 0.0
+        memory_store_ms = 0.0
         if persist:
-            print(f"[BOT] Upserting to vectorstore (index='{self.index_name_chat}')...")
+            print("[BOT] Storing turn in local session memory...")
             t5 = time.time()
-            self.upsert_vectorstore(user_input, ai_output, user_name, user_location, session_id, continuous_data)
-            upsert_ms = (time.time() - t5) * 1000
-            print(f"[BOT] Upsert took {upsert_ms/1000:.2f}s")
+            self.store_session_memory(user_input, ai_output, user_name, user_location, session_id, continuous_data)
+            memory_store_ms = (time.time() - t5) * 1000
+            print(f"[BOT] Local session storage took {memory_store_ms/1000:.2f}s")
 
         session_history = self.retrieve_session(session_id) if include_session_history else []
         return {
@@ -899,7 +302,7 @@ Return exactly one JSON object and nothing else:
             "timings": {
                 "retrieval_ms": round(retrieval_ms, 2),
                 "llm_ms": round(llm_ms, 2),
-                "upsert_ms": round(upsert_ms, 2),
+                "memory_store_ms": round(memory_store_ms, 2),
             }
         }
 
@@ -910,58 +313,30 @@ Return exactly one JSON object and nothing else:
             self.language = language.lower()
 
         t1 = time.time()
-        source_data = self.retrieve_docs(user_input, self.index_name_bot, k=max(1, retrieval_k))
+        source_data = self.retrieve_docs(user_input, self.source_index_name, k=max(1, retrieval_k))
         formatted_source_data = self.format_context(source_data[:2])
         retrieval_ms = (time.time() - t1) * 1000
 
         if not source_data:
-            if self.language == "da":
-                return {
-                    "ai_output": "Dit minde minder os om andre besøgendes forsøg på at fastholde noget vigtigt for fremtiden. Det føjer sig til et fælles kort af det, mennesker ønsker, at andre skal huske.",
-                    "source_data": [],
-                    "timings": {"retrieval_ms": round(retrieval_ms, 2), "llm_ms": 0.0},
-                }
-            return {
-                "ai_output": "Your memory reminds us of how other visitors have tried to hold on to something important for the future. It now becomes part of a shared map of what people want others to remember.",
-                "source_data": [],
-                "timings": {"retrieval_ms": round(retrieval_ms, 2), "llm_ms": 0.0},
-            }
+            raise RuntimeError('memory_confirmation_retrieval_empty')
 
         t2 = time.time()
         prompt = self.default_prompt_memory_confirmation(formatted_source_data, user_input)
-        resp = (self.get_llm_response(prompt, temperature=0.4, max_tokens=180) or '').strip()
+        resp = (self.get_llm_response(prompt, temperature=0.65, max_tokens=280) or '').strip()
         llm_ms = (time.time() - t2) * 1000
 
-        ai_output = self.enforce_concise(resp, max_sentences=3, max_words=80)
+        ai_output = self.enforce_concise(resp, max_sentences=4, max_words=130)
+        if not ai_output:
+            raise RuntimeError('memory_confirmation_empty_response')
         if ai_output:
             if self.language == "da":
-                prefixes = ("Dit minde minder os om", "Dit minde ligner")
+                prefixes = ("Det minder os om", "Det forbinder sig også med", "Det forbinder sig med")
                 if not ai_output.startswith(prefixes):
-                    ai_output = f"Dit minde minder os om {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
+                    ai_output = f"Det minder os om {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
             else:
-                prefixes = ("Your memory reminds us of", "Your memory is similar to")
+                prefixes = ("This reminds us of", "It also connects to", "This connects with")
                 if not ai_output.startswith(prefixes):
-                    ai_output = f"Your memory reminds us of {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
-        if not ai_output:
-            first = source_data[0].get("metadata", {})
-            memory_text = str(first.get("text") or first.get("memory") or source_data[0].get("text") or "").strip()
-            quoted = memory_text[:120] + ('…' if len(memory_text) > 120 else '')
-            name = str(first.get("name") or "").strip()
-            location = str(first.get("location") or "").strip()
-            if self.language == "da":
-                if name and location:
-                    ai_output = f'Dit minde minder os om {name} fra {location}, som beskrev "{quoted}". Det forbinder sig med det samme ønske om, at noget vigtigt ikke går tabt.'
-                elif name:
-                    ai_output = f'Dit minde minder os om {name}, som beskrev "{quoted}". Det forbinder sig med det samme ønske om, at noget vigtigt ikke går tabt.'
-                else:
-                    ai_output = f'Dit minde minder os om en anden, der beskrev "{quoted}". Det forbinder sig med det samme ønske om, at noget vigtigt ikke går tabt.'
-            else:
-                if name and location:
-                    ai_output = f'Your memory reminds us of {name} from {location}, who described "{quoted}". It connects to the same wish that something important should not be lost.'
-                elif name:
-                    ai_output = f'Your memory reminds us of {name}, who described "{quoted}". It connects to the same wish that something important should not be lost.'
-                else:
-                    ai_output = f'Your memory reminds us of someone who described "{quoted}". It connects to the same wish that something important should not be lost.'
+                    ai_output = f"This reminds us of {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
 
         return {
             "ai_output": ai_output,
@@ -973,21 +348,4 @@ Return exactly one JSON object and nothing else:
         }
 
     def retrieve_session(self, session_id: str, k: int = 20) -> List[Dict[str, Any]]:
-        if self.retriever_provider == 'local':
-            docs = [
-                d for d in self._chat_docs
-                if str(d.get('metadata', {}).get('session_id') or '') == session_id
-            ]
-            docs.sort(key=lambda d: d.get('metadata', {}).get('date', ''), reverse=True)
-            return docs[:k]
-
-        docs = self.retrieve_docs(session_id, self.index_name_chat, excluded_session_id=None, k=k)
-
-        def parse_dt(d):
-            try:
-                return datetime.fromisoformat(d.replace("Z", ""))
-            except Exception:
-                return datetime.min.replace(tzinfo=timezone.utc)
-
-        docs.sort(key=lambda d: parse_dt(d["metadata"].get("date", "")), reverse=True)
-        return docs
+        return self._local_corpus.retrieve_session(session_id, k=k)

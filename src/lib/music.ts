@@ -1,3 +1,5 @@
+import { getAudioContextCtor } from './browserApis'
+
 // Singleton background music controller.
 // Audio element creation is deferred until first real playback/unlock to avoid
 // downloading the full background track on initial page load.
@@ -82,8 +84,7 @@ class BackgroundMusicController {
     el.loop = true
     el.volume = this.original
     // iOS requires both property and attribute for inline playback.
-    // @ts-ignore
-    el.playsInline = true
+    ;(el as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
     try { el.setAttribute('playsinline', 'true') } catch {}
     // Defer full download until playback is requested.
     el.preload = 'none'
@@ -95,7 +96,7 @@ class BackgroundMusicController {
     if (!this.audio) return
 
     if (!this.ctx && this.unlocked) {
-      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext
+      const Ctx = getAudioContextCtor()
       if (Ctx) this.ctx = new Ctx()
     }
     if (this.ctx && !this.source) {

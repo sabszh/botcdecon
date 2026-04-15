@@ -21,7 +21,6 @@ services:
     depends_on:
       - db
     environment:
-      RETRIEVER_PROVIDER: ${RETRIEVER_PROVIDER:-local}
       DATA_JSON_PATH: ${DATA_JSON_PATH:-data/all.json}
       TTS_PROVIDER: ${TTS_PROVIDER:-elevenlabs}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://continuonus:continuonus@db:5432/continuonus}

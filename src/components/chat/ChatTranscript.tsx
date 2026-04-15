@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import type { CSSProperties, RefObject } from 'react'
 import type { ChatMessage, Language } from './types'
 
 type Props = {
@@ -21,13 +21,18 @@ export default function ChatTranscript ({
   onFollowLatest
 }: Props) {
   const hasPendingMessage = messages.some(message => message.pending)
+  const transcriptScrollStyle: CSSProperties = {
+    WebkitOverflowScrolling: 'touch',
+    overscrollBehavior: 'contain',
+    touchAction: 'pan-y'
+  }
 
   return (
     <>
       <div
         ref={chatListRef}
         className={`mt-3 flex-1 min-h-0 overflow-y-auto scroll-touch ${isIOS ? '' : 'no-scrollbar'}`}
-        style={{ WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain', touchAction: 'pan-y' as any }}
+        style={transcriptScrollStyle}
       >
         <div className='flex min-h-full flex-col justify-end pb-1'>
           {messages.map(m => (
@@ -35,17 +40,10 @@ export default function ChatTranscript ({
               <div className={`max-w-[80%] whitespace-pre-wrap rounded-[2rem] px-5 py-4 text-2xl leading-relaxed text-black ${m.role === 'user' ? 'surface-bubble-strong' : 'surface-bubble'}`}>
                 {m.pending
                   ? (
-                    <div className='flex flex-col gap-2'>
-                      <div className='typing-dots'>
-                        <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                        <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                        <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
-                      </div>
-                      {m.pendingLabel && (
-                        <div className='text-base leading-snug text-black/55'>
-                          {m.pendingLabel}
-                        </div>
-                      )}
+                    <div className='typing-dots' aria-label={language === 'da' ? 'Skriver' : 'Typing'}>
+                      <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
+                      <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
+                      <span style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}/>
                     </div>
                     )
                   : m.content}
@@ -67,7 +65,7 @@ export default function ChatTranscript ({
       </div>
 
       {showFollow && (
-        <div className='pointer-events-none relative -mt-2 mb-1 flex justify-end'>
+        <div className='pointer-events-none absolute bottom-[7.5rem] right-2 z-30 flex justify-end'>
           <button
             type='button'
             className='surface-pill pointer-events-auto rounded-full px-4 py-1.5 text-base text-black transition hover:bg-white hover:text-black'

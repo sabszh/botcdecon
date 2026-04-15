@@ -7,7 +7,8 @@
       "Bash(magick --version)",
       "Bash(magick.exe --version)",
       "Bash(node:*)",
-      "Bash(ffmpeg:*)"
+      "Bash(ffmpeg:*)",
+      "Bash(.venv/Scripts/python.exe *)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useRef, useState, Suspense, lazy } from 'react'
+import { Suspense, lazy, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AppContext } from '../context/AppContext'
 import { bgm } from '../lib/music'
 import MapCanvas from '../map/Canvas'
@@ -13,7 +13,7 @@ const LANGUAGE_CARD_DELAY_MS = 140
 type ScreenPhase = 'splash' | 'chat' | 'returning'
 
 export default function Home() {
-  const performanceProfile = React.useMemo(() => getDevicePerformanceProfile(), [])
+  const performanceProfile = useMemo(() => getDevicePerformanceProfile(), [])
   const [language, setLanguage] = useState<'en' | 'da' | null>(null)
   const [screenPhase, setScreenPhase] = useState<ScreenPhase>('splash')
   const [showLanguageCard, setShowLanguageCard] = useState(true)
@@ -181,7 +181,7 @@ export default function Home() {
       >
         {screenPhase === 'splash'
           ? <SplashHippoCanvas reducedPerformance={performanceProfile.reducedEffects} />
-          : <MapCanvas key={language} onObjLoaded={() => {}} freezeMotion={screenPhase === 'returning'} reducedPerformance={performanceProfile.reducedEffects} />}
+          : <MapCanvas onObjLoaded={() => {}} freezeMotion={screenPhase === 'returning'} reducedPerformance={performanceProfile.reducedEffects} />}
       </div>
       <div className={`absolute inset-0 -z-5 bg-gradient-to-br from-white/20 via-white/10 to-white/20 transition-opacity duration-[320ms] ease-out ${screenPhase === 'returning' ? 'opacity-90' : 'opacity-100'}`} />
       {screenPhase === 'returning' && (

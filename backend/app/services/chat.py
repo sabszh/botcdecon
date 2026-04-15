@@ -2,35 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 from ...chatbot import ChatBot  # type: ignore
 from ..settings import settings
 from .archive_db import archive_is_available, get_archive_store
+from .audio_jobs import AudioJob, AudioJobStore
+from .chat_formatting import sanitize_model_text
 from .tts import get_tts_service, TTSService
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_model_text(text: str) -> str:
-  if not text:
-    return ''
-  value = text.replace('\r\n', '\n')
-  value = re.sub(r'(?m)^\s*[-*]\s+', '', value)
-  value = re.sub(r'(?m)^#{1,6}\s*', '', value)
-  value = re.sub(r'\*\*(.*?)\*\*', r'\1', value)
-  value = re.sub(r'__(.*?)__', r'\1', value)
-  value = re.sub(r'\*(.*?)\*', r'\1', value)
-  value = re.sub(r'_(.*?)_', r'\1', value)
-  value = re.sub(r'`([^`]*)`', r'\1', value)
-  value = value.replace('*', '')
-  value = re.sub(r'\n{3,}', '\n\n', value)
-  return value.strip()
 
 
 @dataclass
@@ -45,25 +29,17 @@ class ChatResult:
   audio_turn_id: Optional[str] = None
   audio_status: str = 'none'
 
-
-@dataclass
-class AudioJob:
-  status: str = 'pending'
-  audio_bytes: Optional[bytes] = None
-  content_type: str = 'audio/mpeg'
-  error: Optional[str] = None
-  created_at: float = field(default_factory=time.time)
-  tts_ms: float = 0.0
-
-
 class ChatService:
   def __init__(self) -> None:
     self._bot: Optional[ChatBot] = None
     self._init_error: Optional[str] = None
     self._tts: Optional[TTSService] = None
-    self._archive = get_archive_store()
-    self._audio_jobs: Dict[str, AudioJob] = {}
-    self._audio_job_ttl_sec = 600
+    try:
+      self._archive = get_archive_store()
+    except RuntimeError as exc:
+      logger.warning('Archive store unavailable (%s); persistence disabled', exc)
+      self._archive = None
+    self._audio_jobs = AudioJobStore(None)
 
     if settings.has_llm_backends:
       try:
@@ -84,6 +60,7 @@ class ChatService:
     except Exception as exc:  # pragma: no cover - defensive
       logger.exception('Failed to initialise TTS service: %s', exc)
       self._tts = None
+    self._audio_jobs = AudioJobStore(self._tts)
 
   def _schedule_background(self, coro: asyncio.Future | asyncio.Task | Any, *, label: str) -> None:
     async def runner() -> None:
@@ -94,7 +71,7 @@ class ChatService:
 
     asyncio.create_task(runner())
 
-  async def _upsert_vectorstore_background(
+  async def _store_session_memory_background(
     self,
     *,
     user_input: str,
@@ -109,7 +86,7 @@ class ChatService:
       return
     try:
       await asyncio.to_thread(
-        self._bot.upsert_vectorstore,
+        self._bot.store_session_memory,
         user_input,
         ai_output,
         user_name,
@@ -118,7 +95,7 @@ class ChatService:
         continuous_data
       )
     except Exception as exc:  # pragma: no cover - defensive
-      logger.exception('Vectorstore upsert failed (%s): %s', label, exc)
+      logger.exception('Local session memory storage failed (%s): %s', label, exc)
 
   async def chat(
     self,
@@ -139,7 +116,7 @@ class ChatService:
       "[CHAT] mode=%s session=%s lang=%s user=%s msg_len=%d history_len=%d",
       mode, session_id, language, user_name, len(message or ""), len(history or [])
     )
-    self._cleanup_audio_jobs()
+    self._audio_jobs.cleanup()
 
     if self._bot:
       try:
@@ -151,9 +128,11 @@ class ChatService:
             language,
             2
           )
-          ai_output = _sanitize_model_text((response.get('ai_output') or '').strip()) or self._handle_memory_mode(message, language)
+          ai_output = sanitize_model_text((response.get('ai_output') or '').strip())
+          if not ai_output:
+            raise RuntimeError('empty_memory_confirmation')
           timings = response.get('timings', {}) or {}
-          audio_turn_id = await self._queue_audio(ai_output, language)
+          audio_turn_id = await self._audio_jobs.queue(ai_output, language)
           self._schedule_background(
             self._persist_archive_turn(
               session_id=session_id,
@@ -169,16 +148,16 @@ class ChatService:
             label='memory_archive_persist'
           )
           self._schedule_background(
-            self._upsert_vectorstore_background(
+            self._store_session_memory_background(
               user_input=message,
               ai_output=ai_output,
               user_name=user_name,
               user_location=user_location,
               session_id=session_id,
               continuous_data=continuous_data,
-              label='memory_vector_upsert'
+              label='memory_session_memory'
             ),
-            label='memory_vector_upsert'
+            label='memory_session_memory'
           )
           total_ms = (time.perf_counter() - t_start) * 1000
           return ChatResult(
@@ -260,12 +239,14 @@ class ChatService:
           include_history,
           15
         )
-        ai_output = _sanitize_model_text(response.get('ai_output', ''))
+        ai_output = sanitize_model_text(response.get('ai_output', ''))
+        if not ai_output:
+          raise RuntimeError('empty_question_response')
         timings = response.get('timings', {}) or {}
 
-        # Persist this Q/A off-path.
+        # Keep session memory off the critical path.
         asyncio.create_task(asyncio.to_thread(
-          self._bot.upsert_vectorstore,
+          self._bot.store_session_memory,
           message,
           ai_output,
           user_name,
@@ -285,7 +266,7 @@ class ChatService:
           continuous_data=continuous_data
         )
 
-        audio_turn_id = await self._queue_audio(ai_output, language)
+        audio_turn_id = await self._audio_jobs.queue(ai_output, language)
         audio_status = 'pending' if audio_turn_id else 'none'
 
         total_ms = (time.perf_counter() - t_start) * 1000
@@ -313,7 +294,7 @@ class ChatService:
         )
       except Exception as exc:  # pragma: no cover - defensive
         logger.exception('Chat pipeline failed: %s', exc)
-        fallback = _sanitize_model_text(self._fallback_reply(message, language))
+        error_text = f'chat_pipeline_error: {exc}'
         await self._persist_archive_turn(
           session_id=session_id,
           language=language,
@@ -321,24 +302,23 @@ class ChatService:
           user_location=user_location,
           mode=mode,
           user_message=message,
-          bot_message=fallback,
-          error=f'chat_pipeline_error: {exc}',
+          bot_message='',
+          error=error_text,
           continuous_data=continuous_data
         )
-        audio_turn_id = await self._queue_audio(fallback, language)
         total_ms = (time.perf_counter() - t_start) * 1000
         return ChatResult(
-          message=fallback,
+          message='',
           session_id=session_id,
           session_history=[],
-          handoff_action='continue' if mode == 'handoff' else None,
-          error=f'chat_pipeline_error: {exc}',
-          audio_turn_id=audio_turn_id,
-          audio_status='pending' if audio_turn_id else 'none',
-          debug={'total_ms': round(total_ms, 2), 'mode': 'fallback_error'}
+          handoff_action=None,
+          error=error_text,
+          audio_turn_id=None,
+          audio_status='none',
+          debug={'total_ms': round(total_ms, 2), 'mode': 'error'}
         )
 
-    fallback = _sanitize_model_text(self._fallback_reply(message, language))
+    error_text = self._init_error or 'chatbot_unavailable'
     await self._persist_archive_turn(
       session_id=session_id,
       language=language,
@@ -346,59 +326,24 @@ class ChatService:
       user_location=user_location,
       mode=mode,
       user_message=message,
-      bot_message=fallback,
-      error=self._init_error,
+      bot_message='',
+      error=error_text,
       continuous_data=continuous_data
     )
-    audio_turn_id = await self._queue_audio(fallback, language)
     total_ms = (time.perf_counter() - t_start) * 1000
     return ChatResult(
-      message=fallback,
+      message='',
       session_id=session_id,
       session_history=[],
-      handoff_action='continue' if mode == 'handoff' else None,
-      error=self._init_error,
-      audio_turn_id=audio_turn_id,
-      audio_status='pending' if audio_turn_id else 'none',
-      debug={'total_ms': round(total_ms, 2), 'mode': 'fallback_no_bot'}
+      handoff_action=None,
+      error=error_text,
+      audio_turn_id=None,
+      audio_status='none',
+      debug={'total_ms': round(total_ms, 2), 'mode': 'error_no_bot'}
     )
 
   def get_audio_job(self, turn_id: str) -> Optional[AudioJob]:
-    self._cleanup_audio_jobs()
     return self._audio_jobs.get(turn_id)
-
-  async def _queue_audio(self, text: str, language: str) -> Optional[str]:
-    if not text or not self._tts:
-      return None
-    turn_id = uuid4().hex
-    self._audio_jobs[turn_id] = AudioJob(status='pending')
-    asyncio.create_task(self._run_audio_job(turn_id, text, language))
-    return turn_id
-
-  async def _run_audio_job(self, turn_id: str, text: str, language: str) -> None:
-    job = self._audio_jobs.get(turn_id)
-    if not job:
-      return
-    t_start = time.perf_counter()
-    try:
-      audio = await self._tts.synthesize_bytes(text, language=language)
-      job.tts_ms = (time.perf_counter() - t_start) * 1000
-      if not audio:
-        job.status = 'error'
-        job.error = 'tts_empty'
-        return
-      job.audio_bytes = audio
-      job.status = 'ready'
-      job.content_type = 'audio/mpeg'
-    except Exception as exc:  # pragma: no cover - defensive
-      job.status = 'error'
-      job.error = str(exc)
-
-  def _cleanup_audio_jobs(self) -> None:
-    now = time.time()
-    expired = [k for k, v in self._audio_jobs.items() if (now - v.created_at) > self._audio_job_ttl_sec]
-    for key in expired:
-      self._audio_jobs.pop(key, None)
 
   async def _persist_archive_turn(
     self,
@@ -454,19 +399,6 @@ class ChatService:
         content = content[:200] + '…'
       parts.append(f"{role}: {content}")
     return '\n'.join(parts)
-
-  @staticmethod
-  def _fallback_reply(user_input: str, language: str) -> str:
-    if language == 'da':
-      return 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.'
-    return 'I could not fetch an answer right now. Please try again.'
-
-  @staticmethod
-  def _handle_memory_mode(user_input: str, language: str) -> str:
-    if (language or '').lower() == 'da':
-      return "Tak fordi du delte."
-    return "Thank you for sharing."
-
 
 @lru_cache
 def get_chat_service() -> ChatService:

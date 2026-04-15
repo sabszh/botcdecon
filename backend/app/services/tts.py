@@ -20,14 +20,10 @@ class TTSService:
     if not text or not self._provider:
       return None
     loop = asyncio.get_running_loop()
-    try:
-      return await loop.run_in_executor(
-        None,
-        lambda: self._provider.synthesize_bytes(text=text, language=language, speed=speed)
-      )
-    except Exception as exc:  # pragma: no cover - defensive
-      logger.exception('Failed to synthesise speech: %s', exc)
-      return None
+    return await loop.run_in_executor(
+      None,
+      lambda: self._provider.synthesize_bytes(text=text, language=language, speed=speed)
+    )
 
 
 _tts_singleton: Optional[TTSService] = None
