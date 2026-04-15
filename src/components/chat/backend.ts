@@ -7,8 +7,8 @@ export type BackendChatResponse = {
   audio_url?: string | null
   audioTurnId?: string | null
   audio_turn_id?: string | null
-  handoffAction?: 'continue' | 'return' | null
-  handoff_action?: 'continue' | 'return' | null
+  handoffAction?: 'continue' | 'return' | 'question' | 'memory' | null
+  handoff_action?: 'continue' | 'return' | 'question' | 'memory' | null
 }
 
 const CHAT_ENDPOINT = '/api/chat'

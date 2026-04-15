@@ -1,6 +1,6 @@
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Vector3, MOUSE, TOUCH } from 'three'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import { useCallback, useContext, useEffect, useRef } from 'react'
 import { AppContext } from '../context/AppContext'
@@ -8,12 +8,22 @@ import { AppContext } from '../context/AppContext'
 import ObjectMesh from './ObjectMesh'
 import PlaneMesh from './PlaneMesh'
 
+function FpsThrottle ({ fps }: { fps: number }) {
+  const { invalidate } = useThree()
+  useEffect(() => {
+    const id = setInterval(() => invalidate(), 1000 / fps)
+    return () => clearInterval(id)
+  }, [fps, invalidate])
+  return null
+}
+
 type Props = {
   onObjLoaded: () => void
   freezeMotion?: boolean
+  reducedPerformance?: boolean
 }
 
-export default function MapCanvas ({ onObjLoaded, freezeMotion = false }: Props) {
+export default function MapCanvas ({ onObjLoaded, freezeMotion = false, reducedPerformance = false }: Props) {
   const { appState, setAppState } = useContext(AppContext)
 
   useEffect(() => {
@@ -27,18 +37,25 @@ export default function MapCanvas ({ onObjLoaded, freezeMotion = false }: Props)
   }
 
   return (
-    <Canvas shadows='basic' onPointerDown={pointerDown}>
-      <CustomCamera freezeMotion={freezeMotion}/>
+    <Canvas
+      dpr={reducedPerformance ? [1, 1.1] : [1, 1.5]}
+      frameloop={reducedPerformance ? 'demand' : 'always'}
+      performance={{ min: 0.5 }}
+      gl={{ antialias: !reducedPerformance, alpha: true, powerPreference: reducedPerformance ? 'low-power' : 'high-performance' }}
+      onPointerDown={pointerDown}
+    >
+      {reducedPerformance && <FpsThrottle fps={30} />}
+      <CustomCamera freezeMotion={freezeMotion} reducedPerformance={reducedPerformance}/>
       <ambientLight intensity={5}/>
-      <PlaneMesh receiveShadow/>
-      <ObjectMesh onObjLoaded={onObjLoaded} castShadow receiveShadow/>
-      <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={1}/>
+      <PlaneMesh reducedPerformance={reducedPerformance}/>
+      <ObjectMesh onObjLoaded={onObjLoaded} reducedPerformance={reducedPerformance}/>
+      {!reducedPerformance && <pointLight position={[-600, -500, 5000]} color={0xffffff} intensity={0.9}/>}
       <fog attach='fog' args={[0xb2a4b6, 700, 4400]}/>
     </Canvas>
   )
 }
 
-function CustomCamera ({ freezeMotion = false }: { freezeMotion?: boolean }) {
+function CustomCamera ({ freezeMotion = false, reducedPerformance = false }: { freezeMotion?: boolean, reducedPerformance?: boolean }) {
   const { appState, setAppState } = useContext(AppContext)
   const controls = useRef<OrbitControlsImpl>(null)
   const zoomingRef = useRef(false)
@@ -75,12 +92,12 @@ function CustomCamera ({ freezeMotion = false }: { freezeMotion?: boolean }) {
 
     if (appState.viewMode === 'post') {
       if (freezeMotion) return
-      angleRef.current = (angleRef.current + delta * 0.18) % (Math.PI * 2)
-      const radius = 260
+      angleRef.current = (angleRef.current + delta * (reducedPerformance ? 0.07 : 0.18)) % (Math.PI * 2)
+      const radius = reducedPerformance ? 180 : 260
       const cx = -150 + Math.cos(angleRef.current) * radius
       const cy = Math.sin(angleRef.current) * radius
       driftTarget.current.set(cx, cy, zoomPosition.current.z)
-      state.camera.position.lerp(driftTarget.current, 0.015)
+      state.camera.position.lerp(driftTarget.current, reducedPerformance ? 0.01 : 0.015)
       return
     }
 
@@ -118,8 +135,8 @@ function CustomCamera ({ freezeMotion = false }: { freezeMotion?: boolean }) {
         maxPolarAngle={Math.PI / 1.7}
         minAzimuthAngle={-Math.PI / 8}
         maxAzimuthAngle={Math.PI / 8}
-        enableDamping
-        dampingFactor={0.03}/>
+        enableDamping={!reducedPerformance}
+        dampingFactor={reducedPerformance ? 0 : 0.03}/>
     </PerspectiveCamera>
   )
 }

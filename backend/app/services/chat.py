@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -14,6 +15,22 @@ from .archive_db import archive_is_available, get_archive_store
 from .tts import get_tts_service, TTSService
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_model_text(text: str) -> str:
+  if not text:
+    return ''
+  value = text.replace('\r\n', '\n')
+  value = re.sub(r'(?m)^\s*[-*]\s+', '', value)
+  value = re.sub(r'(?m)^#{1,6}\s*', '', value)
+  value = re.sub(r'\*\*(.*?)\*\*', r'\1', value)
+  value = re.sub(r'__(.*?)__', r'\1', value)
+  value = re.sub(r'\*(.*?)\*', r'\1', value)
+  value = re.sub(r'_(.*?)_', r'\1', value)
+  value = re.sub(r'`([^`]*)`', r'\1', value)
+  value = value.replace('*', '')
+  value = re.sub(r'\n{3,}', '\n\n', value)
+  return value.strip()
 
 
 @dataclass
@@ -127,8 +144,16 @@ class ChatService:
     if self._bot:
       try:
         if mode == 'memory':
-          logger.info('[CHAT] MEMORY mode: return immediately and persist off-path')
-          ai_output = self._handle_memory_mode(message, language)
+          logger.info('[CHAT] MEMORY mode: generating confirmation reply')
+          response = await asyncio.to_thread(
+            self._bot.memory_confirmation,
+            message,
+            language,
+            2
+          )
+          ai_output = _sanitize_model_text((response.get('ai_output') or '').strip()) or self._handle_memory_mode(message, language)
+          timings = response.get('timings', {}) or {}
+          audio_turn_id = await self._queue_audio(ai_output, language)
           self._schedule_background(
             self._persist_archive_turn(
               session_id=session_id,
@@ -160,8 +185,9 @@ class ChatService:
             message=ai_output,
             session_id=session_id,
             session_history=[],
-            audio_status='none',
-            debug={'total_ms': round(total_ms, 2), 'mode': 'memory'}
+            audio_turn_id=audio_turn_id,
+            audio_status='pending' if audio_turn_id else 'none',
+            debug={**timings, 'total_ms': round(total_ms, 2), 'mode': 'memory'}
           )
 
         if mode == 'handoff':
@@ -192,6 +218,34 @@ class ChatService:
             debug={'total_ms': round(total_ms, 2), 'mode': 'handoff'}
           )
 
+        if mode == 'followup':
+          logger.info('[CHAT] FOLLOWUP mode: classifying next step')
+          handoff_action = await asyncio.to_thread(
+            self._bot.classify_followup,
+            message,
+            language
+          )
+          await self._persist_archive_turn(
+            session_id=session_id,
+            language=language,
+            user_name=user_name,
+            user_location=user_location,
+            mode=mode,
+            user_message=message,
+            bot_message=handoff_action,
+            error=None,
+            continuous_data=continuous_data
+          )
+          total_ms = (time.perf_counter() - t_start) * 1000
+          return ChatResult(
+            message='',
+            session_id=session_id,
+            session_history=[],
+            handoff_action=handoff_action,
+            audio_status='none',
+            debug={'total_ms': round(total_ms, 2), 'mode': 'followup'}
+          )
+
         logger.info('[CHAT] QUESTION mode: invoking pipeline via thread executor')
         response = await asyncio.to_thread(
           self._bot.pipeline,
@@ -206,7 +260,7 @@ class ChatService:
           include_history,
           15
         )
-        ai_output = response.get('ai_output', '')
+        ai_output = _sanitize_model_text(response.get('ai_output', ''))
         timings = response.get('timings', {}) or {}
 
         # Persist this Q/A off-path.
@@ -259,7 +313,7 @@ class ChatService:
         )
       except Exception as exc:  # pragma: no cover - defensive
         logger.exception('Chat pipeline failed: %s', exc)
-        fallback = self._fallback_reply(message, language)
+        fallback = _sanitize_model_text(self._fallback_reply(message, language))
         await self._persist_archive_turn(
           session_id=session_id,
           language=language,
@@ -284,7 +338,7 @@ class ChatService:
           debug={'total_ms': round(total_ms, 2), 'mode': 'fallback_error'}
         )
 
-    fallback = self._fallback_reply(message, language)
+    fallback = _sanitize_model_text(self._fallback_reply(message, language))
     await self._persist_archive_turn(
       session_id=session_id,
       language=language,
@@ -410,7 +464,7 @@ class ChatService:
   @staticmethod
   def _handle_memory_mode(user_input: str, language: str) -> str:
     if (language or '').lower() == 'da':
-      return "Tak for at dele din erindring."
+      return "Tak fordi du delte."
     return "Thank you for sharing."
 
 

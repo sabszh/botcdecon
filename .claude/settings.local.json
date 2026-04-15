@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\Users\\\\szh\\\\Desktop\\\\EER\\\\continuonus-app\\\\public\\\\layers\\\\\")",
+      "Bash(node -e \"console.log\\('node ok'\\)\")",
+      "Bash(node -e ':*)",
+      "Bash(magick --version)",
+      "Bash(magick.exe --version)",
+      "Bash(node:*)",
+      "Bash(ffmpeg:*)"
+    ]
+  }
+}

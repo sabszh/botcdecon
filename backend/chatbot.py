@@ -27,6 +27,10 @@ class StructuredHandoffDecision(BaseModel):
     decision: Literal["continue", "return"]
 
 
+class StructuredFollowupDecision(BaseModel):
+    decision: Literal["question", "memory", "continue", "return"]
+
+
 ParsedModelT = TypeVar("ParsedModelT", bound=BaseModel)
 
 
@@ -244,7 +248,12 @@ RESPONSE RULES:
 - avoid poetic language
 - final answer must be 3–5 sentences
 - directly answer the user's question in the first sentence
-- do not use names; refer to people as "a contributor", "visitor", "participant", or "guest"
+- make the answer feel connected to real people in the world
+- if a retrieved entry includes a name, use that name
+- if both name and location are available, prefer phrasing like "Sara from Denmark said..."
+- if there is no name, use phrasing like "someone said" or "another person said"
+- only mention a location when it is explicitly available in the retrieved entry
+- do not invent names or locations
 - you may analyse patterns across many retrieved entries, but mention at most five contributors directly
 - use only retrieved details that are relevant
 - when helpful, use map metadata such as emotions, distances, dates, locations, and point coordinates
@@ -272,7 +281,12 @@ SVARREGLER:
 - undgå poetisk sprog
 - det endelige svar skal være 3–5 sætninger
 - besvar brugerens spørgsmål direkte i den første sætning
-- brug ikke navne; omtæl folk som "en bidragyder", "besøgende", "deltager" eller "gæst"
+- få svaret til at føles forbundet med virkelige mennesker i verden
+- hvis et fund har et navn, så nævn navnet
+- hvis et fund har både navn og lokation, så foretræk formuleringer som "Sara fra Danmark sagde ..."
+- hvis der ikke er noget navn, så brug formuleringer som "nogen sagde" eller "en anden sagde"
+- nævn kun en lokation, hvis den faktisk findes i det fundne materiale
+- opfind ikke navne eller lokationer
 - du må gerne analysere mønstre på tværs af mange fund, men nævn højst fem bidragydere direkte
 - brug kun detaljer, der er relevante for spørgsmålet
 - brug gerne kortmetadata som følelser, afstande, datoer, lokationer og koordinater, når det styrker svaret
@@ -296,8 +310,7 @@ Returnér kun det endelige svar til den besøgende som almindelig tekst.
 You are a helpful assistant for the "Carte de Continuonus" artwork.
 Connect the user's question with relevant insights from previous conversations.
 
-Tone: practical, kind, connecting people. Keep it short (1–3 sentences). Avoid names; say "a contributor said". Use at most five contributors.
-Vocabulary: When referring to people, vary your wording between "visitor", "contributor", "participant", or "guest" to keep phrasing fresh.
+Tone: practical, kind, connecting people. Keep it short (1–3 sentences). If a name is available, use it. If both name and location are available, prefer "Name from Location said...". If no name is available, use "someone said" or "another person said". Never invent names or locations. Use at most five contributors.
 
 User asked: "{user_input}"
 Previous response: "{llm_response}"
@@ -311,8 +324,7 @@ IMPORTANT: Respond in English and do not include any personal identifiers.
 Du er en hjælpsom assistent for kunstværket "Carte de Continuonus".
 Forbind brugerens spørgsmål med relevante indsigter fra tidligere samtaler.
 
-Tone: praktisk, venlig, forbinder mennesker. Hold det kort (1–3 sætninger). Undgå navne; sig "en bidragyder sagde". Brug højst fem bidrag.
-Ordvalg: Når du omtaler personer, så variér mellem "besøgende", "bidragyder", "deltager" eller "gæst" for at undgå gentagelser.
+Tone: praktisk, venlig, forbinder mennesker. Hold det kort (1–3 sætninger). Hvis et navn findes, så brug det. Hvis både navn og lokation findes, så foretræk "Navn fra Lokation sagde ...". Hvis der ikke er noget navn, så brug "nogen sagde" eller "en anden sagde". Opfind aldrig navne eller lokationer. Brug højst fem bidrag.
 
 Bruger spurgte: "{user_input}"
 Tidligere svar: "{llm_response}"
@@ -320,6 +332,64 @@ Relevante tidligere samtaler (op til fem): {past_chat}
 Nuværende session: {chat_history}
 
 VIGTIGT: Svar på dansk og undlad personlige oplysninger.
+"""
+
+    def default_prompt_memory_confirmation(self, original_data: str, user_input: str) -> str:
+        if self.language == "en":
+            return f"""
+You are writing a short confirmation after a museum visitor has shared a memory.
+
+GOAL:
+- acknowledge their contribution indirectly through similarity
+- connect it to one or two memories from previous contributors
+
+RULES:
+- 2 to 3 sentences
+- start with "Your memory reminds us of" or "Your memory is similar to"
+- mention one or two contributors only
+- if a contributor has a name, use that name
+- if both name and location are available, prefer phrasing like "Sara from Denmark also thought that..."
+- if there is no name, use phrasing like "someone also said" or "another person said"
+- only mention a location if it is actually available
+- do not invent names or locations
+- use plain, clear language
+- if helpful, include one short quote
+- do not mention missing data or the retrieval process
+- return only the final visitor-facing text
+
+INPUT:
+{{
+  "visitor_memory": "{user_input}",
+  "retrieved_contributor_context": "{original_data}"
+}}
+"""
+
+        return f"""
+Du skriver en kort bekræftelse, efter at en museumsbesøgende har delt en erindring.
+
+MÅL:
+- anerkend bidraget indirekte gennem lighed
+- forbind det med en eller to erindringer fra tidligere bidragydere
+
+REGLER:
+- 2 til 3 sætninger
+- begynd med "Dit minde minder os om" eller "Dit minde ligner"
+- nævn kun en eller to bidragydere
+- hvis en bidragyder har et navn, så brug navnet
+- hvis både navn og lokation findes, så foretræk formuleringer som "Sara fra Danmark tænkte også, at ..."
+- hvis der ikke er noget navn, så brug formuleringer som "nogen sagde også" eller "en anden sagde"
+- nævn kun en lokation, hvis den faktisk er tilgængelig
+- opfind ikke navne eller lokationer
+- brug et enkelt og klart sprog
+- brug gerne ét kort citat, hvis det hjælper
+- nævn ikke manglende data eller selve søgningen
+- returnér kun den endelige tekst til den besøgende
+
+INPUT:
+{{
+  "visitor_memory": "{user_input}",
+  "retrieved_contributor_context": "{original_data}"
+}}
 """
 
     # ---------- retrieval ----------
@@ -455,11 +525,12 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
             md = doc["metadata"]
             if not chat:
                 content = _shorten(doc.get("text", ""), 220)
+                name = _shorten(md.get("name", ""), 60) or "unknown"
                 location = _shorten(md.get("location", ""), 60) or "unknown"
                 date = _shorten(md.get("date", ""), 40) or "unknown"
                 points = self._format_points(md.get("points"))
                 parts.append(
-                    f'Contributor #{idx}: memory="{content}" | location={location} | date={date} | points={points}'
+                    f'Contributor #{idx}: name={name} | location={location} | memory="{content}" | date={date} | points={points}'
                 )
             else:
                 q = _shorten(md.get("user_question", "Unknown Question"), 120)
@@ -528,6 +599,43 @@ VIGTIGT: Svar på dansk og undlad personlige oplysninger.
             return "continue"
         return None
 
+    def _quick_followup_decision(self, user_input: str) -> Optional[str]:
+        normalized = self._normalize_handoff_reply(user_input)
+        if not normalized:
+            return "return"
+
+        if "?" in user_input:
+            return "question"
+
+        handoff_decision = self._quick_handoff_decision(user_input)
+        if handoff_decision:
+            return handoff_decision
+
+        if self.language == "da":
+            question_starts = {
+                "hvad", "hvordan", "hvorfor", "hvornår", "hvor", "hvem",
+                "hvilken", "hvilke", "kan", "kunne", "vil", "ville", "er", "har",
+            }
+            memory_markers = {
+                "jeg husker", "jeg kan huske", "jeg tænker på", "jeg følte", "jeg følte mig",
+                "jeg oplevede", "for mig", "mit minde", "min erindring", "det minder mig om",
+            }
+        else:
+            question_starts = {
+                "what", "how", "why", "when", "where", "who", "which",
+                "can", "could", "would", "is", "are", "do", "does", "did", "has", "have",
+            }
+            memory_markers = {
+                "i remember", "i can remember", "i felt", "i was", "for me",
+                "my memory", "this reminds me", "i experienced", "i keep thinking about",
+            }
+
+        if any(normalized.startswith(prefix + " ") or normalized == prefix for prefix in question_starts):
+            return "question"
+        if any(marker in normalized for marker in memory_markers):
+            return "memory"
+        return None
+
     def classify_handoff(self, user_input: str, language: Optional[str] = None) -> str:
         if language:
             self.language = language.lower()
@@ -590,6 +698,88 @@ Return exactly one JSON object and nothing else:
         if 'RETURN' in response.upper():
             return 'return'
         return 'continue'
+
+    def classify_followup(self, user_input: str, language: Optional[str] = None) -> str:
+        if language:
+            self.language = language.lower()
+
+        quick_decision = self._quick_followup_decision(user_input)
+        if quick_decision:
+            return quick_decision
+
+        if self.language == "da":
+            prompt = f"""
+Du afgør, hvad en museumsbesøgende prøver at gøre efter at have fået et svar.
+
+MULIGE BESLUTNINGER:
+- question: personen stiller et nyt spørgsmål
+- memory: personen deler et nyt minde eller en ny erindring
+- continue: personen vil fortsætte, men har endnu ikke delt et konkret spørgsmål eller minde
+- return: personen vil afslutte, videre eller stoppe
+
+REGLER:
+- vælg question ved tydelige spørgsmål eller undersøgende formuleringer
+- vælg memory ved udsagn, personlige minder eller oplevelser
+- vælg continue ved korte svar som ja, gerne, mere eller lignende uden konkret indhold
+- vælg return ved nej, stop, færdig, videre eller afslutning
+- hvis svaret er uklart, men lyder som en oplevelse eller erindring, vælg memory
+- hvis svaret er uklart, men lyder som noget man vil vide, vælg question
+
+INPUT:
+{{
+  "visitor_reply": "{user_input}"
+}}
+
+PÅKRÆVET OUTPUT:
+Returnér præcis ét JSON-objekt og intet andet:
+{{
+  "decision": "question" | "memory" | "continue" | "return"
+}}
+"""
+        else:
+            prompt = f"""
+Decide what a museum visitor is trying to do after receiving an answer.
+
+POSSIBLE DECISIONS:
+- question: they are asking a new question
+- memory: they are sharing a new memory
+- continue: they want to continue, but have not yet provided a concrete question or memory
+- return: they want to stop, move on, or end the session
+
+RULES:
+- choose question for clear questions or investigative phrasing
+- choose memory for statements, personal recollections, or experiences
+- choose continue for short replies like yes, sure, more, okay, without concrete content
+- choose return for no, stop, finished, move on, or ending language
+- if ambiguous but it sounds like a recollection or experience, choose memory
+- if ambiguous but it sounds like something they want to know, choose question
+
+INPUT:
+{{
+  "visitor_reply": "{user_input}"
+}}
+
+REQUIRED OUTPUT:
+Return exactly one JSON object and nothing else:
+{{
+  "decision": "question" | "memory" | "continue" | "return"
+}}
+"""
+
+        response = (self.get_llm_response(
+            prompt,
+            temperature=0.0,
+            max_tokens=24,
+        ) or '').strip()
+        parsed = self._parse_llm_json(response, StructuredFollowupDecision)
+        if parsed:
+            return parsed.decision
+
+        upper = response.upper()
+        for key in ("QUESTION", "MEMORY", "RETURN", "CONTINUE"):
+            if key in upper:
+                return key.lower()
+        return "continue"
 
     # ---------- upsert ----------
     def upsert_vectorstore(
@@ -710,6 +900,75 @@ Return exactly one JSON object and nothing else:
                 "retrieval_ms": round(retrieval_ms, 2),
                 "llm_ms": round(llm_ms, 2),
                 "upsert_ms": round(upsert_ms, 2),
+            }
+        }
+
+    def memory_confirmation(self, user_input: str, language: Optional[str] = None, retrieval_k: int = 2) -> Dict[str, Any]:
+        import time
+
+        if language:
+            self.language = language.lower()
+
+        t1 = time.time()
+        source_data = self.retrieve_docs(user_input, self.index_name_bot, k=max(1, retrieval_k))
+        formatted_source_data = self.format_context(source_data[:2])
+        retrieval_ms = (time.time() - t1) * 1000
+
+        if not source_data:
+            if self.language == "da":
+                return {
+                    "ai_output": "Dit minde minder os om andre besøgendes forsøg på at fastholde noget vigtigt for fremtiden. Det føjer sig til et fælles kort af det, mennesker ønsker, at andre skal huske.",
+                    "source_data": [],
+                    "timings": {"retrieval_ms": round(retrieval_ms, 2), "llm_ms": 0.0},
+                }
+            return {
+                "ai_output": "Your memory reminds us of how other visitors have tried to hold on to something important for the future. It now becomes part of a shared map of what people want others to remember.",
+                "source_data": [],
+                "timings": {"retrieval_ms": round(retrieval_ms, 2), "llm_ms": 0.0},
+            }
+
+        t2 = time.time()
+        prompt = self.default_prompt_memory_confirmation(formatted_source_data, user_input)
+        resp = (self.get_llm_response(prompt, temperature=0.4, max_tokens=180) or '').strip()
+        llm_ms = (time.time() - t2) * 1000
+
+        ai_output = self.enforce_concise(resp, max_sentences=3, max_words=80)
+        if ai_output:
+            if self.language == "da":
+                prefixes = ("Dit minde minder os om", "Dit minde ligner")
+                if not ai_output.startswith(prefixes):
+                    ai_output = f"Dit minde minder os om {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
+            else:
+                prefixes = ("Your memory reminds us of", "Your memory is similar to")
+                if not ai_output.startswith(prefixes):
+                    ai_output = f"Your memory reminds us of {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
+        if not ai_output:
+            first = source_data[0].get("metadata", {})
+            memory_text = str(first.get("text") or first.get("memory") or source_data[0].get("text") or "").strip()
+            quoted = memory_text[:120] + ('…' if len(memory_text) > 120 else '')
+            name = str(first.get("name") or "").strip()
+            location = str(first.get("location") or "").strip()
+            if self.language == "da":
+                if name and location:
+                    ai_output = f'Dit minde minder os om {name} fra {location}, som beskrev "{quoted}". Det forbinder sig med det samme ønske om, at noget vigtigt ikke går tabt.'
+                elif name:
+                    ai_output = f'Dit minde minder os om {name}, som beskrev "{quoted}". Det forbinder sig med det samme ønske om, at noget vigtigt ikke går tabt.'
+                else:
+                    ai_output = f'Dit minde minder os om en anden, der beskrev "{quoted}". Det forbinder sig med det samme ønske om, at noget vigtigt ikke går tabt.'
+            else:
+                if name and location:
+                    ai_output = f'Your memory reminds us of {name} from {location}, who described "{quoted}". It connects to the same wish that something important should not be lost.'
+                elif name:
+                    ai_output = f'Your memory reminds us of {name}, who described "{quoted}". It connects to the same wish that something important should not be lost.'
+                else:
+                    ai_output = f'Your memory reminds us of someone who described "{quoted}". It connects to the same wish that something important should not be lost.'
+
+        return {
+            "ai_output": ai_output,
+            "source_data": source_data[:2],
+            "timings": {
+                "retrieval_ms": round(retrieval_ms, 2),
+                "llm_ms": round(llm_ms, 2),
             }
         }
 

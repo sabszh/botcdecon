@@ -38,6 +38,11 @@ Backend:
 - `ELEVENLABS_API_KEY` required for ElevenLabs TTS.
 - `VOICE_ID` optional ElevenLabs voice id.
 - `MODEL_ID` optional ElevenLabs model id.
+- `ARCHIVE_DB_ENABLED` default `false`. Enable only if you want archive/admin persistence.
+- `DATABASE_URL` required only when `ARCHIVE_DB_ENABLED=true`.
+- `ARCHIVE_DB_CONNECT_TIMEOUT_SEC` optional, default `2`.
+- `ARCHIVE_DB_INIT_MAX_ATTEMPTS` optional, default `1`.
+- `ARCHIVE_DB_RETRY_DELAY_SEC` optional, default `0.25`.
 
 Optional Pinecone mode:
 - `RETRIEVER_PROVIDER=pinecone`
@@ -84,6 +89,9 @@ MISTRAL_MODEL=mistral-small-latest
 
 TTS_PROVIDER=elevenlabs
 ELEVENLABS_API_KEY=your_key_here
+
+# Optional archive/admin persistence
+ARCHIVE_DB_ENABLED=false
 ```
 
 3. Start backend:
@@ -103,6 +111,7 @@ Notes:
 - the frontend expects the backend at `VITE_API_BASE` unless you use same-origin proxying
 - the backend defaults to `LLM_PROVIDER=mistral`
 - generated audio is asynchronous and fetched through the audio polling endpoint
+- archive/admin persistence is disabled by default in local dev; enable it only if you have a reachable Postgres database
 
 ## Local Run (Docker Compose)
 

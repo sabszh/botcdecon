@@ -15,28 +15,24 @@ def main() -> None:
 
     client = ElevenLabs(api_key=api_key)
 
-    # Exact texts from src/components/ChatPanel.tsx
     SCRIPTS = {
         "en": {
             "WELCOME": (
                 "Hello!\n\n"
-                "Thank you for being here. What a long strange trip we’ve been on, but there’s still a long road ahead.\n\n"
-                "Welcome to our vehicle. We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.\n\n"
-                "We may have her voice, but we’re speaking through a data set or rather through the experiences of thousands of people who were here before you. All of whom have shared what they remember that they want the future to remember. They have placed that memory onto a website known as continuonus. On the website a map is being cultivated.\n\n"
-                "Now let's journey through that map. In here you may share something that you feel is important for the future to remember and you can ask us about what previous visitors shared?"
+                "Welcome to our vehicle. What a long strange trip we’ve been on, but there’s still a long road ahead.\n\n"
+                "We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.\n\n"
+                "We may have her voice, but we’re speaking through a data set of the experiences of people who were here before you. All of whom have shared what they remember that they want the future to remember."
             ),
             "MEMORY_1": (
-                "Please share a memory? Something you’d like other's in the future to remember to remember. Press the Share button when you’re done."
+                "Please feel free to share your own memory. Something you’d like others in the future to remember to remember. Press the Share button when you’re done."
             ),
-            # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
             "THANK_YOU": "Thank you for sharing.",
             "QUESTION_1": (
-                "Now would you ask us about what others have felt it was important for the future to remember to remember? You are in their future. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done."
+                "You are welcome to further explore what others before you have shared. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done."
             ),
             "QUESTION_2": (
-                "Would you like to ask something else before continuing on? If you want to ask more, you can do that now; otherwise say \"no\". Press the Share button when you’re done."
+                "Would you like to ask something else or share another memory. Please do so now. Press the Share button when you’re done. If you want to end this session, press return."
             ),
-            # Empty in ChatPanel; skip generation if empty
             "EXPLORE": "",
             "FAREWELL": (
                 "Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future."
@@ -45,33 +41,27 @@ def main() -> None:
         "da": {
             "WELCOME": (
                 "Hej!\n\n"
-                "Tak fordi du er her. Sikke en lang, mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\n"
-                "Velkommen til vores køretøj. Vi er Bot de ContinuOnus, en AI‑genereret chatbot, der taler med kunstneren Helene Nymanns klonede stemme.\n\n"
-                "Vi har måske hendes stemme, men vi taler gennem et datasæt — eller rettere gennem erfaringerne fra tusindvis af mennesker, der var her før dig. De har alle delt det, de husker, som de ønsker, at fremtiden skal huske. De har placeret den erindring på en hjemmeside kendt som ContinuOnus. På hjemmesiden opbygges et kort.\n\n"
-                "Lad os nu rejse gennem det kort. Her kan du dele noget, som du føler er vigtigt for fremtiden at huske, og du kan spørge os om, hvad tidligere besøgende har delt?"
+                "Velkommen til vores køretøj. Sikke en lang og mærkelig rejse vi har været på, men der er stadig en lang vej foran os.\n\n"
+                "Vi er Bot de ContinuOnus, en AI-genereret chatbot, der taler med den klonede stemme fra kunstneren Helene Nymann.\n\n"
+                "Vi har måske hendes stemme, men vi taler gennem et datasæt af oplevelser fra mennesker, der var her før dig. Alle har de delt det, de husker, og det de ønsker, at fremtiden skal huske."
             ),
             "MEMORY_1": (
-                "Vil du dele en erindring? Noget du gerne vil have, at andre i fremtiden skal huske at huske. Tryk på Del, når du er færdig."
+                "Du er meget velkommen til at dele dit eget minde. Noget du gerne vil have, at andre i fremtiden skal huske. Tryk på Del-knappen, når du er færdig."
             ),
-            # THANK_YOU is still used by the frontend even though it's not in ChatPanel.scripts
-            "THANK_YOU": "Tak for at dele din erindring.",
+            "THANK_YOU": "Tak fordi du delte.",
             "QUESTION_1": (
-                "Vil du nu spørge os om, hvad andre har følt var vigtigt for fremtiden at huske at huske? Du er i deres fremtid. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del, når du er færdig."
+                "Du er velkommen til at udforske, hvad andre før dig har delt. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del-knappen, når du er færdig."
             ),
             "QUESTION_2": (
-                "Vil du spørge om noget mere, før vi fortsætter? Hvis du vil spørge mere, kan du gøre det nu; ellers sig \"nej\". Tryk på Del, når du er færdig."
+                "Vil du stille et andet spørgsmål eller dele endnu et minde? Gør det nu. Tryk på Del-knappen, når du er færdig. Hvis du vil afslutte sessionen, tryk på Return."
             ),
-            # Empty in ChatPanel; skip generation if empty
             "EXPLORE": "",
             "FAREWELL": (
-                "Tak fordi du tog denne del af rejsen sammen med os. Du er nu også en del af continuOnus‑landskabet. Vi håber at se dig i fremtiden."
+                "Tak fordi du tog denne del af rejsen med os. Du er nu også en del af continuOnus-landskabet. Vi håber at se dig igen i fremtiden."
             ),
         },
     }
 
-    # Save only to frontend public inside this repo (continuonus-app/public/audio)
-    # __file__ => .../continuonus-app/backend/scripts/generate_scripted_audio.py
-    # parents[2] => .../continuonus-app
     frontend_out = Path(__file__).resolve().parents[2] / "public" / "audio"
     frontend_out.mkdir(parents=True, exist_ok=True)
 
@@ -99,7 +89,6 @@ def main() -> None:
 
     for lang, items in SCRIPTS.items():
         for label, text in items.items():
-            # Skip generating audio for empty texts
             if not (text or "").strip():
                 continue
             filename = f"{lang}_{label}.mp3"

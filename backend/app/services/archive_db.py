@@ -93,7 +93,14 @@ class SessionTurn:
 
 class ArchiveStore:
   def __init__(self) -> None:
-    self._engine = create_engine(settings.database_url, future=True, pool_pre_ping=True)
+    if not settings.database_url:
+      raise RuntimeError('archive_db_disabled')
+    self._engine = create_engine(
+      settings.database_url,
+      future=True,
+      pool_pre_ping=True,
+      connect_args={'connect_timeout': settings.archive_db_connect_timeout_sec}
+    )
     self._session_factory = sessionmaker(bind=self._engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
   def init_db(self) -> None:
@@ -278,10 +285,23 @@ def get_archive_init_error() -> Optional[str]:
   return _archive_init_error
 
 
-def init_archive_db(max_attempts: int = 10, retry_delay_sec: float = 1.0) -> bool:
+def init_archive_db(
+  max_attempts: Optional[int] = None,
+  retry_delay_sec: Optional[float] = None
+) -> bool:
   global _archive_available, _archive_init_error
   _archive_available = False
   _archive_init_error = None
+  if not settings.archive_db_enabled:
+    logger.info('Archive database init skipped: ARCHIVE_DB_ENABLED is false')
+    return False
+  if not settings.database_url:
+    _archive_init_error = 'archive_db_disabled_missing_database_url'
+    logger.warning('Archive database init skipped: ARCHIVE_DB_ENABLED is true but DATABASE_URL is missing')
+    return False
+
+  max_attempts = max_attempts or settings.archive_db_init_max_attempts
+  retry_delay_sec = retry_delay_sec if retry_delay_sec is not None else settings.archive_db_retry_delay_sec
   last_error: Optional[Exception] = None
   for attempt in range(1, max_attempts + 1):
     try:

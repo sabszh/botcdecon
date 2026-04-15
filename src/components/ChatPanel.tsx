@@ -16,6 +16,8 @@ type Props = {
 // Debug toggle: set localStorage.audioDebug = '1' to enable logs
 const AUDIO_DEBUG = (() => { try { return localStorage.getItem('audioDebug') === '1' } catch { return false } })()
 const dlog = (...args: any[]) => { if (AUDIO_DEBUG) console.log('[AUDIO]', ...args) }
+const MIC_DEBUG = (() => { try { return localStorage.getItem('micDebug') === '1' } catch { return false } })()
+const mlog = (...args: any[]) => { if (MIC_DEBUG) console.log('[MIC]', ...args) }
 
 // Resolve audio URL from backend:
 // - Keep data:, blob:, and absolute http(s) URLs as-is
@@ -54,6 +56,50 @@ function normalizeSpeechText (value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
+function sanitizeAssistantText (value: string): string {
+  if (!value) return ''
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/_(.*?)_/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function isLikelyQuestionInput (value: string, language: Language): boolean {
+  const normalized = normalizeSpeechText(value).toLowerCase()
+  if (!normalized) return false
+  if (normalized.includes('?')) return true
+
+  const questionStarts = language === 'da'
+    ? ['hvad', 'hvordan', 'hvorfor', 'hvornår', 'hvor', 'hvem', 'hvilken', 'hvilke', 'kan', 'kunne', 'vil', 'ville', 'er', 'har', 'fortæl']
+    : ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'can', 'could', 'would', 'is', 'are', 'do', 'does', 'did', 'has', 'have', 'tell me']
+
+  return questionStarts.some(prefix => normalized.startsWith(prefix + ' ') || normalized === prefix)
+}
+
+function getConfirmMoreReprompt (language: Language): string {
+  return language === 'da'
+    ? 'Del en ny erindring eller stil et nyt spørgsmål nu. Tryk på Del, når du er færdig. Hvis du vil afslutte sessionen, så tryk på tilbage.'
+    : 'Please share another memory or ask another question now. Press the Share button when you’re done. If you want to end this session, press return.'
+}
+
+function getPendingLabel (language: Language, kind: 'memory' | 'question' | 'followup'): string {
+  if (language === 'da') {
+    if (kind === 'memory') return 'Forbinder dit minde med tidligere minder…'
+    if (kind === 'followup') return 'Finder den rigtige næste retning…'
+    return 'Leder efter et svar i tidligere minder…'
+  }
+  if (kind === 'memory') return 'Connecting your memory to earlier memories…'
+  if (kind === 'followup') return 'Figuring out the next step…'
+  return 'Looking through earlier memories for an answer…'
+}
 
 export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
@@ -96,6 +142,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const isLoadingRef = useRef(false) // Loading state reference
   const committedMicRef = useRef('') // Committed microphone reference
   const speechSessionBaseRef = useRef('')
+  const speechSessionFinalRef = useRef('')
   const sessionIdRef = useRef(buildSessionId())
   const requestAbortRef = useRef<AbortController | null>(null)
   const audioFetchAbortRef = useRef<AbortController | null>(null)
@@ -120,6 +167,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     activePlaybackKindRef.current = null
     speechReplayRef.current = null
     speechSessionBaseRef.current = ''
+    speechSessionFinalRef.current = ''
     setHasSpeechReplay(false)
   }, [language])
   useEffect(() => () => {
@@ -127,11 +175,22 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     audioFetchAbortRef.current?.abort()
   }, [])
 
-  const addMessage = useCallback((role: ChatMessage['role'], content: string) => {
-    if (!content?.trim()) return null as number | null
+  const addMessage = useCallback((role: ChatMessage['role'], content: string, extras: Partial<ChatMessage> = {}) => {
+    if (!content?.trim() && !extras.pending) return null as number | null
     const id = messageIdRef.current++
-    setMessages(cur => [...cur, { id, role, content }])
+    setMessages(cur => [...cur, { id, role, content, ...extras }])
     return id
+  }, [])
+
+  const addPendingMessage = useCallback((label: string) => {
+    return addMessage('bot', '', { pending: true, pendingLabel: label })
+  }, [addMessage])
+
+  const updateMessage = useCallback((id: number | null, content: string, extras: Partial<ChatMessage> = {}) => {
+    if (id == null) return
+    setMessages(cur => cur.map(message => (
+      message.id === id ? { ...message, content, ...extras } : message
+    )))
   }, [])
 
   const deleteOneWord = useCallback(() => {
@@ -234,7 +293,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     autoScrollMsgId?: number,
     enableMicAfter: boolean = true
   ) => {
-    if (!src) return
+    if (!src) {
+      if (onError) onError()
+      return
+    }
     // Swap to cached blob URL if preloaded (removes network/decode lag)
     const cached = getCached(src)
     const chosenSrc = cached || src
@@ -245,7 +307,12 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     speechReplayRef.current = null
     setHasSpeechReplay(false)
     const el = audioElRef.current
-    if (!el) return
+    if (!el) {
+      activePlaybackKindRef.current = null
+      setIsAudioPlaying(false)
+      if (onError) onError()
+      return
+    }
 
     try { recognitionRef.current?.stop?.() } catch {}
     setIsMicOn(false)
@@ -285,7 +352,13 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       activeNarrationAdvanceRef.current = null
       if (onError) onError()
     }
-    el.play().catch(err => console.warn('[Audio play rejected]', err))
+    el.play().catch(err => {
+      console.warn('[Audio play rejected]', err)
+      setIsAudioPlaying(false)
+      activePlaybackKindRef.current = null
+      activeNarrationAdvanceRef.current = null
+      if (onError) onError()
+    })
   }, [])
 
   // Start the scripted intro, with iOS unlock-aware gating
@@ -484,7 +557,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
   // Fallback TTS using the browser's SpeechSynthesis
   const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number) => {
-    if (!text) { if (onEnded) onEnded(); return }
+    const safeText = sanitizeAssistantText(text)
+    if (!safeText) { if (onEnded) onEnded(); return }
     const synth = (window as any).speechSynthesis as SpeechSynthesis | undefined
     if (!synth) { if (onEnded) onEnded(); return }
     try { synth.cancel() } catch {}
@@ -494,14 +568,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     setIsAudioPlaying(true)
     activePlaybackKindRef.current = 'speech'
     activeNarrationAdvanceRef.current = onEnded || null
-    speechReplayRef.current = { text, lang, onEnded, autoScrollMsgId }
+    speechReplayRef.current = { text: safeText, lang, onEnded, autoScrollMsgId }
     setHasSpeechReplay(true)
-    const utter = new SpeechSynthesisUtterance(text)
+    const utter = new SpeechSynthesisUtterance(safeText)
     utter.lang = lang === 'da' ? 'da-DK' : 'en-US'
     // Slightly faster (5%) for browser TTS fallback only
     utter.rate = BROWSER_TTS_RATE
     if (typeof autoScrollMsgId === 'number') {
-      const total = Math.max(1, text.length)
+      const total = Math.max(1, safeText.length)
       utter.onboundary = (ev: any) => {
         const idx = typeof ev?.charIndex === 'number' ? ev.charIndex : 0
         const ratio = Math.max(0, Math.min(1, idx / total))
@@ -571,20 +645,43 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     rec.onresult = (event: any) => {
       // Ignore stale results if it's not user's turn or mic not desired
       if (!micDesiredRef.current || isAudioPlayingRef.current || isLoadingRef.current) {
+        mlog('result ignored', {
+          reason: {
+            micDesired: micDesiredRef.current,
+            audioPlaying: isAudioPlayingRef.current,
+            loading: isLoadingRef.current
+          }
+        })
         return
       }
       const finalParts: string[] = []
-      const interimParts: string[] = []
+      let latestInterim = ''
       for (let i = 0; i < event.results.length; i++) {
         const res = event.results[i]
         const chunk = normalizeSpeechText(res[0].transcript || '')
         if (!chunk) continue
         if (res.isFinal) finalParts.push(chunk)
-        else interimParts.push(chunk)
+        else latestInterim = chunk
       }
-      const committed = normalizeSpeechText([speechSessionBaseRef.current, ...finalParts].filter(Boolean).join(' '))
-      const interim = normalizeSpeechText(interimParts.join(' '))
+      const sessionFinal = normalizeSpeechText(finalParts.join(' '))
+      speechSessionFinalRef.current = sessionFinal
+      const committed = normalizeSpeechText([speechSessionBaseRef.current, sessionFinal].filter(Boolean).join(' '))
+      const interim = normalizeSpeechText(latestInterim)
       const visibleDraft = normalizeSpeechText([committed, interim].filter(Boolean).join(' '))
+
+      mlog('result', {
+        resultIndex: event.resultIndex,
+        sessionBase: speechSessionBaseRef.current,
+        sessionFinal,
+        interim,
+        committed,
+        visibleDraft,
+        results: Array.from(event.results || []).map((res: any, idx: number) => ({
+          idx,
+          final: !!res?.isFinal,
+          transcript: normalizeSpeechText(res?.[0]?.transcript || '')
+        }))
+      })
 
       committedMicRef.current = committed
       setSttBuffer(committed)
@@ -594,6 +691,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     rec.onerror = (ev: any) => {
       setIsMicOn(false)
       const err = (ev?.error || '').toString()
+      mlog('error', { error: err, language, isIOS })
       if (err === 'not-allowed' || err === 'service-not-allowed') {
         setMicError(getSpeechErrorMessage(err, language))
         setMicDesired(false)
@@ -608,8 +706,19 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       setSttLive('')
       // Keep listening while desired and it's the user's turn
       const shouldListen = micDesiredRef.current && !isAudioPlayingRef.current && !isLoadingRef.current
+      const nextBase = normalizeSpeechText([speechSessionBaseRef.current, speechSessionFinalRef.current].filter(Boolean).join(' '))
+      speechSessionBaseRef.current = nextBase
+      committedMicRef.current = nextBase
+      setSttBuffer(nextBase)
+      speechSessionFinalRef.current = ''
+      mlog('end', {
+        shouldListen,
+        nextBase,
+        micDesired: micDesiredRef.current,
+        audioPlaying: isAudioPlayingRef.current,
+        loading: isLoadingRef.current
+      })
       if (shouldListen) {
-        speechSessionBaseRef.current = normalizeSpeechText(committedMicRef.current)
         setTimeout(() => { try { rec.start() } catch {} }, 150)
       } else {
         setIsMicOn(false)
@@ -631,20 +740,24 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     try {
       if (isSpeechSupported && recognitionRef.current && !isAudioPlayingRef.current && !isLoadingRef.current) {
         // Capture current input as base for interim/final appends
-        committedMicRef.current = normalizeSpeechText(draft || '')
-        speechSessionBaseRef.current = committedMicRef.current
-        setSttBuffer(committedMicRef.current)
+        const base = normalizeSpeechText(sttBuffer || draft || '')
+        committedMicRef.current = base
+        speechSessionBaseRef.current = base
+        speechSessionFinalRef.current = ''
+        setSttBuffer(base)
         setSttLive('')
+        mlog('startMic immediate', { base, draft, sttBuffer })
         recognitionRef.current.start()
         setIsMicOn(true)
       }
     } catch {}
-  }, [draft, isSpeechSupported])
+  }, [draft, isSpeechSupported, sttBuffer])
 
   const stopMic = useCallback(() => {
     // external toggle: mark undesired, controller effect will stop
     setMicDesired(false)
     setSttLive('')
+    mlog('stopMic manual')
     try { recognitionRef.current?.stop?.() } catch {}
     setIsMicOn(false)
   }, [])
@@ -676,17 +789,21 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     if (shouldListen && !isMicOn) {
       try {
         // Capture current input as base for interim/final appends
-        committedMicRef.current = normalizeSpeechText(draft || '')
-        speechSessionBaseRef.current = committedMicRef.current
-        setSttBuffer(committedMicRef.current)
+        const base = normalizeSpeechText(sttBuffer || draft || '')
+        committedMicRef.current = base
+        speechSessionBaseRef.current = base
+        speechSessionFinalRef.current = ''
+        setSttBuffer(base)
+        mlog('startMic effect', { base, draft, sttBuffer, shouldListen })
         recognitionRef.current.start()
         setIsMicOn(true)
       } catch {}
     } else if (!shouldListen && isMicOn) {
+      mlog('stopMic effect', { shouldListen, isMicOn })
       try { recognitionRef.current.stop() } catch {}
       setIsMicOn(false)
     }
-  }, [language, micDesired, isAudioPlaying, isLoading, isSpeechSupported, isMicOn, draft])
+  }, [language, micDesired, isAudioPlaying, isLoading, isSpeechSupported, isMicOn, draft, sttBuffer])
 
   const requestChatTurn = useCallback(async (payload: Record<string, unknown>) => {
     requestAbortRef.current?.abort()
@@ -716,62 +833,71 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     setSttBuffer('')
     setSttLive('')
     committedMicRef.current = ''
-    // Special handling: if we're confirming more questions, branch here
-    if (phase === 'confirm_more') {
-      const conf = scripts[language]
-      setIsLoading(true)
-      try {
-        const payload = {
-          sessionId: sessionIdRef.current,
-          message: text,
-          language,
-          userName: 'Visitor',
-          userLocation: 'Museum',
-          mode: 'handoff' as const,
-          history: buildHistoryPayload(messages)
-        }
-        const data = await requestChatTurn(payload)
-        const handoffAction = data.handoffAction || data.handoff_action || 'continue'
-        if (handoffAction === 'return') {
-          addMessage('bot', conf.farewell)
-          playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
-            onChangeLanguage()
-          }, undefined, GENERATED_SPEECH_RATE)
-        } else {
-          const prompt = language === 'da'
-            ? 'Hvad vil du gerne spørge om?'
-            : 'What would you like to ask?'
-          addMessage('bot', prompt)
-          setPhase('await_question')
-          setMicDesired(true)
-        }
-      } catch (err) {
-        if ((err as Error)?.name === 'AbortError') return
-        addMessage('bot', language === 'da' ? 'Noget gik galt. Prøv igen.' : 'Something went wrong. Please try again.')
-        setPhase('await_question')
-        setMicDesired(true)
-      } finally {
-        setIsLoading(false)
-      }
-      return
-    }
     setIsLoading(true)
+    let activePendingMessageId: number | null = null
     try {
-      const isMemoryTurn = phase === 'await_memory' || !hasSharedMemory
-      if (isMemoryTurn) {
-        const conf = scripts[language]
-        setHasSharedMemory(true)
-        addMessage('bot', THANK_YOU_TEXTS[language])
-        setIsLoading(false)
-        playAudio(`/audio/${language}_THANK_YOU.mp3`, () => {
-          addMessage('bot', conf.question1)
-          playAudio(`/audio/${language}_QUESTION_1.mp3`, () => {
-            setPhase('await_question')
-            setMicDesired(true)
-          }, undefined, GENERATED_SPEECH_RATE)
-        }, undefined, GENERATED_SPEECH_RATE)
+      const conf = scripts[language]
+      let inputMode: 'memory' | 'question' = (phase === 'await_memory' || !hasSharedMemory) ? 'memory' : 'question'
 
-        requestChatTurn({
+      if (phase === 'confirm_more') {
+        activePendingMessageId = addPendingMessage(getPendingLabel(language, 'followup'))
+        try {
+          const followupData = await requestChatTurn({
+            sessionId: sessionIdRef.current,
+            message: text,
+            language,
+            userName: 'Visitor',
+            userLocation: 'Museum',
+            mode: 'followup' as const,
+            history: buildHistoryPayload(messages)
+          })
+          const followupAction = followupData.handoffAction || followupData.handoff_action || 'continue'
+
+          if (followupAction === 'return') {
+            updateMessage(activePendingMessageId, conf.farewell, { pending: false, pendingLabel: undefined })
+            playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
+              onChangeLanguage()
+            }, () => {
+              speakBrowserTTS(conf.farewell, language, onChangeLanguage, activePendingMessageId ?? undefined)
+            }, GENERATED_SPEECH_RATE, activePendingMessageId ?? undefined)
+            return
+          }
+
+          if (followupAction === 'continue') {
+            const reprompt = getConfirmMoreReprompt(language)
+            updateMessage(activePendingMessageId, reprompt, { pending: false, pendingLabel: undefined })
+            speakBrowserTTS(reprompt, language, () => {
+              setPhase('confirm_more')
+              setMicDesired(true)
+            }, activePendingMessageId ?? undefined)
+            return
+          }
+
+          inputMode = followupAction === 'question' ? 'question' : 'memory'
+          updateMessage(activePendingMessageId, '', { pending: true, pendingLabel: getPendingLabel(language, inputMode) })
+        } catch (err) {
+          if ((err as Error)?.name === 'AbortError') throw err
+          console.error('Follow-up classification failed', err)
+          inputMode = isLikelyQuestionInput(text, language) ? 'question' : 'memory'
+          if (activePendingMessageId != null) {
+            updateMessage(activePendingMessageId, '', { pending: true, pendingLabel: getPendingLabel(language, inputMode) })
+          }
+        }
+      }
+
+      const isMemoryTurn = inputMode === 'memory'
+      if (isMemoryTurn) {
+        const thankYouText = THANK_YOU_TEXTS[language]
+        const fallbackMemoryReply = language === 'da'
+          ? 'Dit minde bliver nu en del af continuOnus-landskabet.'
+          : 'Your memory now becomes part of the continuOnus landscape.'
+        setHasSharedMemory(true)
+        const memoryStartedAt = Date.now()
+        const memoryDeadlineMs = 12000
+        const memoryPlaceholderId = activePendingMessageId ?? addPendingMessage(getPendingLabel(language, 'memory'))
+        activePendingMessageId = memoryPlaceholderId
+
+        const memoryRequest = requestChatTurn({
           sessionId: sessionIdRef.current,
           message: text,
           language,
@@ -779,13 +905,73 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           userLocation: 'Museum',
           mode: 'memory',
           history: buildHistoryPayload(messages)
-        }).catch(err => {
-          if ((err as Error)?.name === 'AbortError') return
-          console.error('Memory persistence request failed', err)
         })
+
+        await new Promise<void>(resolve => {
+          playAudio(`/audio/${language}_THANK_YOU.mp3`, resolve, resolve, GENERATED_SPEECH_RATE)
+        })
+
+        let replyText = ''
+        let audioUrl: string | null = null
+        let audioTurnId: string | null = null
+
+        try {
+          const remainingMs = Math.max(0, memoryDeadlineMs - (Date.now() - memoryStartedAt))
+          const data = await Promise.race([
+            memoryRequest,
+            new Promise<null>(resolve => window.setTimeout(() => resolve(null), remainingMs))
+          ])
+          if (data) {
+            replyText = sanitizeAssistantText((data.message || '').trim())
+            audioUrl = data?.audioUrl || data?.audio_url || null
+            audioTurnId = data?.audioTurnId || data?.audio_turn_id || null
+          } else {
+            console.warn('Memory confirmation request timed out; using fallback reply')
+          }
+        } catch (err) {
+          if ((err as Error)?.name === 'AbortError') throw err
+          console.error('Memory persistence request failed', err)
+        }
+
+        const finalReplyText = replyText || fallbackMemoryReply
+        const combinedReply = `${thankYouText}
+
+${finalReplyText}`
+        updateMessage(memoryPlaceholderId, combinedReply, { pending: false, pendingLabel: undefined })
+
+        const startQuestionPrompt = () => {
+          addMessage('bot', conf.question1)
+          playAudio(`/audio/${language}_QUESTION_1.mp3`, () => {
+            setPhase('await_question')
+            setMicDesired(true)
+          }, undefined, GENERATED_SPEECH_RATE)
+        }
+
+        let turnAudioBlobUrl: string | null = null
+        if (replyText && audioTurnId) {
+          turnAudioBlobUrl = await resolveAudioTurn(audioTurnId).catch(() => null)
+        }
+        const resolved = replyText ? (turnAudioBlobUrl || resolveAudioSrc(audioUrl)) : null
+        const cleanupTurnAudio = () => {
+          if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
+        }
+
+        if (resolved) {
+          playAudio(
+            resolved,
+            () => { cleanupTurnAudio(); startQuestionPrompt() },
+            () => { cleanupTurnAudio(); speakBrowserTTS(finalReplyText, language, startQuestionPrompt, memoryPlaceholderId ?? undefined) },
+            GENERATED_SPEECH_RATE,
+            memoryPlaceholderId ?? undefined
+          )
+        } else {
+          speakBrowserTTS(finalReplyText, language, startQuestionPrompt, memoryPlaceholderId ?? undefined)
+        }
         return
       }
 
+      const questionPlaceholderId = activePendingMessageId ?? addPendingMessage(getPendingLabel(language, 'question'))
+      activePendingMessageId = questionPlaceholderId
       const payload = {
         sessionId: sessionIdRef.current,
         message: text,
@@ -796,12 +982,11 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         history: buildHistoryPayload(messages)
       }
       const data = await requestChatTurn(payload)
-      const replyText = (data.message || '').trim()
+      const replyText = sanitizeAssistantText((data.message || '').trim())
       const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
       const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
       dlog('api audioUrl', audioUrl)
       // Question mode: speak the answer, then prompt for more (Question 2)
-      const conf = scripts[language]
       const afterAnswerSpoken = () => {
         addMessage('bot', conf.question2)
         playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
@@ -810,7 +995,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         }, undefined, GENERATED_SPEECH_RATE)
       }
       if (replyText) {
-        const msgId = addMessage('bot', replyText)
+        updateMessage(questionPlaceholderId, replyText, { pending: false, pendingLabel: undefined })
         let turnAudioBlobUrl: string | null = null
         if (audioTurnId) {
           turnAudioBlobUrl = await resolveAudioTurn(audioTurnId).catch(() => null)
@@ -824,26 +1009,35 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           playAudio(
             resolved,
             () => { cleanupTurnAudio(); afterAnswerSpoken() },
-            () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined) },
+            () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswerSpoken, questionPlaceholderId ?? undefined) },
             GENERATED_SPEECH_RATE,
-            msgId ?? undefined
+            questionPlaceholderId ?? undefined
           )
         } else {
-          speakBrowserTTS(replyText, language, afterAnswerSpoken, msgId ?? undefined)
+          speakBrowserTTS(replyText, language, afterAnswerSpoken, questionPlaceholderId ?? undefined)
         }
       } else {
         // No answer received; keep the session open and prompt to try again
-        addMessage('bot', language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.')
+        updateMessage(
+          questionPlaceholderId,
+          language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.',
+          { pending: false, pendingLabel: undefined }
+        )
         setPhase('await_question')
         setMicDesired(true)
       }
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return
-      addMessage('bot', language === 'da' ? 'Noget gik galt. Prøv igen.' : 'Something went wrong. Please try again.')
+      const errorText = language === 'da' ? 'Noget gik galt. Prøv igen.' : 'Something went wrong. Please try again.'
+      if (activePendingMessageId != null) {
+        updateMessage(activePendingMessageId, errorText, { pending: false, pendingLabel: undefined })
+      } else {
+        addMessage('bot', errorText)
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [addMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, onChangeLanguage, speakBrowserTTS, resolveAudioTurn, requestChatTurn])
+  }, [addMessage, addPendingMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, onChangeLanguage, speakBrowserTTS, resolveAudioTurn, requestChatTurn, updateMessage])
 
   const skip = useCallback(() => {
     if (!language) return
@@ -975,7 +1169,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
   const handleDraftChange = useCallback((value: string, el: HTMLTextAreaElement) => {
     setDraft(value)
+    setSttBuffer(normalizeSpeechText(value))
+    setSttLive('')
     stopMic()
+    mlog('draft change', { value })
     resizeTextarea(el)
   }, [resizeTextarea, stopMic])
 

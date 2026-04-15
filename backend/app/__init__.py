@@ -37,8 +37,10 @@ def create_app() -> FastAPI:
     @app.on_event('startup')
     async def startup_sync_entries() -> None:
         archive_ready = init_archive_db()
-        if not archive_ready:
+        if settings.archive_db_enabled and not archive_ready:
             logger.warning('Archive database is unavailable; chat history admin will be disabled until the database is reachable')
+        elif not settings.archive_db_enabled:
+            logger.info('Archive database is disabled; chat history admin is unavailable in this environment')
         result = sync_entries_dataset()
         if not result.attempted:
             logger.info('Entries startup sync skipped (enabled=%s, url=%s)', settings.sync_entries_on_startup, settings.entries_source_url)

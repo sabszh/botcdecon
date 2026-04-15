@@ -101,7 +101,7 @@ export default function ChatComposer ({
             disabled={isLoading || !draft.trim()}
             className='surface-primary-action shrink-0 rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
           >
-            Share
+            {language === 'da' ? 'Del' : 'Share'}
           </button>
         </div>
         {canType && (

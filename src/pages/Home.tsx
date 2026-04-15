@@ -3,6 +3,7 @@ import { AppContext } from '../context/AppContext'
 import { bgm } from '../lib/music'
 import MapCanvas from '../map/Canvas'
 import SplashHippoCanvas from '../map/SplashHippoCanvas'
+import { getDevicePerformanceProfile } from '../lib/deviceProfile'
 
 const ChatPanel = lazy(() => import('../components/ChatPanel'))
 const ACTIVITY_RESET_THROTTLE_MS = 700
@@ -12,6 +13,7 @@ const LANGUAGE_CARD_DELAY_MS = 140
 type ScreenPhase = 'splash' | 'chat' | 'returning'
 
 export default function Home() {
+  const performanceProfile = React.useMemo(() => getDevicePerformanceProfile(), [])
   const [language, setLanguage] = useState<'en' | 'da' | null>(null)
   const [screenPhase, setScreenPhase] = useState<ScreenPhase>('splash')
   const [showLanguageCard, setShowLanguageCard] = useState(true)
@@ -167,8 +169,8 @@ export default function Home() {
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >
           <div className='rounded-2xl border border-white/30 bg-white/10 px-6 py-4 text-2xl'>
-            <span className='block text-center'>Tap to enable sound</span>
-            <span className='block text-center opacity-80 text-lg mt-1'>Tryk for at aktivere lyd</span>
+            <span className='block text-center'>{language === 'da' ? 'Tryk for at aktivere lyd' : 'Tap to enable sound'}</span>
+            <span className='block text-center opacity-80 text-lg mt-1'>{language === 'da' ? 'Tap to enable sound' : 'Tryk for at aktivere lyd'}</span>
           </div>
         </div>
       )}
@@ -178,8 +180,8 @@ export default function Home() {
         onClick={() => { if (needsAudioUnlock) unlockAndPlay() }}
       >
         {screenPhase === 'splash'
-          ? <SplashHippoCanvas />
-          : <MapCanvas key={language} onObjLoaded={() => {}} freezeMotion={screenPhase === 'returning'} />}
+          ? <SplashHippoCanvas reducedPerformance={performanceProfile.reducedEffects} />
+          : <MapCanvas key={language} onObjLoaded={() => {}} freezeMotion={screenPhase === 'returning'} reducedPerformance={performanceProfile.reducedEffects} />}
       </div>
       <div className={`absolute inset-0 -z-5 bg-gradient-to-br from-white/20 via-white/10 to-white/20 transition-opacity duration-[320ms] ease-out ${screenPhase === 'returning' ? 'opacity-90' : 'opacity-100'}`} />
       {screenPhase === 'returning' && (

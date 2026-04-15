@@ -22,7 +22,11 @@ class Settings:
   allow_methods: List[str] = field(default_factory=lambda: ['*'])
   allow_headers: List[str] = field(default_factory=lambda: ['*'])
   allow_credentials: bool = os.getenv('API_ALLOW_CREDENTIALS', 'false').lower() == 'true'
-  database_url: str = os.getenv('DATABASE_URL', 'postgresql+psycopg://continuonus:continuonus@127.0.0.1:5432/continuonus')
+  archive_db_enabled: bool = os.getenv('ARCHIVE_DB_ENABLED', 'false').lower() == 'true'
+  database_url: Optional[str] = os.getenv('DATABASE_URL')
+  archive_db_connect_timeout_sec: int = int(os.getenv('ARCHIVE_DB_CONNECT_TIMEOUT_SEC', '2'))
+  archive_db_init_max_attempts: int = int(os.getenv('ARCHIVE_DB_INIT_MAX_ATTEMPTS', '1'))
+  archive_db_retry_delay_sec: float = float(os.getenv('ARCHIVE_DB_RETRY_DELAY_SEC', '0.25'))
   admin_username: Optional[str] = os.getenv('ADMIN_USERNAME')
   admin_password: Optional[str] = os.getenv('ADMIN_PASSWORD')
 
@@ -67,6 +71,10 @@ class Settings:
   @property
   def has_admin_auth(self) -> bool:
     return bool(self.admin_username and self.admin_password)
+
+  @property
+  def has_archive_db(self) -> bool:
+    return self.archive_db_enabled and bool(self.database_url)
 
 
 settings = Settings()
