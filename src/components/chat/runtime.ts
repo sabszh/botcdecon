@@ -32,6 +32,16 @@ export function normalizeSpeechText (value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
+export function normalizeInputStreamText (value: string): string {
+  const normalized = normalizeSpeechText(value)
+  if (!normalized) return ''
+  return normalized
+    .toLowerCase()
+    .replace(/[.,!?;:"'`()[\]{}<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function normalizeMessageLineBreaks (value: string): string {
   return value
     .replace(/\r\n/g, '\n')

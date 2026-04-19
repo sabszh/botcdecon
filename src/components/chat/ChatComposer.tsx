@@ -16,6 +16,7 @@ type Props = {
   isVoiceActive: boolean
   isAudioPlaying: boolean
   hasPlaybackSource: boolean
+  showFollow: boolean
   micError: string | null
   voiceStatusLabel: string
   inputRef: RefObject<HTMLTextAreaElement | null>
@@ -26,6 +27,7 @@ type Props = {
   onStopMic: () => void
   onStartDeleteHold: () => void
   onStopDeleteHold: () => void
+  onFollowLatest: () => void
   onSkip: () => void
   onTogglePlayback: () => void
 }
@@ -45,6 +47,7 @@ export default function ChatComposer ({
   isVoiceActive,
   isAudioPlaying,
   hasPlaybackSource,
+  showFollow,
   micError,
   voiceStatusLabel,
   inputRef,
@@ -55,14 +58,15 @@ export default function ChatComposer ({
   onStopMic,
   onStartDeleteHold,
   onStopDeleteHold,
+  onFollowLatest,
   onSkip,
   onTogglePlayback
 }: Props) {
   return (
-    <form onSubmit={onSubmit} className='mt-2 flex flex-col gap-2'>
+    <form onSubmit={onSubmit} className='relative z-10 -mt-[22px] flex flex-col gap-2'>
       <label htmlFor='message' className='sr-only'>Message</label>
-      <div className='surface-card rounded-[2rem] px-4 py-3'>
-        <div className='flex items-end gap-3'>
+      <div className='surface-card relative rounded-[2rem] px-4 py-3'>
+        <div className='relative flex items-end gap-3'>
           <div className='relative flex min-w-0 flex-1 items-end'>
             <textarea
               ref={inputRef}
@@ -81,26 +85,42 @@ export default function ChatComposer ({
             />
             <button
               type='button'
-              onMouseDown={onStartDeleteHold}
-              onMouseUp={onStopDeleteHold}
-              onMouseLeave={onStopDeleteHold}
-              onTouchStart={(e) => { e.preventDefault(); onStartDeleteHold() }}
-              onTouchEnd={onStopDeleteHold}
-              onTouchCancel={onStopDeleteHold}
+              onPointerDown={(e) => {
+                e.preventDefault()
+                onStartDeleteHold()
+              }}
+              onPointerUp={onStopDeleteHold}
+              onPointerCancel={onStopDeleteHold}
+              onPointerLeave={onStopDeleteHold}
+              onContextMenu={(e) => e.preventDefault()}
               disabled={!hasDraftContent}
-              className='surface-delete-action absolute right-1 top-1/2 -translate-y-1/2 rounded-full px-3 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-0'
+              className='surface-delete-action absolute right-1 top-1/2 -translate-y-1/2 select-none rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-0'
+              style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
               aria-label={language === 'da' ? 'Slet ord' : 'Delete word'}
             >
               ⌫
             </button>
           </div>
-          <button
-            type='submit'
-            disabled={isLoading || !draft.trim()}
-            className='surface-primary-action shrink-0 rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
-          >
-            {language === 'da' ? 'Del' : 'Share'}
-          </button>
+          <div className='relative flex shrink-0 items-end justify-center self-stretch'>
+            {showFollow && (
+              <button
+                type='button'
+                className='surface-pill absolute bottom-full left-1/2 z-20 mb-5 inline-flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full text-2xl leading-none text-black transition hover:bg-white hover:text-black'
+                onClick={onFollowLatest}
+                aria-label={language === 'da' ? 'Følg bund' : 'Jump to latest'}
+                title={language === 'da' ? 'Følg bund' : 'Jump to latest'}
+              >
+                ↓
+              </button>
+            )}
+            <button
+              type='submit'
+              disabled={isLoading || !draft.trim()}
+              className='surface-primary-action shrink-0 rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
+            >
+              {language === 'da' ? 'Del' : 'Share'}
+            </button>
+          </div>
         </div>
         {canType && (
           <div className='mt-2 flex flex-wrap items-center gap-3 px-1'>

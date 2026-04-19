@@ -31,7 +31,7 @@ def main() -> None:
                 "You are welcome to further explore what others before you have shared. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done."
             ),
             "QUESTION_2": (
-                "Would you like to ask something else or share another memory. Please do so now. Press the Share button when you’re done. If you want to end this session, press return."
+                "Would you like to ask something else or share another memory. Please do so now. May we ask you, where do you think we are going? Press the Share button when you’re done. If you want to end this session, press return."
             ),
             "FAREWELL": (
                 "Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future."
@@ -52,7 +52,7 @@ def main() -> None:
                 "Du er velkommen til at udforske, hvad andre før dig har delt. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del-knappen, når du er færdig."
             ),
             "QUESTION_2": (
-                "Vil du stille et andet spørgsmål eller dele endnu et minde? Gør det nu. Tryk på Del-knappen, når du er færdig. Hvis du vil afslutte sessionen, tryk på Return."
+                "Vil du stille et andet spørgsmål eller dele endnu et minde? Gør det nu. Må vi spørge dig, hvor tror du, vi er på vej hen? Tryk på Del-knappen, når du er færdig. Hvis du vil afslutte sessionen, tryk på Return."
             ),
             "FAREWELL": (
                 "Tak fordi du tog denne del af rejsen med os. Du er nu også en del af continuOnus-landskabet. Vi håber at se dig igen i fremtiden."

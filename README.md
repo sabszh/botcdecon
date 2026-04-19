@@ -25,6 +25,16 @@ Agent-facing repository guidance:
 
 Frontend:
 - `VITE_API_BASE` backend base URL, for example `http://127.0.0.1:8000`.
+- If you want LAN microphone access in dev, place HTTPS certs at `.certs/dev-cert.pem` and `.certs/dev-key.pem`; Vite will auto-enable HTTPS and proxy `/api` to the backend.
+
+Local HTTPS cert generation on Windows:
+
+```powershell
+mkdir .certs
+mkcert -key-file .certs/dev-key.pem -cert-file .certs/dev-cert.pem localhost 127.0.0.1 192.168.0.6
+```
+
+If you open the app from another device, that device also needs to trust the issuing local CA or the browser will still treat the page as untrusted.
 
 Backend:
 - `LLM_PROVIDER` default `mistral`.
@@ -95,6 +105,8 @@ uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
 ```bash
 npm run dev
 ```
+
+For HTTPS LAN testing, generate `.certs/dev-cert.pem` and `.certs/dev-key.pem` first, then start the frontend normally. Vite will serve over HTTPS and proxy `/api` to the backend automatically.
 
 Notes:
 

@@ -9,3 +9,14 @@ export function getSpeechRecognitionCtor (): SpeechRecognitionConstructor | null
 export function getSpeechSynthesisApi (): SpeechSynthesis | null {
   return window.speechSynthesis || null
 }
+
+export async function requestMicrophonePermission (): Promise<boolean> {
+  if (!navigator.mediaDevices?.getUserMedia) return false
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  try {
+    stream.getTracks().forEach(track => track.stop())
+  } finally {
+    // ensure tracks are stopped even if the loop above throws
+  }
+  return true
+}

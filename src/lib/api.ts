@@ -1,7 +1,7 @@
 const rawApiBase =
   (import.meta.env.VITE_API_BASE as string) ||
   (import.meta.env.VITE_API_BASE_URL as string) ||
-  ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  (window.location.protocol === 'http:' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://127.0.0.1:8000'
     : '')
 

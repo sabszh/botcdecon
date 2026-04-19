@@ -38,6 +38,30 @@ The production output directory is:
 
 - `dist`
 
+## Secure Local Development
+
+If you need browser microphone access from a non-localhost device, run the frontend over HTTPS.
+
+Recommended local setup:
+
+1. Generate certs with `mkcert`.
+2. Save them as `.certs/dev-cert.pem` and `.certs/dev-key.pem` in the repo root.
+3. Start the frontend with `npm run dev`.
+
+The Vite config will:
+
+- serve the dev server over HTTPS when the cert files are present
+- proxy `/api` calls to `http://127.0.0.1:8000`
+- keep the browser on a secure origin so `getUserMedia()` can prompt for microphone access
+
+Example cert command on Windows:
+
+```powershell
+mkcert -key-file .certs/dev-key.pem -cert-file .certs/dev-cert.pem localhost 127.0.0.1 192.168.0.6
+```
+
+If another device opens the site, it must trust the same local CA or the page will still be considered untrusted by the browser.
+
 ## Backend Build
 
 The repository already includes a backend Dockerfile at `backend/Dockerfile`.

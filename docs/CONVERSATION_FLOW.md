@@ -303,6 +303,8 @@ After the answer audio ends:
 - add bot message with `scripts[language].question2`
 - play `/audio/{language}_QUESTION_2.mp3`
 
+`QUESTION_2` is the final scripted handoff prompt. It asks the user whether they want to ask something else or share another memory, and includes the final question: “May we ask you, where do you think we are going?”
+
 When `QUESTION_2` audio ends:
 - phase becomes `confirm_more`
 - `micDesired` becomes `true`

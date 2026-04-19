@@ -13,6 +13,7 @@
   "dependencies": {
     "@react-three/drei": "10.7.6",
     "@react-three/fiber": "9.3.0",
+    "@timur00kh/whisper.wasm": "^0.1.0-canary.52de4c5",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "three": "0.180.0"

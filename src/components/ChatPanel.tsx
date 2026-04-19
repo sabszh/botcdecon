@@ -6,11 +6,12 @@ import ChatComposer from './chat/ChatComposer'
 import ChatTranscript from './chat/ChatTranscript'
 import { buildHistoryPayload, buildSessionId } from './chat/helpers'
 import type { ChatMessage, Language } from './chat/types'
-import { getSpeechRecognitionCtor, getSpeechSynthesisApi } from '../lib/browserApis'
+import { getSpeechRecognitionCtor, getSpeechSynthesisApi, requestMicrophonePermission } from '../lib/browserApis'
 import {
   getConfirmMoreReprompt,
   getSpeechErrorMessage,
   isLikelyQuestionInput,
+  normalizeInputStreamText,
   normalizeMessageLineBreaks,
   normalizeSpeechText,
   resolveAudioSrc,
@@ -28,30 +29,42 @@ const dlog = (...args: unknown[]) => { if (AUDIO_DEBUG) console.log('[AUDIO]', .
 const MIC_DEBUG = (() => { try { return localStorage.getItem('micDebug') === '1' } catch { return false } })()
 const mlog = (...args: unknown[]) => { if (MIC_DEBUG) console.log('[MIC]', ...args) }
 
-function mergeTranscriptWithOverlap (finalText: string, interimText: string): string {
-  const finalNorm = normalizeSpeechText(finalText)
-  const interimNorm = normalizeSpeechText(interimText)
-  if (!finalNorm) return interimNorm
-  if (!interimNorm) return finalNorm
+function appendWithTokenOverlap (baseText: string, recognizedText: string): string {
+  const base = normalizeSpeechText(baseText)
+  const recognized = normalizeSpeechText(recognizedText)
+  if (!base) return recognized
+  if (!recognized) return base
 
-  // Chrome often returns interim text that already contains finalized words.
-  // Prefer the fuller interim string in that case to avoid duplicated prefixes.
-  if (interimNorm.startsWith(finalNorm)) return interimNorm
-  if (finalNorm.startsWith(interimNorm)) return finalNorm
+  if (recognized.startsWith(base)) return recognized
+  if (base.startsWith(recognized)) return base
 
-  const finalTokens = finalNorm.split(' ')
-  const interimTokens = interimNorm.split(' ')
-  const maxOverlap = Math.min(finalTokens.length, interimTokens.length)
+  const baseTokens = base.split(' ')
+  const recognizedTokens = recognized.split(' ')
+  const maxOverlap = Math.min(baseTokens.length, recognizedTokens.length)
 
   for (let overlap = maxOverlap; overlap > 0; overlap--) {
-    const finalTail = finalTokens.slice(finalTokens.length - overlap).join(' ')
-    const interimHead = interimTokens.slice(0, overlap).join(' ')
-    if (finalTail === interimHead) {
-      return `${finalNorm} ${interimTokens.slice(overlap).join(' ')}`.trim()
+    const baseTail = baseTokens.slice(baseTokens.length - overlap).join(' ')
+    const recognizedHead = recognizedTokens.slice(0, overlap).join(' ')
+    if (baseTail === recognizedHead) {
+      const rest = recognizedTokens.slice(overlap).join(' ')
+      return normalizeSpeechText(`${base} ${rest}`)
     }
   }
 
-  return `${finalNorm} ${interimNorm}`.trim()
+  return normalizeSpeechText(`${base} ${recognized}`)
+}
+
+function collapseAdjacentDuplicateWords (value: string): string {
+  const normalized = normalizeSpeechText(value)
+  if (!normalized) return ''
+  const tokens = normalized.split(' ')
+  const compact: string[] = []
+  for (const token of tokens) {
+    const prev = compact[compact.length - 1]
+    if (prev && prev === token) continue
+    compact.push(token)
+  }
+  return compact.join(' ')
 }
 
 export default function ChatPanel ({ language, onChangeLanguage }: Props) {
@@ -94,6 +107,11 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const committedMicRef = useRef('') // Committed microphone reference
   const speechSessionBaseRef = useRef('')
   const speechSessionFinalRef = useRef('')
+  const speechSessionCurrentRef = useRef('')
+  const speechResultSegmentsRef = useRef<Array<{ text: string, isFinal: boolean }>>([])
+  const ignoreRecognitionResultsRef = useRef(false)
+  const awaitingFreshRecognitionStartRef = useRef(false)
+  const draftRef = useRef('')
   const sessionIdRef = useRef(buildSessionId())
   const requestAbortRef = useRef<AbortController | null>(null)
   const audioFetchAbortRef = useRef<AbortController | null>(null)
@@ -110,6 +128,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
   useEffect(() => { micDesiredRef.current = micDesired }, [micDesired])
   useEffect(() => { isLoadingRef.current = isLoading }, [isLoading])
+  useEffect(() => { draftRef.current = draft }, [draft])
   useEffect(() => {
     sessionIdRef.current = buildSessionId()
     requestAbortRef.current?.abort()
@@ -119,6 +138,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     speechReplayRef.current = null
     speechSessionBaseRef.current = ''
     speechSessionFinalRef.current = ''
+    speechSessionCurrentRef.current = ''
+    speechResultSegmentsRef.current = []
+    ignoreRecognitionResultsRef.current = false
+    awaitingFreshRecognitionStartRef.current = false
     setHasSpeechReplay(false)
   }, [language])
   useEffect(() => () => {
@@ -146,17 +169,38 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     )))
   }, [])
 
+  const syncDraftFromManualEdit = useCallback((nextValue: string) => {
+    const raw = (nextValue || '').toString()
+    const normalized = normalizeInputStreamText(raw)
+    // Keep keyboard input exactly as typed (including punctuation/case).
+    setDraft(raw)
+    draftRef.current = raw
+    // Keep speech state normalized so microphone continuation remains deterministic.
+    setSttBuffer(normalized)
+    committedMicRef.current = normalized
+    speechSessionBaseRef.current = normalized
+    speechSessionFinalRef.current = ''
+    speechSessionCurrentRef.current = ''
+    speechResultSegmentsRef.current = []
+    // Ignore late results from the previous recognition run until a new session starts.
+    ignoreRecognitionResultsRef.current = true
+    awaitingFreshRecognitionStartRef.current = true
+  }, [])
+
   const deleteOneWord = useCallback(() => {
-    const current = (draft || '').toString()
+    const current = (draftRef.current || '').toString()
     if (!current) return
     // Remove trailing spaces first, then remove last word
     const trimmedEnd = current.replace(/\s+$/g, '')
     const withoutLast = trimmedEnd.replace(/\S+\s*$/g, '')
-    const next = withoutLast
-    setDraft(next)
-    setSttBuffer(next)
-    committedMicRef.current = next
-  }, [draft])
+    syncDraftFromManualEdit(withoutLast)
+
+    // Force the recognizer to restart from the edited base text.
+    if (isMicOnRef.current) {
+      try { recognitionRef.current?.stop?.() } catch {}
+      setIsMicOn(false)
+    }
+  }, [syncDraftFromManualEdit])
 
   const startDeleteHold = useCallback(() => {
     // Immediate delete, then start repeating after a short delay
@@ -624,42 +668,67 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         })
         return
       }
-      const finalParts: string[] = []
-      let latestInterim = ''
-      for (let i = 0; i < event.results.length; i++) {
-        const res = event.results[i]
-        const chunk = normalizeSpeechText(res[0].transcript || '')
-        if (!chunk) continue
-        if (res.isFinal) finalParts.push(chunk)
-        else latestInterim = chunk
+      if (ignoreRecognitionResultsRef.current) {
+        mlog('result ignored', { reason: 'awaiting-fresh-session-start' })
+        return
       }
+      const finalParts: string[] = []
+      const interimParts: string[] = []
+      const nextSegments = speechResultSegmentsRef.current.slice(0, event.resultIndex)
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        const transcript = normalizeInputStreamText(result?.[0]?.transcript || '')
+        if (!transcript) continue
+        nextSegments.push({ text: transcript, isFinal: !!result?.isFinal })
+      }
+
+      speechResultSegmentsRef.current = nextSegments
+
+      for (const segment of nextSegments) {
+        if (!segment.text) continue
+        if (segment.isFinal) finalParts.push(segment.text)
+        else interimParts.push(segment.text)
+      }
+
       const sessionFinal = normalizeSpeechText(finalParts.join(' '))
+      const sessionInterim = normalizeSpeechText(interimParts.join(' '))
+
       speechSessionFinalRef.current = sessionFinal
-      const committed = normalizeSpeechText([speechSessionBaseRef.current, sessionFinal].filter(Boolean).join(' '))
-      const interim = normalizeSpeechText(latestInterim)
-      const sessionVisible = mergeTranscriptWithOverlap(sessionFinal, interim)
-      const visibleDraft = normalizeSpeechText([speechSessionBaseRef.current, sessionVisible].filter(Boolean).join(' '))
+      speechSessionCurrentRef.current = sessionInterim
+      const committed = normalizeInputStreamText(speechSessionBaseRef.current)
+      const sessionRecognized = normalizeSpeechText([sessionFinal, sessionInterim].filter(Boolean).join(' '))
+      const nextVisibleDraft = appendWithTokenOverlap(committed, sessionRecognized)
+      const normalizedVisibleDraft = normalizeInputStreamText(collapseAdjacentDuplicateWords(nextVisibleDraft))
 
       mlog('result', {
         resultIndex: event.resultIndex,
         sessionBase: speechSessionBaseRef.current,
-        sessionFinal,
-        interim,
+        sessionFinal: speechSessionFinalRef.current,
+        interim: sessionInterim,
         committed,
-        visibleDraft,
+        visibleDraft: nextVisibleDraft,
         results: Array.from({ length: event.results.length }, (_, idx) => {
           const res = event.results[idx]
           return {
             idx,
             final: !!res?.isFinal,
-            transcript: normalizeSpeechText(res?.[0]?.transcript || '')
+            transcript: normalizeInputStreamText(res?.[0]?.transcript || '')
           }
         })
       })
 
-      committedMicRef.current = committed
-      setSttBuffer(committed)
-      setDraft(visibleDraft || committed || speechSessionBaseRef.current)
+      committedMicRef.current = normalizedVisibleDraft || committed || speechSessionBaseRef.current
+      setSttBuffer(committedMicRef.current)
+      setDraft(committedMicRef.current)
+      draftRef.current = committedMicRef.current
+    }
+    rec.onstart = () => {
+      if (awaitingFreshRecognitionStartRef.current) {
+        ignoreRecognitionResultsRef.current = false
+        awaitingFreshRecognitionStartRef.current = false
+      }
+      setIsMicOn(true)
     }
     rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
       setIsMicOn(false)
@@ -678,11 +747,22 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     rec.onend = () => {
       // Keep listening while desired and it's the user's turn
       const shouldListen = micDesiredRef.current && !isAudioPlayingRef.current && !isLoadingRef.current
-      const nextBase = normalizeSpeechText([speechSessionBaseRef.current, speechSessionFinalRef.current].filter(Boolean).join(' '))
+      const mergedSessionBase = normalizeInputStreamText(
+        appendWithTokenOverlap(
+          speechSessionBaseRef.current,
+          normalizeSpeechText([speechSessionFinalRef.current, speechSessionCurrentRef.current].filter(Boolean).join(' '))
+        )
+      )
+      const visibleDraft = normalizeInputStreamText(draftRef.current)
+      const nextBase = normalizeInputStreamText(visibleDraft || mergedSessionBase)
       speechSessionBaseRef.current = nextBase
       committedMicRef.current = nextBase
       setSttBuffer(nextBase)
+      setDraft(nextBase)
+      draftRef.current = nextBase
       speechSessionFinalRef.current = ''
+      speechSessionCurrentRef.current = ''
+      speechResultSegmentsRef.current = []
       mlog('end', {
         shouldListen,
         nextBase,
@@ -691,9 +771,12 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         loading: isLoadingRef.current
       })
       if (shouldListen) {
+        awaitingFreshRecognitionStartRef.current = true
         setTimeout(() => { try { rec.start() } catch {} }, 150)
       } else {
         setIsMicOn(false)
+        ignoreRecognitionResultsRef.current = false
+        awaitingFreshRecognitionStartRef.current = false
       }
     }
     recognitionRef.current = rec
@@ -712,14 +795,16 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     try {
       if (isSpeechSupported && recognitionRef.current && !isAudioPlayingRef.current && !isLoadingRef.current) {
         // Capture current input as base for interim/final appends
-        const base = normalizeSpeechText(sttBuffer || draft || '')
+        const base = normalizeInputStreamText(committedMicRef.current || draftRef.current || sttBuffer || draft || '')
         committedMicRef.current = base
         speechSessionBaseRef.current = base
         speechSessionFinalRef.current = ''
+        speechSessionCurrentRef.current = ''
+        speechResultSegmentsRef.current = []
+        awaitingFreshRecognitionStartRef.current = true
         setSttBuffer(base)
         mlog('startMic immediate', { base, draft, sttBuffer })
         recognitionRef.current.start()
-        setIsMicOn(true)
       }
     } catch {}
   }, [draft, isSpeechSupported, sttBuffer])
@@ -728,6 +813,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     // external toggle: mark undesired, controller effect will stop
     setMicDesired(false)
     mlog('stopMic manual')
+    ignoreRecognitionResultsRef.current = false
+    awaitingFreshRecognitionStartRef.current = false
     try { recognitionRef.current?.stop?.() } catch {}
     setIsMicOn(false)
   }, [])
@@ -759,14 +846,16 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     if (shouldListen && !isMicOn) {
       try {
         // Capture current input as base for interim/final appends
-        const base = normalizeSpeechText(sttBuffer || draft || '')
+        const base = normalizeInputStreamText(committedMicRef.current || draftRef.current || sttBuffer || draft || '')
         committedMicRef.current = base
         speechSessionBaseRef.current = base
         speechSessionFinalRef.current = ''
+        speechSessionCurrentRef.current = ''
+        speechResultSegmentsRef.current = []
+        awaitingFreshRecognitionStartRef.current = true
         setSttBuffer(base)
         mlog('startMic effect', { base, draft, sttBuffer, shouldListen })
         recognitionRef.current.start()
-        setIsMicOn(true)
       } catch {}
     } else if (!shouldListen && isMicOn) {
       mlog('stopMic effect', { shouldListen, isMicOn })
@@ -1068,10 +1157,33 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
 
   const activateVoiceInput = useCallback(() => {
     if (!canType || isLoading || !isSpeechSupported) return
+    if (!window.isSecureContext) {
+      setMicError(language === 'da'
+        ? 'Mikrofon kræver HTTPS eller localhost. Åbn siden via https, ellers vil browseren blokere adgang.'
+        : 'Microphone requires HTTPS or localhost. Open the site over https, otherwise the browser will block access.')
+      setMicDesired(false)
+      return
+    }
+
     setKeyboardEnabled(false)
+    setMicError(null)
     try { inputRef.current?.blur() } catch {}
-    startMic()
-  }, [canType, isLoading, isSpeechSupported, startMic])
+
+    void (async () => {
+      try {
+        await requestMicrophonePermission()
+        startMic()
+      } catch (err) {
+        const message = (err as DOMException | Error | undefined)?.name === 'NotAllowedError'
+          ? getSpeechErrorMessage('not-allowed', language)
+          : language === 'da'
+            ? 'Mikrofonadgang kunne ikke aktiveres. Tjek browserens tilladelser.'
+            : 'Microphone access could not be enabled. Check your browser permissions.'
+        setMicError(message)
+        setMicDesired(false)
+      }
+    })()
+  }, [canType, isLoading, isSpeechSupported, language, startMic])
 
   const handleFollowLatest = useCallback(() => {
     const list = chatListRef.current
@@ -1114,15 +1226,14 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   }, [hasSpeechReplay, isAudioPlaying, playAudio, speakBrowserTTS])
 
   const handleDraftChange = useCallback((value: string, el: HTMLTextAreaElement) => {
-    setDraft(value)
-    setSttBuffer(normalizeSpeechText(value))
+    syncDraftFromManualEdit(value)
     stopMic()
     mlog('draft change', { value })
     resizeTextarea(el)
-  }, [resizeTextarea, stopMic])
+  }, [resizeTextarea, stopMic, syncDraftFromManualEdit])
 
   return (
-    <div className='relative z-10 w-[1100px] max-w-[95vw] px-6 py-6 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
+    <div className='relative z-10 box-border w-[1100px] max-w-[95vw] overflow-x-hidden px-6 py-6 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
       <audio ref={audioElRef} preload='auto' playsInline />
 
       <ChatTranscript
@@ -1131,8 +1242,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         language={language}
         messages={messages}
         isLoading={isLoading}
-        showFollow={showFollow}
-        onFollowLatest={handleFollowLatest}
       />
 
       <ChatComposer
@@ -1149,7 +1258,8 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         canSkipAhead={canSkipAhead}
         isVoiceActive={isVoiceActive}
         isAudioPlaying={isAudioPlaying}
-        hasPlaybackSource={Boolean(lastAudioSrcRef.current)}
+        hasPlaybackSource={Boolean(lastAudioSrcRef.current) || hasSpeechReplay}
+        showFollow={showFollow}
         micError={micError}
         voiceStatusLabel={voiceStatusLabel}
         inputRef={inputRef}
@@ -1160,6 +1270,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         onStopMic={stopMic}
         onStartDeleteHold={startDeleteHold}
         onStopDeleteHold={stopDeleteHold}
+        onFollowLatest={handleFollowLatest}
         onSkip={skip}
         onTogglePlayback={handleTogglePlayback}
       />

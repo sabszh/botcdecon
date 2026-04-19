@@ -1,12 +1,47 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+const devCertificatePath = path.resolve(__dirname, '.certs/dev-cert.pem')
+const devKeyPath = path.resolve(__dirname, '.certs/dev-key.pem')
+
+function readHttpsOptions () {
+  if (!fs.existsSync(devCertificatePath) || !fs.existsSync(devKeyPath)) return undefined
+
+  return {
+    cert: fs.readFileSync(devCertificatePath),
+    key: fs.readFileSync(devKeyPath)
+  }
+}
+
+const httpsOptions = readHttpsOptions()
+
 export default defineConfig({
   plugins: [react()],
+  server: {
+    host: true,
+    https: httpsOptions,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      }
+    }
+  },
+  preview: {
+    host: true,
+    https: httpsOptions,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      }
+    }
+  },
   build: {
     sourcemap: process.env.VITE_SOURCEMAP === 'true',
     minify: process.env.VITE_DISABLE_MINIFY === 'true' ? false : 'esbuild',
