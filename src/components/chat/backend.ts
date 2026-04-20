@@ -7,8 +7,6 @@ export type BackendChatResponse = {
   audio_url?: string | null
   audioTurnId?: string | null
   audio_turn_id?: string | null
-  handoffAction?: 'continue' | 'return' | 'question' | 'memory' | null
-  handoff_action?: 'continue' | 'return' | 'question' | 'memory' | null
 }
 
 const CHAT_ENDPOINT = '/api/chat'
@@ -35,7 +33,33 @@ export async function requestChatTurn (
     throw new Error(data.error || `Chat request failed (${res.status})`)
   }
 
-  if (!data.message && !data.handoffAction && !data.handoff_action) {
+  if (!data.message) {
+    throw new Error(data.error || 'Empty chat response')
+  }
+
+  return data
+}
+
+export async function persistSystemTurn (
+  payload: Record<string, unknown>
+): Promise<BackendChatResponse> {
+  const res = await fetch(resolveApiUrl(CHAT_ENDPOINT), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  const ct = res.headers.get('content-type') || ''
+  if (!ct.includes('application/json')) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `Chat request failed (${res.status})`)
+  }
+
+  const data = await res.json() as BackendChatResponse
+  if (!res.ok) {
+    throw new Error(data.error || `Chat request failed (${res.status})`)
+  }
+
+  if (!data.message) {
     throw new Error(data.error || 'Empty chat response')
   }
 

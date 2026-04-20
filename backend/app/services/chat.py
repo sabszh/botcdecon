@@ -22,7 +22,6 @@ class ChatResult:
   message: str
   session_id: str
   session_history: List[Dict[str, Any]] = field(default_factory=list)
-  handoff_action: Optional[str] = None
   error: Optional[str] = None
   debug: Optional[Dict[str, Any]] = None
   audio_url: Optional[str] = None
@@ -106,6 +105,8 @@ class ChatService:
     user_name: str,
     user_location: Optional[str],
     mode: str,
+    bot_message: Optional[str],
+    clear_session_memory: bool,
     history: List[Dict[str, Any]],
     continuous_data: Optional[Dict[str, Any]],
     include_history: bool = False
@@ -117,6 +118,35 @@ class ChatService:
       mode, session_id, language, user_name, len(message or ""), len(history or [])
     )
     self._audio_jobs.cleanup()
+
+    if mode == 'system':
+      system_message = (bot_message or '').strip()
+      if not system_message:
+        raise RuntimeError('empty_system_message')
+      await self._persist_archive_turn(
+        session_id=session_id,
+        language=language,
+        user_name=user_name,
+        user_location=user_location,
+        mode='system',
+        user_message=message,
+        bot_message=system_message,
+        error=None,
+        continuous_data=continuous_data
+      )
+      if clear_session_memory and self._bot:
+        try:
+          await asyncio.to_thread(self._bot.clear_session_memory, session_id)
+        except Exception as exc:  # pragma: no cover - defensive
+          logger.exception('Session memory clear failed (%s): %s', session_id, exc)
+      total_ms = (time.perf_counter() - t_start) * 1000
+      return ChatResult(
+        message=system_message,
+        session_id=session_id,
+        session_history=[],
+        audio_status='none',
+        debug={'total_ms': round(total_ms, 2), 'mode': 'system'}
+      )
 
     if self._bot:
       try:
@@ -167,62 +197,6 @@ class ChatService:
             audio_turn_id=audio_turn_id,
             audio_status='pending' if audio_turn_id else 'none',
             debug={**timings, 'total_ms': round(total_ms, 2), 'mode': 'memory'}
-          )
-
-        if mode == 'handoff':
-          logger.info('[CHAT] HANDOFF mode: invoking agent decision')
-          handoff_action = await asyncio.to_thread(
-            self._bot.classify_handoff,
-            message,
-            language
-          )
-          await self._persist_archive_turn(
-            session_id=session_id,
-            language=language,
-            user_name=user_name,
-            user_location=user_location,
-            mode=mode,
-            user_message=message,
-            bot_message=handoff_action,
-            error=None,
-            continuous_data=continuous_data
-          )
-          total_ms = (time.perf_counter() - t_start) * 1000
-          return ChatResult(
-            message='',
-            session_id=session_id,
-            session_history=[],
-            handoff_action=handoff_action,
-            audio_status='none',
-            debug={'total_ms': round(total_ms, 2), 'mode': 'handoff'}
-          )
-
-        if mode == 'followup':
-          logger.info('[CHAT] FOLLOWUP mode: classifying next step')
-          handoff_action = await asyncio.to_thread(
-            self._bot.classify_followup,
-            message,
-            language
-          )
-          await self._persist_archive_turn(
-            session_id=session_id,
-            language=language,
-            user_name=user_name,
-            user_location=user_location,
-            mode=mode,
-            user_message=message,
-            bot_message=handoff_action,
-            error=None,
-            continuous_data=continuous_data
-          )
-          total_ms = (time.perf_counter() - t_start) * 1000
-          return ChatResult(
-            message='',
-            session_id=session_id,
-            session_history=[],
-            handoff_action=handoff_action,
-            audio_status='none',
-            debug={'total_ms': round(total_ms, 2), 'mode': 'followup'}
           )
 
         logger.info('[CHAT] QUESTION mode: invoking pipeline via thread executor')
@@ -311,7 +285,6 @@ class ChatService:
           message='',
           session_id=session_id,
           session_history=[],
-          handoff_action=None,
           error=error_text,
           audio_turn_id=None,
           audio_status='none',
@@ -335,7 +308,6 @@ class ChatService:
       message='',
       session_id=session_id,
       session_history=[],
-      handoff_action=None,
       error=error_text,
       audio_turn_id=None,
       audio_status='none',

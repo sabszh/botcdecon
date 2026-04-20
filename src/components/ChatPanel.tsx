@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { preloadAudio, getCached, clearCache } from '../lib/audioCache'
-import { requestChatTurn as requestChatTurnRequest, resolveAudioTurn as resolveAudioTurnRequest } from './chat/backend'
+import { persistSystemTurn, requestChatTurn as requestChatTurnRequest, resolveAudioTurn as resolveAudioTurnRequest } from './chat/backend'
 import { BROWSER_TTS_RATE, GENERATED_SPEECH_RATE, INTRO_MIN_DELAY_MS, INTRO_START_MAX_WAIT_MS, scripts, THANK_YOU_TEXTS } from './chat/config'
 import ChatComposer from './chat/ChatComposer'
 import ChatTranscript from './chat/ChatTranscript'
@@ -8,7 +8,6 @@ import { buildHistoryPayload, buildSessionId } from './chat/helpers'
 import type { ChatMessage, Language } from './chat/types'
 import { getSpeechRecognitionCtor, getSpeechSynthesisApi, requestMicrophonePermission } from '../lib/browserApis'
 import {
-  getConfirmMoreReprompt,
   getSpeechErrorMessage,
   isLikelyQuestionInput,
   normalizeInputStreamText,
@@ -20,7 +19,9 @@ import {
 
 type Props = {
   language: Language
-  onChangeLanguage: () => void
+  onExitSession: () => void
+  manualReturnRequestId: number
+  onManualReturnAvailabilityChange: (available: boolean) => void
 }
 
 // Debug toggle: set localStorage.audioDebug = '1' to enable logs
@@ -67,7 +68,12 @@ function collapseAdjacentDuplicateWords (value: string): string {
   return compact.join(' ')
 }
 
-export default function ChatPanel ({ language, onChangeLanguage }: Props) {
+export default function ChatPanel ({
+  language,
+  onExitSession,
+  manualReturnRequestId,
+  onManualReturnAvailabilityChange
+}: Props) {
   const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
   type Phase = 'intro' | 'await_memory' | 'await_question' | 'confirm_more'
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -82,9 +88,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   const [micDesired, setMicDesired] = useState(false)
   const [phase, setPhase] = useState<Phase>('intro')
   const [hasSharedMemory, setHasSharedMemory] = useState(false)
+  const [hasReachedQuestionPrompt, setHasReachedQuestionPrompt] = useState(false)
+  const [hasReachedFinalPrompt, setHasReachedFinalPrompt] = useState(false)
   const [introAssetsReady, setIntroAssetsReady] = useState(false)
   // No UI or persistence for speech rate; use a fixed constant for generated audio only
-  // No follow-up question now; no need to track question count
   const [micError, setMicError] = useState<string | null>(null)
   // Track whether we've started the intro flow (prevents double-start on iOS unlock)
   const introStartedRef = useRef(false)
@@ -123,6 +130,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
   // Repeating delete (backspace) support
   const deleteHoldTimeoutRef = useRef<number | null>(null)
   const deleteHoldIntervalRef = useRef<number | null>(null)
+  const manualReturnInFlightRef = useRef(false)
+  const pendingManualReturnRef = useRef(false)
+  const lastHandledReturnRequestRef = useRef(0)
 
   useEffect(() => { isMicOnRef.current = isMicOn }, [isMicOn])
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
@@ -142,12 +152,21 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     speechResultSegmentsRef.current = []
     ignoreRecognitionResultsRef.current = false
     awaitingFreshRecognitionStartRef.current = false
+    manualReturnInFlightRef.current = false
+    pendingManualReturnRef.current = false
+    lastHandledReturnRequestRef.current = 0
     setHasSpeechReplay(false)
+    setHasReachedQuestionPrompt(false)
+    setHasReachedFinalPrompt(false)
   }, [language])
   useEffect(() => () => {
     requestAbortRef.current?.abort()
     audioFetchAbortRef.current?.abort()
   }, [])
+
+  useEffect(() => {
+    onManualReturnAvailabilityChange(hasSharedMemory)
+  }, [hasSharedMemory, onManualReturnAvailabilityChange])
 
   const addMessage = useCallback((role: ChatMessage['role'], content: string, extras: Partial<ChatMessage> = {}) => {
     const normalizedContent = normalizeMessageLineBreaks(content || '').trim()
@@ -167,6 +186,10 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     setMessages(cur => cur.map(message => (
       message.id === id ? { ...message, content: normalizedContent, ...extras } : message
     )))
+  }, [])
+
+  const markQuestionPromptReached = useCallback(() => {
+    setHasReachedQuestionPrompt(true)
   }, [])
 
   const syncDraftFromManualEdit = useCallback((nextValue: string) => {
@@ -258,6 +281,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       `/audio/${language}_MEMORY_1.mp3`,
       `/audio/${language}_QUESTION_1.mp3`,
       `/audio/${language}_QUESTION_2.mp3`,
+      `/audio/${language}_RETURN_PROMPT.mp3`,
       `/audio/${language}_FAREWELL.mp3`,
       `/audio/${language}_THANK_YOU.mp3`,
     ]
@@ -879,6 +903,94 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     return await resolveAudioTurnRequest(turnId, controller.signal)
   }, [])
 
+  const persistArchiveSystemTurn = useCallback(async (botMessage: string, clearSessionMemory: boolean = false) => {
+    await persistSystemTurn({
+      sessionId: sessionIdRef.current,
+      message: '',
+      botMessage,
+      clearSessionMemory,
+      language,
+      userName: 'Visitor',
+      userLocation: 'Museum',
+      mode: 'system' as const,
+      history: buildHistoryPayload(messages)
+    })
+  }, [language, messages])
+
+  const startManualReturn = useCallback(() => {
+    if (manualReturnInFlightRef.current) return
+    if (isLoadingRef.current) {
+      pendingManualReturnRef.current = true
+      return
+    }
+    manualReturnInFlightRef.current = true
+    pendingManualReturnRef.current = false
+
+    audioFetchAbortRef.current?.abort()
+    activeNarrationAdvanceRef.current = null
+    setIsLoading(false)
+    setMicDesired(false)
+    stopMic()
+
+    if (activePlaybackKindRef.current === 'speech') {
+      const synth = getSpeechSynthesisApi()
+      suppressSpeechOnEndRef.current = true
+      try { synth?.cancel() } catch {}
+    }
+    const el = audioElRef.current
+    try { el?.pause() } catch {}
+    try { if (el) el.currentTime = 0 } catch {}
+    activePlaybackKindRef.current = null
+    setIsAudioPlaying(false)
+
+    const conf = scripts[language]
+    const playFarewell = () => {
+      const farewellId = addMessage('bot', conf.farewell)
+      void persistArchiveSystemTurn(conf.farewell, true).catch((err) => {
+        dlog('system farewell persist failed', err)
+      })
+      playAudio(
+        `/audio/${language}_FAREWELL.mp3`,
+        onExitSession,
+        () => { speakBrowserTTS(conf.farewell, language, onExitSession, farewellId ?? undefined) },
+        GENERATED_SPEECH_RATE,
+        farewellId ?? undefined,
+        false
+      )
+    }
+
+    if (hasReachedFinalPrompt) {
+      const returnPromptId = addMessage('bot', conf.returnPrompt)
+      void persistArchiveSystemTurn(conf.returnPrompt).catch((err) => {
+        dlog('system return prompt persist failed', err)
+      })
+      playAudio(
+        `/audio/${language}_RETURN_PROMPT.mp3`,
+        playFarewell,
+        () => { speakBrowserTTS(conf.returnPrompt, language, playFarewell, returnPromptId ?? undefined) },
+        GENERATED_SPEECH_RATE,
+        returnPromptId ?? undefined,
+        false
+      )
+      return
+    }
+
+    playFarewell()
+  }, [addMessage, hasReachedFinalPrompt, language, onExitSession, persistArchiveSystemTurn, playAudio, speakBrowserTTS, stopMic])
+
+  useEffect(() => {
+    if (!manualReturnRequestId) return
+    if (manualReturnRequestId === lastHandledReturnRequestRef.current) return
+    lastHandledReturnRequestRef.current = manualReturnRequestId
+    startManualReturn()
+  }, [manualReturnRequestId, startManualReturn])
+
+  useEffect(() => {
+    if (!pendingManualReturnRef.current) return
+    if (isLoading) return
+    startManualReturn()
+  }, [isLoading, startManualReturn])
+
   const submit = useCallback(async (e: FormEvent) => {
     e.preventDefault()
     const text = (draft.trim() || sttBuffer.trim())
@@ -898,54 +1010,20 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       let inputMode: 'memory' | 'question' = (phase === 'await_memory' || !hasSharedMemory) ? 'memory' : 'question'
 
       if (phase === 'confirm_more') {
-        activePendingMessageId = addPendingMessage()
-        try {
-          const followupData = await requestChatTurn({
-            sessionId: sessionIdRef.current,
-            message: text,
-            language,
-            userName: 'Visitor',
-            userLocation: 'Museum',
-            mode: 'followup' as const,
-            history: buildHistoryPayload(messages)
-          })
-          const followupAction = followupData.handoffAction || followupData.handoff_action || 'continue'
-
-          if (followupAction === 'return') {
-            updateMessage(activePendingMessageId, conf.farewell, { pending: false })
-            playAudio(`/audio/${language}_FAREWELL.mp3`, () => {
-              onChangeLanguage()
-            }, () => {
-              speakBrowserTTS(conf.farewell, language, onChangeLanguage, activePendingMessageId ?? undefined)
-            }, GENERATED_SPEECH_RATE, activePendingMessageId ?? undefined)
-            return
-          }
-
-          if (followupAction === 'continue') {
-            const reprompt = getConfirmMoreReprompt(language)
-            updateMessage(activePendingMessageId, reprompt, { pending: false })
-            speakBrowserTTS(reprompt, language, () => {
-              setPhase('confirm_more')
-              setMicDesired(true)
-            }, activePendingMessageId ?? undefined)
-            return
-          }
-
-          inputMode = followupAction === 'question' ? 'question' : 'memory'
-          updateMessage(activePendingMessageId, '', { pending: true })
-        } catch (err) {
-          if ((err as Error)?.name === 'AbortError') throw err
-          dlog('follow-up classification failed; falling back to local guess', err)
-          inputMode = isLikelyQuestionInput(text, language) ? 'question' : 'memory'
-          if (activePendingMessageId != null) {
-            updateMessage(activePendingMessageId, '', { pending: true })
-          }
-        }
+        inputMode = isLikelyQuestionInput(text, language) ? 'question' : 'memory'
       }
 
       const isMemoryTurn = inputMode === 'memory'
       if (isMemoryTurn) {
         const thankYouText = THANK_YOU_TEXTS[language]
+        const startQuestionPrompt = () => {
+          markQuestionPromptReached()
+          addMessage('bot', conf.question1)
+          playAudio(`/audio/${language}_QUESTION_1.mp3`, () => {
+            setPhase('await_question')
+            setMicDesired(true)
+          }, undefined, GENERATED_SPEECH_RATE)
+        }
         setHasSharedMemory(true)
         const memoryPlaceholderId = activePendingMessageId ?? addPendingMessage()
         activePendingMessageId = memoryPlaceholderId
@@ -967,10 +1045,20 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
           playAudio(`/audio/${language}_THANK_YOU.mp3`, resolve, resolve, GENERATED_SPEECH_RATE, memoryPlaceholderId ?? undefined, false)
         })
 
-        const data = await memoryRequest
+        let data
+        try {
+          data = await memoryRequest
+        } catch (err) {
+          dlog('memory turn request failed; continuing with scripted fallback', err)
+          startQuestionPrompt()
+          return
+        }
+
         const replyText = sanitizeAssistantText((data.message || '').trim())
         if (!replyText) {
-          throw new Error(language === 'da' ? 'Tomt svar fra backend.' : 'Empty response from backend.')
+          dlog('memory turn returned empty reply; continuing with scripted fallback')
+          startQuestionPrompt()
+          return
         }
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
         const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
@@ -978,14 +1066,6 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
         const combinedReply = `${thankYouText}\n${replyText}`
         updateMessage(memoryPlaceholderId, combinedReply, { pending: false })
         scrollToMessageTop(memoryPlaceholderId)
-
-        const startQuestionPrompt = () => {
-          addMessage('bot', conf.question1)
-          playAudio(`/audio/${language}_QUESTION_1.mp3`, () => {
-            setPhase('await_question')
-            setMicDesired(true)
-          }, undefined, GENERATED_SPEECH_RATE)
-        }
 
         let turnAudioBlobUrl: string | null = null
         if (audioTurnId) {
@@ -1032,6 +1112,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       dlog('api audioUrl', audioUrl)
       // Question mode: speak the answer, then prompt for more (Question 2)
       const afterAnswerSpoken = () => {
+        setHasReachedFinalPrompt(true)
         addMessage('bot', conf.question2)
         playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
           setPhase('confirm_more')
@@ -1077,8 +1158,9 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
       }
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return
-      const rawError = (err as Error)?.message?.trim()
-      const errorText = rawError || (language === 'da' ? 'Noget gik galt. Prøv igen.' : 'Something went wrong. Please try again.')
+      const errorText = language === 'da'
+        ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.'
+        : 'I could not fetch an answer right now. Please try again.'
       if (activePendingMessageId != null) {
         updateMessage(activePendingMessageId, errorText, { pending: false })
       } else {
@@ -1087,7 +1169,7 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     } finally {
       setIsLoading(false)
     }
-  }, [addMessage, addPendingMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, onChangeLanguage, speakBrowserTTS, resolveAudioTurn, requestChatTurn, updateMessage, scrollToMessageTop])
+  }, [addMessage, addPendingMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, speakBrowserTTS, resolveAudioTurn, requestChatTurn, updateMessage, scrollToMessageTop, markQuestionPromptReached])
 
   const skip = useCallback(() => {
     if (!language) return
@@ -1118,12 +1200,13 @@ export default function ChatPanel ({ language, onChangeLanguage }: Props) {
     }
     // If awaiting memory, skip to question prompt
     if (phase === 'await_memory') {
+      markQuestionPromptReached()
       addMessage('bot', conf.question1)
       setPhase('await_question')
       setMicDesired(true)
       return
     }
-  }, [language, phase, messages, addMessage, playAudio, advanceCurrentNarration])
+  }, [language, phase, messages, addMessage, playAudio, advanceCurrentNarration, markQuestionPromptReached])
 
   const canSkipAhead = phase === 'intro' || phase === 'await_memory' || isAudioPlaying
   const canType = phase === 'await_memory' || phase === 'await_question' || phase === 'confirm_more'

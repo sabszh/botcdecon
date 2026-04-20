@@ -25,7 +25,7 @@ Thank you for sharing.
 Your memory is similar to / reminds us of ...
 
 ### Question Prompt 1
-You are welcome to further explore what others before you have shared. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done.
+You are welcome to now further explore what others before you have shared. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done.
 
 ### Question Prompt 2
 Would you like to ask something else or share another memory. Please do so now.
@@ -81,7 +81,7 @@ Dit minde ligner / minder os om ...
 
 ### Spørgsmål Prompt 1
 
-Du er velkommen til at udforske, hvad andre før dig har delt. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del-knappen, når du er færdig.
+Du er velkommen til nu at udforske, hvad andre før dig har delt. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del-knappen, når du er færdig.
 
 ### Spørgsmål Prompt 2
 

@@ -1,12 +1,5 @@
-from __future__ import annotations
-
-import json
 import re
-from typing import Any, Dict, List, Optional, Type, TypeVar
-
-from pydantic import BaseModel, ValidationError
-
-ParsedModelT = TypeVar("ParsedModelT", bound=BaseModel)
+from typing import Any, Dict, List
 
 
 def enforce_concise(text: str, max_sentences: int = 5, max_words: int = 120) -> str:
@@ -66,57 +59,6 @@ def format_context(documents: List[Dict[str, Any]], *, chat: bool = False) -> st
       a = shorten(md.get("ai_output", "Unknown Response"), 120)
       parts.append(f'A contributor asked: "{q}" and received: "{a}"')
   return "\n".join(parts)
-
-
-def extract_first_json_object(text: str) -> Optional[str]:
-  if not text:
-    return None
-  start = text.find("{")
-  if start < 0:
-    return None
-
-  depth = 0
-  in_string = False
-  escaped = False
-  for idx in range(start, len(text)):
-    ch = text[idx]
-    if in_string:
-      if escaped:
-        escaped = False
-      elif ch == "\\":
-        escaped = True
-      elif ch == '"':
-        in_string = False
-      continue
-
-    if ch == '"':
-      in_string = True
-      continue
-    if ch == "{":
-      depth += 1
-    elif ch == "}":
-      depth -= 1
-      if depth == 0:
-        return text[start:idx + 1]
-  return None
-
-
-def parse_llm_json(raw_text: str, model_type: Type[ParsedModelT]) -> Optional[ParsedModelT]:
-  payload = extract_first_json_object(raw_text or "")
-  if not payload:
-    return None
-  try:
-    data = json.loads(payload)
-    return model_type.model_validate(data)
-  except (json.JSONDecodeError, ValidationError, TypeError, ValueError):
-    return None
-
-
-def normalize_handoff_reply(user_input: str) -> str:
-  normalized = (user_input or "").strip().lower()
-  normalized = re.sub(r"\s+", " ", normalized)
-  normalized = re.sub(r"^[\"'“”‘’\s]+|[\"'“”‘’\s]+$", "", normalized)
-  return re.sub(r"[.!]+$", "", normalized)
 
 
 def sanitize_model_text(text: str) -> str:

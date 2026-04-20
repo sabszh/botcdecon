@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+.venv
+.certs
+.codex
+.claude
+.config
+node_modules
+dist
+output
+snapshots
+example
+__pycache__
+*.pyc

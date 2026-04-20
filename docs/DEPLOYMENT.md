@@ -64,15 +64,15 @@ If another device opens the site, it must trust the same local CA or the page wi
 
 ## Backend Build
 
-The repository already includes a backend Dockerfile at `backend/Dockerfile`.
+The repository includes a production Dockerfile at `backend/Dockerfile`.
 
 Build shape:
 
-- Python 3.11 slim image
-- install `backend/requirements.txt`
-- copy `backend/`
-- copy `data/`
-- run Uvicorn on port `8000`
+- multi-stage build
+- Node 20 stage builds the Vite frontend into `dist/`
+- Python 3.11 slim stage installs `backend/requirements.txt`
+- copies `backend/`, `data/`, and built `dist/`
+- runs Uvicorn on port `8000`
 
 ## Render
 
@@ -109,15 +109,15 @@ Do not assume the current backend will behave correctly on Vercel serverless fun
 
 ## Single-Host / VM
 
-A simple VM deployment is still valid.
+The repo is now set up for a simple Hetzner-style VM deployment with Docker Compose.
 
 Typical shape:
 
-- backend container or Uvicorn process
-- frontend static files
-- Caddy or Nginx as reverse proxy
+- `docker-compose.yml` starts Postgres and one production app container
+- the app container serves both the frontend `dist/` build and the FastAPI backend
+- Caddy or Nginx sits in front and terminates TLS
 
-This is the easiest way to preserve the current runtime behavior without host-specific adaptation.
+This preserves the current runtime behavior with the least operational complexity.
 
 ## Environment Variables
 
@@ -135,7 +135,7 @@ Core backend variables:
 
 Frontend variable:
 
-- `VITE_API_BASE`
+- `VITE_API_BASE` only if you are hosting frontend and backend on different origins
 
 Optional:
 
@@ -157,6 +157,11 @@ Current intent:
 
 This matters because media files under stable paths can otherwise stay stale after deploys.
 
+## Compose Files
+
+- `docker-compose.yml`: production
+- `docker-compose.dev.yml`: local development with bind mounts, backend reload, and Vite dev server
+
 ## Deployment Checklist
 
 Before shipping:
@@ -169,3 +174,4 @@ Before shipping:
 - admin auth works if enabled
 - frontend can reach the backend origin
 - one hard refresh is not required for every new deploy
+- Postgres persists across container restarts

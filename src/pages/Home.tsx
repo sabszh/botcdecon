@@ -17,6 +17,8 @@ export default function Home() {
   const [language, setLanguage] = useState<'en' | 'da' | null>(null)
   const [screenPhase, setScreenPhase] = useState<ScreenPhase>('splash')
   const [showLanguageCard, setShowLanguageCard] = useState(true)
+  const [manualReturnAvailable, setManualReturnAvailable] = useState(false)
+  const [manualReturnRequestId, setManualReturnRequestId] = useState(0)
   const [needsAudioUnlock, setNeedsAudioUnlock] = useState<boolean>(() => {
     const isiOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
     try { return isiOS && localStorage.getItem('audioAllowed') !== '1' } catch { return isiOS }
@@ -31,6 +33,8 @@ export default function Home() {
     setLanguage(null)
     setScreenPhase('splash')
     setShowLanguageCard(false)
+    setManualReturnAvailable(false)
+    setManualReturnRequestId(0)
     if (languageCardTimer.current) window.clearTimeout(languageCardTimer.current)
     languageCardTimer.current = window.setTimeout(() => {
       setShowLanguageCard(true)
@@ -47,6 +51,15 @@ export default function Home() {
       resetToLanguageSelect()
     }, RETURN_TRANSITION_MS)
   }, [resetToLanguageSelect, screenPhase])
+
+  const requestSessionExit = useCallback(() => {
+    if (screenPhase !== 'chat') return
+    if (manualReturnAvailable) {
+      setManualReturnRequestId(cur => cur + 1)
+      return
+    }
+    beginReturnToSplash()
+  }, [beginReturnToSplash, manualReturnAvailable, screenPhase])
 
   // One-shot unlock+play helper kept as synchronous as possible for iOS
   const unlockAndPlay = async () => {
@@ -68,7 +81,7 @@ export default function Home() {
     const resetTimer = () => {
       if (inactivityTimer.current) window.clearTimeout(inactivityTimer.current)
       inactivityTimer.current = window.setTimeout(() => {
-        beginReturnToSplash()
+        requestSessionExit()
       }, 180000) // 3 minutes
     }
 
@@ -93,7 +106,7 @@ export default function Home() {
       if (inactivityTimer.current) window.clearTimeout(inactivityTimer.current)
       events.forEach((ev) => window.removeEventListener(ev, onActivity))
     }
-  }, [beginReturnToSplash, language, screenPhase])
+  }, [language, requestSessionExit, screenPhase])
 
   // Language selection — now iOS-safe for autoplay
   // Home.tsx  — STEP 2: robust iOS unlock + start + fade
@@ -103,6 +116,8 @@ export default function Home() {
     setShowLanguageCard(true)
     setLanguage(lang)
     setScreenPhase('chat')
+    setManualReturnAvailable(false)
+    setManualReturnRequestId(0)
 
     try {
       // Make sure context is ready, then unlock, then play
@@ -226,7 +241,7 @@ export default function Home() {
                 <button
                   type='button'
                   className='surface-pill rounded-full px-4 py-2 text-xl text-black transition hover:bg-white hover:text-black'
-                  onClick={beginReturnToSplash}
+                  onClick={requestSessionExit}
                 >
                   {language === 'da' ? 'Tilbage' : 'Return'}
                 </button>
@@ -239,7 +254,9 @@ export default function Home() {
             <Suspense fallback={null}>
               <ChatPanel
                 language={language}
-                onChangeLanguage={beginReturnToSplash}
+                onExitSession={beginReturnToSplash}
+                manualReturnRequestId={manualReturnRequestId}
+                onManualReturnAvailabilityChange={setManualReturnAvailable}
               />
             </Suspense>
           </div>

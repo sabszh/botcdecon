@@ -89,7 +89,6 @@ Modes:
 
 - `memory`
 - `question`
-- `handoff`
 
 `memory` mode:
 
@@ -102,10 +101,6 @@ Modes:
 - persists archive data
 - queues TTS generation
 - returns text immediately and an `audioTurnId` if audio is being generated
-
-`handoff` mode:
-
-- classifies whether the experience should continue or return
 
 Generated audio is fetched separately from:
 

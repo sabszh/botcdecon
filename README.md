@@ -115,18 +115,19 @@ Notes:
 - generated audio is asynchronous and fetched through the audio polling endpoint
 - archive/admin persistence is disabled by default in local dev; enable it only if you have a reachable Postgres database
 
-## Local Run (Docker Compose)
+## Docker
 
-Backend only:
+Production-shaped app + Postgres:
 
 ```bash
-docker compose up --build
+cp .env.example .env
+docker compose up --build -d
 ```
 
-Backend + frontend dev server:
+Local dev compose with backend reload + Vite dev server:
 
 ```bash
-docker compose --profile dev up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 ## Chat Audio API
@@ -140,20 +141,11 @@ Operational note:
 
 - pending audio jobs are stored in backend process memory, so the current backend is intended for a long-running service rather than serverless execution
 
-## Hetzner Deployment (Single VM)
+## Hetzner Deployment
 
-Recommended baseline:
-- One Hetzner VM.
-- Docker + Docker Compose.
-- Caddy or Nginx as reverse proxy with TLS.
+Use the production compose file in the repo root and follow `HETZNER_HOSTING.md`.
 
-Steps:
-1. Copy repository and `.env` to server.
-2. Keep `DATA_JSON_PATH=data/all.json`.
-3. Start services with `docker compose up --build -d`.
-4. Put Caddy/Nginx in front of backend/frontend.
-
-Backups:
+Back up:
 - `.env`
 - `data/all.json`
-- any persistent volumes you add later (e.g., Postgres/Qdrant).
+- the Postgres volume from `docker compose`

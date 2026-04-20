@@ -29,7 +29,6 @@ The frontend is responsible for:
 The backend is responsible for:
 - generating memory-confirmation replies
 - generating question answers
-- classifying short handoff intents like continue vs return
 - queuing TTS audio for generated replies
 - archive logging and local session-memory storage
 
@@ -138,10 +137,9 @@ Common steps:
 4. set `isLoading = true`
 5. decide which mode to use
 
-The frontend then routes the turn into one of three backend modes:
+The frontend then routes the turn into one of two backend modes:
 - `memory`
 - `question`
-- `handoff`
 
 ## Mode Selection Rules
 
@@ -152,11 +150,10 @@ If phase is `await_memory`, the next user turn is treated as `memory`.
 If phase is `await_question`, the next user turn is treated as `question`.
 
 ### Confirm-more stage
-If phase is `confirm_more`, the frontend does extra classification before choosing a backend mode.
+If phase is `confirm_more`, the frontend uses local question detection before choosing a backend mode.
 
 Rules in `confirm_more`:
-- if the input is a short intent like `yes`, `no`, `more`, `done`, `ja`, `nej`, it goes to `handoff`
-- else if the input looks like a question, it goes to `question`
+- if the input looks like a question, it goes to `question`
 - otherwise it is treated as a new `memory`
 
 Question detection is heuristic.
@@ -303,7 +300,7 @@ After the answer audio ends:
 - add bot message with `scripts[language].question2`
 - play `/audio/{language}_QUESTION_2.mp3`
 
-`QUESTION_2` is the final scripted handoff prompt. It asks the user whether they want to ask something else or share another memory, and includes the final question: “May we ask you, where do you think we are going?”
+`QUESTION_2` is the post-answer reprompt. It asks the user whether they want to ask something else or share another memory, and reminds them that they can end the session with the Return/Tilbage button.
 
 When `QUESTION_2` audio ends:
 - phase becomes `confirm_more`
@@ -311,52 +308,36 @@ When `QUESTION_2` audio ends:
 
 ## Confirm-More Flow
 
-This is the post-answer handoff stage.
+This is the post-answer continuation stage.
 The app allows the user to:
 - ask another question
 - share another memory
-- end the session
+- end the session manually with the top-right Return/Tilbage button
 
-### Path A: short handoff intent
-If the text is a short intent reply, frontend sends `mode: "handoff"`.
+There is no backend handoff classifier in this stage anymore.
 
-Backend `classify_handoff()` returns one of:
-- `continue`
-- `return`
-
-If backend returns `return`:
-- frontend adds farewell message
-- plays `/audio/{language}_FAREWELL.mp3`
-- then calls `onChangeLanguage()` to end/reset the session
-
-If backend returns `continue`:
-- frontend adds a reprompt message telling the user to actually ask or share something
-- frontend speaks that reprompt with browser TTS
-- phase stays `confirm_more`
-- mic is re-enabled after speech
-
-### Path B: real question
+### Path A: real question
 If the text looks like a question:
 - frontend routes directly into the normal `question` flow
 
-### Path C: new memory
-If the text is not a short handoff intent and does not look like a question:
+### Path B: new memory
+If the text does not look like a question:
 - frontend routes directly into the normal `memory` flow
 
 ## Farewell / End of Session
 
-There are two main end paths.
+There are two end paths.
 
-### 1. Return button or handoff return
-The user can end through:
-- the explicit Return UI path handled outside the turn routing, or
-- a `handoff` result of `return`
+### 1. Return button before first shared memory
+Before the visitor has shared their first memory, the top-right Return/Tilbage button exits immediately through the parent screen transition.
 
-In both cases the effective closing flow is:
-1. add farewell text bubble
-2. play farewell scripted MP3
-3. call `onChangeLanguage()`
-4. parent resets back to language selection
+### 2. Return button after first shared memory
+After the visitor has shared at least one memory, the top-right Return/Tilbage button triggers the scripted exit path inside `ChatPanel.tsx`:
+1. stop any current mic/audio/backend turn work
+2. add the farewell text bubble
+3. play `/audio/{language}_FAREWELL.mp3`
+4. call `onExitSession()`
+5. parent transitions back to language selection
 
 ## Audio Behavior
 
@@ -467,9 +448,9 @@ If backend TTS never resolves or fails:
 27. User either:
     - asks another question
     - shares another memory
-    - or signals return/end
-28. If end is chosen, farewell bubble appears and farewell MP3 plays.
-29. Session resets back to language selection.
+    - or uses the Return/Tilbage button to end manually
+28. If Return/Tilbage is pressed after the visitor has shared their first memory, the farewell MP3 plays.
+29. Session resets back to language selection after the farewell completes.
 
 ## Current Implementation Notes
 

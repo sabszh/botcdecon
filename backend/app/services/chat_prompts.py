@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 def build_source_prompt(language: str, chat_history: str, original_data: str, user_input: str) -> str:
   if language == "en":
     return f"""
@@ -94,7 +93,7 @@ Your task: connect this visitor's memory to what others have left behind, so the
 
 RULES:
 - 3 to 4 sentences
-- start with "This connects to" or "It also echoes" — then build from there
+- begin with a short connective phrase that links the visitor's memory to others, for example "This reminds us of", "It also connects to", or something close in that style
 - mention one or two contributors with warmth and specificity, but keep the tone grounded
 - if a contributor has a name, use it: "Petra from Denmark" or "someone who came before you"
 - if both name and location are available, use phrasing like "Petra from Denmark, who also shared..." or "Peter from Germany, who said..."
@@ -130,7 +129,7 @@ Din opgave: forbind den besøgendes minde med det, andre har efterladt, så de f
 
 REGLER:
 - 3 til 4 sætninger
-- begynd med "Det forbinder sig til" eller "Det knytter sig også til" — og byg derfra
+- begynd med en kort forbindende formulering, der knytter den besøgendes minde til andres, for eksempel "Det minder os om", "Det forbinder sig også med" eller noget tæt på den stil
 - nævn en eller to bidragydere med varme og præcision, men hold tonen jordnær
 - hvis en bidragyder har et navn, brug det: "Petra fra Danmark" eller "nogen der kom før dig"
 - hvis både navn og lokation findes, brug formuleringer som "Petra fra Danmark, som også delte ..." eller "Peter fra Tyskland, som sagde ..."
@@ -152,110 +151,4 @@ INPUT:
 
 PÅKRÆVET OUTPUT:
 Returnér kun den endelige tekst til den besøgende som almindelig prosa. Ingen overskrifter, ingen punktopstillinger.
-"""
-
-
-def build_handoff_prompt(language: str, user_input: str) -> str:
-  if language == "da":
-    return f"""
-Du afgør kun, om en museumsbesøgende vil fortsætte samtalen eller afslutte den.
-
-REGLER:
-- continue betyder, at personen vil stille et spørgsmål mere eller fortsætte samtalen
-- return betyder, at personen vil videre, afslutte eller ikke spørge mere
-- hvis svaret er uklart, men lyder som et nyt emne eller spørgsmål, vælg continue
-- hvis svaret er uklart, men lyder som afvisning, stop, nej, færdig eller afslutning, vælg return
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-PÅKRÆVET OUTPUT:
-Returnér præcis ét JSON-objekt og intet andet:
-{{
-  "decision": "continue" | "return"
-}}
-"""
-
-  return f"""
-Decide only whether a museum visitor wants to continue the conversation or end it.
-
-RULES:
-- continue means they want to ask something else or keep talking
-- return means they want to move on, stop, or ask nothing more
-- if the answer is ambiguous but sounds like a new topic or question, choose continue
-- if the answer is ambiguous but sounds like refusal, stopping, being done, or ending, choose return
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-REQUIRED OUTPUT:
-Return exactly one JSON object and nothing else:
-{{
-  "decision": "continue" | "return"
-}}
-"""
-
-
-def build_followup_prompt(language: str, user_input: str) -> str:
-  if language == "da":
-    return f"""
-Du afgør, hvad en museumsbesøgende prøver at gøre efter at have fået et svar.
-
-MULIGE BESLUTNINGER:
-- question: personen stiller et nyt spørgsmål
-- memory: personen deler et nyt minde eller en ny erindring
-- continue: personen vil fortsætte, men har endnu ikke delt et konkret spørgsmål eller minde
-- return: personen vil afslutte, videre eller stoppe
-
-REGLER:
-- vælg question ved tydelige spørgsmål eller undersøgende formuleringer
-- vælg memory ved udsagn, personlige minder eller oplevelser
-- vælg continue ved korte svar som ja, gerne, mere eller lignende uden konkret indhold
-- vælg return ved nej, stop, færdig, videre eller afslutning
-- hvis svaret er uklart, men lyder som en oplevelse eller erindring, vælg memory
-- hvis svaret er uklart, men lyder som noget man vil vide, vælg question
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-PÅKRÆVET OUTPUT:
-Returnér præcis ét JSON-objekt og intet andet:
-{{
-  "decision": "question" | "memory" | "continue" | "return"
-}}
-"""
-
-  return f"""
-Decide what a museum visitor is trying to do after receiving an answer.
-
-POSSIBLE DECISIONS:
-- question: they are asking a new question
-- memory: they are sharing a new memory
-- continue: they want to continue, but have not yet provided a concrete question or memory
-- return: they want to stop, move on, or end the session
-
-RULES:
-- choose question for clear questions or investigative phrasing
-- choose memory for statements, personal recollections, or experiences
-- choose continue for short replies like yes, sure, more, okay, without concrete content
-- choose return for no, stop, finished, move on, or ending language
-- if ambiguous but it sounds like a recollection or experience, choose memory
-- if ambiguous but it sounds like something they want to know, choose question
-
-INPUT:
-{{
-  "visitor_reply": "{user_input}"
-}}
-
-REQUIRED OUTPUT:
-Return exactly one JSON object and nothing else:
-{{
-  "decision": "question" | "memory" | "continue" | "return"
-}}
 """

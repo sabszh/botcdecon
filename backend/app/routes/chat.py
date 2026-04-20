@@ -18,11 +18,13 @@ class HistoryItem(BaseModel):
 
 class ChatRequest(BaseModel):
   session_id: str = Field(..., alias='sessionId')
-  message: str
+  message: str = ''
   language: Literal['da', 'en'] = Field(settings.default_language, alias='language')
   user_name: str = Field('Visitor', alias='userName')
   user_location: Optional[str] = Field(None, alias='userLocation')
-  mode: Literal['question', 'memory', 'handoff', 'followup'] = 'question'
+  mode: Literal['question', 'memory', 'system'] = 'question'
+  bot_message: Optional[str] = Field(None, alias='botMessage')
+  clear_session_memory: bool = Field(False, alias='clearSessionMemory')
   history: List[HistoryItem] = Field(default_factory=list)
   continuous_data: Optional[Dict[str, Any]] = Field(default=None, alias='continuousData')
   include_history: bool = Field(False, alias='includeHistory')
@@ -35,7 +37,6 @@ class ChatResponse(BaseModel):
   message: str
   session_id: str = Field(..., alias='sessionId')
   session_history: List[Dict[str, Any]] = Field(default_factory=list, alias='sessionHistory')
-  handoff_action: Optional[Literal['continue', 'return', 'question', 'memory']] = Field(default=None, alias='handoffAction')
   error: Optional[str] = None
   debug: Optional[Dict[str, Any]] = None
   audio_url: Optional[str] = Field(default=None, alias='audioUrl')
@@ -58,6 +59,8 @@ async def chat_endpoint(
     user_name=payload.user_name,
     user_location=payload.user_location,
     mode=payload.mode,
+    bot_message=payload.bot_message,
+    clear_session_memory=payload.clear_session_memory,
     history=[item.dict() for item in payload.history],
     continuous_data=payload.continuous_data,
     include_history=payload.include_history
@@ -70,7 +73,6 @@ async def chat_endpoint(
     message=result.message,
     session_id=result.session_id,
     session_history=result.session_history,
-    handoff_action=result.handoff_action,
     error=result.error,
     debug=result.debug,
     audio_url=result.audio_url,

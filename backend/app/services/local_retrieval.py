@@ -176,3 +176,11 @@ class LocalCorpus:
     ]
     docs.sort(key=lambda d: d.get('metadata', {}).get('date', ''), reverse=True)
     return docs[:k]
+
+  def clear_session(self, session_id: str) -> None:
+    if not session_id:
+      return
+    self._chat_docs = [
+      d for d in self._chat_docs
+      if str(d.get('metadata', {}).get('session_id') or '') != session_id
+    ]

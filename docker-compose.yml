@@ -3,49 +3,42 @@ version: "3.9"
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-continuonus}
       POSTGRES_USER: ${POSTGRES_USER:-continuonus}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-continuonus}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-continuonus} -d ${POSTGRES_DB:-continuonus}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  backend:
+  app:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
       DATA_JSON_PATH: ${DATA_JSON_PATH:-data/all.json}
+      ARCHIVE_DB_ENABLED: ${ARCHIVE_DB_ENABLED:-true}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://continuonus:change-me@db:5432/continuonus}
+      API_ALLOW_ORIGINS: ${API_ALLOW_ORIGINS:-*}
       TTS_PROVIDER: ${TTS_PROVIDER:-elevenlabs}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://continuonus:continuonus@db:5432/continuonus}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}
     ports:
-      - "8000:8000"
-    volumes:
-      - ./:/app
-    command: uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
-
-  frontend:
-    image: node:20-alpine
-    working_dir: /app
-    depends_on:
-      - backend
-    environment:
-      VITE_API_BASE: ${VITE_API_BASE:-http://127.0.0.1:8000}
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./:/app
-    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
-    profiles:
-      - dev
+      - "${APP_PORT_BIND:-127.0.0.1:8000}:8000"
 
 volumes:
   postgres_data:

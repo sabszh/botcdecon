@@ -1,20 +1,14 @@
 # -*- coding: utf-8 -*-
-from typing import List, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
 from .app.services.llm import LLMProvider, get_llm_provider
 from .app.services.chat_formatting import (
     enforce_concise as enforce_concise_text,
-    extract_first_json_object,
     format_context as format_retrieval_context,
     format_points,
-    normalize_handoff_reply,
-    parse_llm_json,
 )
 from .app.services.chat_prompts import (
-    build_followup_prompt,
-    build_handoff_prompt,
     build_memory_confirmation_prompt,
     build_source_prompt,
 )
@@ -22,14 +16,6 @@ from .app.services.local_retrieval import LocalCorpus
 from .app.settings import settings
 
 load_dotenv()
-
-
-class StructuredHandoffDecision(BaseModel):
-    decision: Literal["continue", "return"]
-
-
-class StructuredFollowupDecision(BaseModel):
-    decision: Literal["question", "memory", "continue", "return"]
 
 
 class ChatBot:
@@ -80,14 +66,6 @@ class ChatBot:
     def _format_points(points: Any) -> str:
         return format_points(points)
 
-    @staticmethod
-    def _extract_first_json_object(text: str) -> Optional[str]:
-        return extract_first_json_object(text)
-
-    @staticmethod
-    def _parse_llm_json(raw_text: str, model_type: type[BaseModel]) -> Optional[BaseModel]:
-        return parse_llm_json(raw_text, model_type)
-
     def format_context(self, documents: List[Dict[str, Any]], chat: bool = False) -> str:
         return format_retrieval_context(documents, chat=chat)
 
@@ -104,128 +82,6 @@ class ChatBot:
             temperature=min(self.temperature, 0.65) if temperature is None else temperature,
             max_tokens=max_tokens,
         )
-
-    @staticmethod
-    def _normalize_handoff_reply(user_input: str) -> str:
-        return normalize_handoff_reply(user_input)
-
-    def _quick_handoff_decision(self, user_input: str) -> Optional[str]:
-        normalized = self._normalize_handoff_reply(user_input)
-        if not normalized:
-            return "return"
-
-        if "?" in user_input:
-            return "continue"
-
-        if len(normalized.split()) > 6:
-            return None
-
-        if self.language == "da":
-            return_phrases = {
-                "nej", "nej tak", "ellers tak", "det var alt", "det er alt",
-                "jeg er færdig", "færdig", "slut", "videre",
-            }
-            continue_phrases = {
-                "ja", "ja tak", "gerne", "ok", "okay", "mere",
-                "et spørgsmål mere", "endnu et spørgsmål",
-            }
-        else:
-            return_phrases = {
-                "no", "no thanks", "no thank you", "i'm good", "im good",
-                "that's all", "thats all", "done", "finished", "stop",
-            }
-            continue_phrases = {
-                "yes", "yes please", "sure", "ok", "okay", "more",
-                "one more", "another question",
-            }
-
-        if normalized in return_phrases:
-            return "return"
-        if normalized in continue_phrases:
-            return "continue"
-        return None
-
-    def _quick_followup_decision(self, user_input: str) -> Optional[str]:
-        normalized = self._normalize_handoff_reply(user_input)
-        if not normalized:
-            return "return"
-
-        if "?" in user_input:
-            return "question"
-
-        handoff_decision = self._quick_handoff_decision(user_input)
-        if handoff_decision:
-            return handoff_decision
-
-        if self.language == "da":
-            question_starts = {
-                "hvad", "hvordan", "hvorfor", "hvornår", "hvor", "hvem",
-                "hvilken", "hvilke", "kan", "kunne", "vil", "ville", "er", "har",
-            }
-            memory_markers = {
-                "jeg husker", "jeg kan huske", "jeg tænker på", "jeg følte", "jeg følte mig",
-                "jeg oplevede", "for mig", "mit minde", "min erindring", "det minder mig om",
-            }
-        else:
-            question_starts = {
-                "what", "how", "why", "when", "where", "who", "which",
-                "can", "could", "would", "is", "are", "do", "does", "did", "has", "have",
-            }
-            memory_markers = {
-                "i remember", "i can remember", "i felt", "i was", "for me",
-                "my memory", "this reminds me", "i experienced", "i keep thinking about",
-            }
-
-        if any(normalized.startswith(prefix + " ") or normalized == prefix for prefix in question_starts):
-            return "question"
-        if any(marker in normalized for marker in memory_markers):
-            return "memory"
-        return None
-
-    def classify_handoff(self, user_input: str, language: Optional[str] = None) -> str:
-        if language:
-            self.language = language.lower()
-
-        quick_decision = self._quick_handoff_decision(user_input)
-        if quick_decision:
-            return quick_decision
-
-        prompt = build_handoff_prompt(self.language, user_input)
-        response = (self.get_llm_response(
-            prompt,
-            temperature=0.0,
-            max_tokens=16,
-        ) or '').strip()
-        parsed = self._parse_llm_json(response, StructuredHandoffDecision)
-        if parsed:
-            return parsed.decision
-        if 'RETURN' in response.upper():
-            return 'return'
-        return 'continue'
-
-    def classify_followup(self, user_input: str, language: Optional[str] = None) -> str:
-        if language:
-            self.language = language.lower()
-
-        quick_decision = self._quick_followup_decision(user_input)
-        if quick_decision:
-            return quick_decision
-
-        prompt = build_followup_prompt(self.language, user_input)
-        response = (self.get_llm_response(
-            prompt,
-            temperature=0.0,
-            max_tokens=24,
-        ) or '').strip()
-        parsed = self._parse_llm_json(response, StructuredFollowupDecision)
-        if parsed:
-            return parsed.decision
-
-        upper = response.upper()
-        for key in ("QUESTION", "MEMORY", "RETURN", "CONTINUE"):
-            if key in upper:
-                return key.lower()
-        return "continue"
 
     # ---------- session memory ----------
     def store_session_memory(
@@ -328,15 +184,6 @@ class ChatBot:
         ai_output = self.enforce_concise(resp, max_sentences=4, max_words=130)
         if not ai_output:
             raise RuntimeError('memory_confirmation_empty_response')
-        if ai_output:
-            if self.language == "da":
-                prefixes = ("Det minder os om", "Det forbinder sig også med", "Det forbinder sig med")
-                if not ai_output.startswith(prefixes):
-                    ai_output = f"Det minder os om {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
-            else:
-                prefixes = ("This reminds us of", "It also connects to", "This connects with")
-                if not ai_output.startswith(prefixes):
-                    ai_output = f"This reminds us of {ai_output[:1].lower() + ai_output[1:] if ai_output else ''}"
 
         return {
             "ai_output": ai_output,
@@ -349,3 +196,6 @@ class ChatBot:
 
     def retrieve_session(self, session_id: str, k: int = 20) -> List[Dict[str, Any]]:
         return self._local_corpus.retrieve_session(session_id, k=k)
+
+    def clear_session_memory(self, session_id: str) -> None:
+        self._local_corpus.clear_session(session_id)

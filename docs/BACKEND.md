@@ -95,7 +95,7 @@ Responsibilities:
 
 - initialize `ChatBot`
 - initialize the TTS provider
-- run question/memory/handoff flows
+- run question/memory flows
 - persist archive turns
 - queue background TTS jobs
 - expose in-memory audio job lookup
@@ -104,7 +104,6 @@ Modes:
 
 - `memory` returns immediately and persists off-path
 - `question` runs the full chatbot pipeline
-- `handoff` classifies whether the conversation should continue or return
 
 ## Audio Job Model
 
