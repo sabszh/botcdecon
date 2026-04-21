@@ -1223,6 +1223,16 @@ export default function ChatPanel ({
       : (isVoiceActive ? 'Listening…' : 'Voice input ready')
   )
 
+  useEffect(() => {
+    if (!autoFollowRef.current) return
+    const list = chatListRef.current
+    if (!list) return
+    const frame = window.requestAnimationFrame(() => {
+      list.scrollTop = list.scrollHeight
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [keyboardEnabled, showSecondaryRow, micError, canType, isVoiceActive, showPlaybackControl])
+
   const activateKeyboardInput = useCallback(() => {
     if (!canType || isLoading) return
     setKeyboardEnabled(true)
