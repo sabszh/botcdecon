@@ -63,7 +63,7 @@ export default function ChatComposer ({
   onTogglePlayback
 }: Props) {
   return (
-    <form onSubmit={onSubmit} className='relative z-10 -mt-[22px] flex flex-col gap-2'>
+    <form onSubmit={onSubmit} className='relative z-10 -mt-[30px] flex flex-col gap-2'>
       <label htmlFor='message' className='sr-only'>Message</label>
       <div className='surface-card relative rounded-[2rem] px-4 py-3'>
         <div className='relative flex items-end gap-3'>
@@ -161,11 +161,15 @@ export default function ChatComposer ({
               type='button'
               onClick={onSkip}
               disabled={isLoading}
-              className='surface-utility rounded-full px-4 py-2 text-sm text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
-            >
-              {isAudioPlaying
+              className='surface-utility rounded-full px-4 py-2 text-xl leading-none text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
+              aria-label={isAudioPlaying
                 ? (language === 'da' ? 'Spring over' : 'Skip')
                 : (language === 'da' ? 'Næste' : 'Next')}
+              title={isAudioPlaying
+                ? (language === 'da' ? 'Spring over' : 'Skip')
+                : (language === 'da' ? 'Næste' : 'Next')}
+            >
+              →
             </button>
           )}
           {showPlaybackControl && (
@@ -173,11 +177,17 @@ export default function ChatComposer ({
               type='button'
               onClick={onTogglePlayback}
               disabled={!isAudioPlaying && !hasPlaybackSource}
-              className='surface-utility rounded-full px-4 py-2 text-sm text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
-            >
-              {isAudioPlaying
+              className='surface-utility rounded-full px-4 py-2 text-xl leading-none text-black/70 transition hover:text-black disabled:cursor-not-allowed disabled:opacity-40'
+              aria-label={isAudioPlaying
                 ? (language === 'da' ? 'Stop lyd' : 'Stop audio')
                 : (language === 'da' ? 'Afspil lyd' : 'Play audio')}
+              title={isAudioPlaying
+                ? (language === 'da' ? 'Stop lyd' : 'Stop audio')
+                : (language === 'da' ? 'Afspil lyd' : 'Play audio')}
+            >
+              {isAudioPlaying
+                ? '■'
+                : '▶'}
             </button>
           )}
         </div>

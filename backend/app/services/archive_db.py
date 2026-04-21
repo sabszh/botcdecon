@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, create_engine, exists, func, or_, select
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, create_engine, exists, func, or_, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 from ..settings import settings
@@ -105,6 +105,90 @@ class ArchiveStore:
 
   def init_db(self) -> None:
     Base.metadata.create_all(self._engine)
+    self._ensure_compatible_schema()
+
+  def _ensure_compatible_schema(self) -> None:
+    # Additive migration layer for existing Postgres databases.
+    # create_all() will not update old tables, so admin/archive queries can
+    # crash if the deployment is running against a schema from an earlier app version.
+    statements = [
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      """,
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      """,
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS language VARCHAR(8) NOT NULL DEFAULT 'da'
+      """,
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS user_name VARCHAR(120) NOT NULL DEFAULT 'Visitor'
+      """,
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS user_location VARCHAR(255)
+      """,
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS turn_count INTEGER NOT NULL DEFAULT 0
+      """,
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS last_user_message TEXT NOT NULL DEFAULT ''
+      """,
+      """
+      ALTER TABLE chat_sessions
+      ADD COLUMN IF NOT EXISTS last_bot_message TEXT NOT NULL DEFAULT ''
+      """,
+      """
+      ALTER TABLE chat_turns
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      """,
+      """
+      ALTER TABLE chat_turns
+      ADD COLUMN IF NOT EXISTS mode VARCHAR(24) NOT NULL DEFAULT 'question'
+      """,
+      """
+      ALTER TABLE chat_turns
+      ADD COLUMN IF NOT EXISTS language VARCHAR(8) NOT NULL DEFAULT 'da'
+      """,
+      """
+      ALTER TABLE chat_turns
+      ADD COLUMN IF NOT EXISTS error TEXT
+      """,
+      """
+      ALTER TABLE chat_turns
+      ADD COLUMN IF NOT EXISTS continuous_data JSON
+      """,
+      """
+      CREATE INDEX IF NOT EXISTS ix_chat_sessions_last_activity_at
+      ON chat_sessions (last_activity_at)
+      """,
+      """
+      CREATE INDEX IF NOT EXISTS ix_chat_sessions_language
+      ON chat_sessions (language)
+      """,
+      """
+      CREATE INDEX IF NOT EXISTS ix_chat_turns_created_at
+      ON chat_turns (created_at)
+      """,
+      """
+      CREATE INDEX IF NOT EXISTS ix_chat_turns_mode
+      ON chat_turns (mode)
+      """,
+      """
+      CREATE INDEX IF NOT EXISTS ix_chat_turns_session_id
+      ON chat_turns (session_id)
+      """,
+    ]
+
+    with self._engine.begin() as conn:
+      for statement in statements:
+        conn.execute(text(statement))
 
   @contextmanager
   def session_scope(self) -> Generator[Session, None, None]:

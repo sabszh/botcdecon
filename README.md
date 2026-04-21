@@ -52,6 +52,8 @@ Backend:
 - `ARCHIVE_DB_CONNECT_TIMEOUT_SEC` optional, default `2`.
 - `ARCHIVE_DB_INIT_MAX_ATTEMPTS` optional, default `1`.
 - `ARCHIVE_DB_RETRY_DELAY_SEC` optional, default `0.25`.
+- `PROMPT_TRACE_ENABLED` optional, default `false`. When `true`, writes prompt trace JSON files for local prompt tuning.
+- `PROMPT_TRACE_DIR` optional, default `output/prompt_traces`.
 
 ## Repository Structure
 
@@ -114,6 +116,7 @@ Notes:
 - the backend defaults to `LLM_PROVIDER=mistral`
 - generated audio is asynchronous and fetched through the audio polling endpoint
 - archive/admin persistence is disabled by default in local dev; enable it only if you have a reachable Postgres database
+- prompt tuning traces can be enabled locally with `PROMPT_TRACE_ENABLED=true`; each turn writes a JSON file into `output/prompt_traces`
 
 ## Docker
 

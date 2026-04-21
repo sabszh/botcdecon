@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
@@ -43,6 +44,8 @@ class Settings:
   voice_id: str = os.getenv('VOICE_ID', '4PzN60Ir6O2U6RzaQ5fm')
   model_id: str = os.getenv('MODEL_ID', 'eleven_multilingual_v2')
   llm_repo_id: Optional[str] = os.getenv('LLM_REPO_ID')
+  prompt_trace_enabled: bool = os.getenv('PROMPT_TRACE_ENABLED', 'false').lower() == 'true'
+  prompt_trace_dir: str = os.getenv('PROMPT_TRACE_DIR', 'output/prompt_traces')
 
   default_language: str = os.getenv('DEFAULT_LANGUAGE', 'da')
 
@@ -69,6 +72,14 @@ class Settings:
   @property
   def has_archive_db(self) -> bool:
     return self.archive_db_enabled and bool(self.database_url)
+
+  @property
+  def prompt_trace_path(self) -> Path:
+    raw = self.prompt_trace_dir.strip() or 'output/prompt_traces'
+    path = Path(raw)
+    if path.is_absolute():
+      return path
+    return Path(__file__).resolve().parents[2] / path
 
 
 settings = Settings()

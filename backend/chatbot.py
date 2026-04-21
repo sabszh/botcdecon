@@ -12,6 +12,7 @@ from .app.services.chat_prompts import (
     build_memory_confirmation_prompt,
     build_source_prompt,
 )
+from .app.services.prompt_trace import write_prompt_trace
 from .app.services.local_retrieval import LocalCorpus
 from .app.settings import settings
 
@@ -141,6 +142,26 @@ class ChatBot:
         ai_output_raw = (resp1 or '').strip()
         ai_output = ai_output_raw
 
+        write_prompt_trace({
+            "trace_kind": "question",
+            "session_id": session_id,
+            "language": self.language,
+            "user_name": user_name,
+            "user_location": user_location,
+            "user_input": user_input,
+            "chat_history": chat_history.strip(),
+            "retrieval_k": retrieval_k,
+            "retrieved_documents": source_data,
+            "formatted_retrieval_context": formatted_source_data,
+            "prompt": prompt1,
+            "raw_model_output": resp1,
+            "final_output": ai_output,
+            "timings": {
+                "retrieval_ms": round(retrieval_ms, 2),
+                "llm_ms": round(llm_ms, 2),
+            },
+        })
+
         memory_store_ms = 0.0
         if persist:
             print("[BOT] Storing turn in local session memory...")
@@ -184,6 +205,23 @@ class ChatBot:
         ai_output = self.enforce_concise(resp, max_sentences=4, max_words=130)
         if not ai_output:
             raise RuntimeError('memory_confirmation_empty_response')
+
+        write_prompt_trace({
+            "trace_kind": "memory_confirmation",
+            "session_id": "memory-confirmation",
+            "language": self.language,
+            "user_input": user_input,
+            "retrieval_k": retrieval_k,
+            "retrieved_documents": source_data[:2],
+            "formatted_retrieval_context": formatted_source_data,
+            "prompt": prompt,
+            "raw_model_output": resp,
+            "final_output": ai_output,
+            "timings": {
+                "retrieval_ms": round(retrieval_ms, 2),
+                "llm_ms": round(llm_ms, 2),
+            },
+        })
 
         return {
             "ai_output": ai_output,

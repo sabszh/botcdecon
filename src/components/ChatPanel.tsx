@@ -1025,11 +1025,8 @@ export default function ChatPanel ({
           }, undefined, GENERATED_SPEECH_RATE)
         }
         setHasSharedMemory(true)
-        const memoryPlaceholderId = activePendingMessageId ?? addPendingMessage()
-        activePendingMessageId = memoryPlaceholderId
-
-        updateMessage(memoryPlaceholderId, thankYouText, { pending: false })
-        scrollToMessageTop(memoryPlaceholderId)
+        const thankYouMessageId = addMessage('bot', thankYouText)
+        scrollToMessageTop(thankYouMessageId)
 
         const memoryRequest = requestChatTurn({
           sessionId: sessionIdRef.current,
@@ -1042,8 +1039,12 @@ export default function ChatPanel ({
         })
 
         await new Promise<void>(resolve => {
-          playAudio(`/audio/${language}_THANK_YOU.mp3`, resolve, resolve, GENERATED_SPEECH_RATE, memoryPlaceholderId ?? undefined, false)
+          playAudio(`/audio/${language}_THANK_YOU.mp3`, resolve, resolve, GENERATED_SPEECH_RATE, thankYouMessageId ?? undefined, false)
         })
+
+        const memoryReplyId = addPendingMessage()
+        activePendingMessageId = memoryReplyId
+        scrollToMessageTop(memoryReplyId)
 
         let data
         try {
@@ -1063,9 +1064,8 @@ export default function ChatPanel ({
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
         const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
 
-        const combinedReply = `${thankYouText}\n${replyText}`
-        updateMessage(memoryPlaceholderId, combinedReply, { pending: false })
-        scrollToMessageTop(memoryPlaceholderId)
+        updateMessage(memoryReplyId, replyText, { pending: false })
+        scrollToMessageTop(memoryReplyId)
 
         let turnAudioBlobUrl: string | null = null
         if (audioTurnId) {
@@ -1084,12 +1084,12 @@ export default function ChatPanel ({
           playAudio(
             resolved,
             () => { cleanupTurnAudio(); startQuestionPrompt() },
-            () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, startQuestionPrompt, memoryPlaceholderId ?? undefined) },
+            () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, startQuestionPrompt, memoryReplyId ?? undefined) },
             GENERATED_SPEECH_RATE,
-            memoryPlaceholderId ?? undefined
+            memoryReplyId ?? undefined
           )
         } else {
-          speakBrowserTTS(replyText, language, startQuestionPrompt, memoryPlaceholderId ?? undefined)
+          speakBrowserTTS(replyText, language, startQuestionPrompt, memoryReplyId ?? undefined)
         }
         return
       }
@@ -1214,8 +1214,8 @@ export default function ChatPanel ({
   const showPlaybackControl = isAudioPlaying || Boolean(lastAudioSrcRef.current) || hasSpeechReplay
   const showSecondaryRow = canSkipAhead || showPlaybackControl
   const inputPlaceholder = language === 'da'
-    ? 'Skriv her'
-    : 'Type here'
+    ? 'Tal eller skriv her...'
+    : 'Speak or type here...'
   const isVoiceActive = micDesired || isMicOn
   const voiceStatusLabel = (
     language === 'da'
@@ -1316,7 +1316,7 @@ export default function ChatPanel ({
   }, [resizeTextarea, stopMic, syncDraftFromManualEdit])
 
   return (
-    <div className='relative z-10 box-border w-[1100px] max-w-[95vw] overflow-x-hidden px-6 py-6 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
+    <div className='relative z-10 box-border w-[1100px] max-w-[95vw] overflow-x-hidden px-6 pb-6 pt-3 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
       <audio ref={audioElRef} preload='auto' playsInline />
 
       <ChatTranscript
