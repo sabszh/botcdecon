@@ -76,7 +76,7 @@ export async function resolveAudioTurn (
   while (Date.now() < deadline) {
     const res = await fetch(resolveApiUrl(`${CHAT_AUDIO_ENDPOINT}/${encodeURIComponent(turnId)}`), {
       method: 'GET',
-      headers: { Accept: 'audio/mpeg' },
+      headers: { Accept: 'audio/mpeg, application/json' },
       signal
     })
     if (res.status === 202) {
@@ -92,7 +92,22 @@ export async function resolveAudioTurn (
       }
       throw new Error(`Audio turn failed (${res.status})`)
     }
+
+    const contentType = (res.headers.get('content-type') || '').toLowerCase()
+    if (contentType.includes('application/json')) {
+      const payload = await res.json().catch(() => null) as { status?: string } | null
+      if (payload?.status === 'error') {
+        return null
+      }
+      return null
+    }
+
+    if (!contentType.includes('audio/')) {
+      return null
+    }
+
     const blob = await res.blob()
+    if (!blob.size) return null
     return URL.createObjectURL(blob)
   }
   return null

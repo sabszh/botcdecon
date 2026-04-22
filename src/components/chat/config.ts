@@ -10,6 +10,11 @@ export const THANK_YOU_TEXTS: Record<Language, string> = {
   da: 'Tak fordi du delte.'
 }
 
+export const MEMORY_FALLBACK_TEXTS: Record<Language, string> = {
+  en: 'Your memory reminds me of others who hope for care and closeness. Your memory is now part of the continuOnus landscape.',
+  da: 'Dit minde minder mig om andres håb om omsorg og nærhed. Nu er dit minde en del af continuOnus-landskabet.'
+}
+
 export const scripts = {
   en: {
     welcome: `Hello!
@@ -24,6 +29,7 @@ We may have her voice, but we’re speaking through a data set of the experience
     question2: `Would you like to ask something else or share another memory. Please do so now.
 Press the Share button when you’re done. If you want to end this session, press return.`,
     returnPrompt: `Thank you for sharing. Before you go, may we ask you, where do you think we are going?`,
+    returnExitHint: `If you would rather leave now, press Return again.`,
     farewell: `Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future.`
   },
   da: {
@@ -38,6 +44,7 @@ Vi har måske hendes stemme, men vi taler gennem et datasæt af oplevelser fra m
     question1: `Du er velkommen til nu at udforske, hvad andre før dig har delt. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del-knappen, når du er færdig.`,
     question2: `Vil du stille et andet spørgsmål eller dele endnu et minde? Gør det nu. Tryk på Del-knappen, når du er færdig. Hvis du vil afslutte sessionen, tryk på Tilbage.`,
     returnPrompt: `Tak fordi du delte. Inden du går, må vi spørge dig, hvor tror du, vi er på vej hen?`,
+    returnExitHint: `Hvis du hellere vil gå nu, så tryk på Tilbage igen.`,
     farewell: `Tak fordi du tog denne del af rejsen med os. Du er nu også en del af continuOnus-landskabet. Vi håber at se dig igen i fremtiden.`
   }
 } as const

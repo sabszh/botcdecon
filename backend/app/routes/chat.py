@@ -92,7 +92,7 @@ async def chat_audio_endpoint(
   if job.status == 'pending':
     return JSONResponse(status_code=202, content={'status': 'pending', 'turnId': turn_id})
   if job.status == 'error':
-    return JSONResponse(status_code=424, content={'status': 'error', 'turnId': turn_id, 'error': job.error})
+    return JSONResponse(status_code=200, content={'status': 'error', 'turnId': turn_id, 'error': job.error})
   if not job.audio_bytes:
     raise HTTPException(status_code=500, detail='audio_missing')
   return Response(

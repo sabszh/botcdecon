@@ -39,6 +39,14 @@ class Settings:
   llm_provider: str = os.getenv('LLM_PROVIDER', 'mistral').lower()
   mistral_api_key: Optional[str] = os.getenv('MISTRAL_API_KEY')
   mistral_model: str = os.getenv('MISTRAL_MODEL', 'mistral-small-latest')
+  retrieval_embedding_model: str = os.getenv(
+    'RETRIEVAL_EMBEDDING_MODEL',
+    'intfloat/multilingual-e5-small',
+  )
+  retrieval_embedding_query_prefix: str = os.getenv('RETRIEVAL_EMBEDDING_QUERY_PREFIX', 'query: ')
+  retrieval_embedding_document_prefix: str = os.getenv('RETRIEVAL_EMBEDDING_DOCUMENT_PREFIX', 'passage: ')
+  retrieval_use_embeddings: bool = os.getenv('RETRIEVAL_USE_EMBEDDINGS', 'true').lower() == 'true'
+  retrieval_cache_dir: str = os.getenv('RETRIEVAL_CACHE_DIR', 'output/vector_store')
   elevenlabs_api_key: Optional[str] = os.getenv('ELEVENLABS_API_KEY')
   tts_provider: str = os.getenv('TTS_PROVIDER', 'elevenlabs').lower()
   voice_id: str = os.getenv('VOICE_ID', '4PzN60Ir6O2U6RzaQ5fm')
@@ -76,6 +84,14 @@ class Settings:
   @property
   def prompt_trace_path(self) -> Path:
     raw = self.prompt_trace_dir.strip() or 'output/prompt_traces'
+    path = Path(raw)
+    if path.is_absolute():
+      return path
+    return Path(__file__).resolve().parents[2] / path
+
+  @property
+  def retrieval_cache_path(self) -> Path:
+    raw = self.retrieval_cache_dir.strip() or 'output/vector_store'
     path = Path(raw)
     if path.is_absolute():
       return path

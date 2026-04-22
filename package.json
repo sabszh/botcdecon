@@ -8,17 +8,22 @@
     "build": "vite build",
     "preview": "vite preview",
     "snapshot": "node scripts/snapshot.mjs",
-    "restore:snapshot": "node scripts/restore.mjs"
+    "restore:snapshot": "node scripts/restore.mjs",
+    "test": "npm run test:frontend-flow && npm run test:backend",
+    "test:frontend-flow": "node --import tsx --test src/components/chat/flow.test.ts",
+    "test:backend": "python3 -m unittest discover -s backend/tests -p \"test_*.py\""
   },
   "dependencies": {
     "@react-three/drei": "10.7.6",
     "@react-three/fiber": "9.3.0",
     "@timur00kh/whisper.wasm": "^0.1.0-canary.52de4c5",
+    "esbuild": "^0.27.7",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "three": "0.180.0"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "@types/three": "0.180.0",
@@ -26,6 +31,8 @@
     "autoprefixer": "10.4.14",
     "postcss": "8.4.22",
     "tailwindcss": "3.3.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
     "vite": "7.1.9"
   },
   "engines": {

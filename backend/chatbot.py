@@ -13,7 +13,7 @@ from .app.services.chat_prompts import (
     build_source_prompt,
 )
 from .app.services.prompt_trace import write_prompt_trace
-from .app.services.local_retrieval import LocalCorpus
+from .app.services.local_retrieval import get_local_corpus
 from .app.settings import settings
 
 load_dotenv()
@@ -30,8 +30,10 @@ class ChatBot:
     ):
         self.source_index_name = index_name_bot or "local-source"
         self.session_index_name = index_name_chat or "local-session"
-        self._local_corpus = LocalCorpus(settings.data_json_path)
-        print(f"[INIT] Retriever provider: local ({self._local_corpus.entry_count} corpus entries)")
+        self._local_corpus = get_local_corpus(settings.data_json_path)
+        print(
+            f"[INIT] Retriever provider: local vector store ({self._local_corpus.entry_count} corpus entries)"
+        )
 
         self.repo_id = repo_id or settings.llm_repo_id
         self.temperature = temperature
@@ -47,7 +49,7 @@ class ChatBot:
         return build_memory_confirmation_prompt(self.language, original_data, user_input)
 
     # ---------- retrieval ----------
-    def retrieve_docs(self, query: str, index_name: str, excluded_session_id: Optional[str] = None, k: int = 15) -> List[Dict[str, Any]]:
+    def retrieve_docs(self, query: str, index_name: str, excluded_session_id: Optional[str] = None, k: int = 20) -> List[Dict[str, Any]]:
         docs = self._local_corpus.retrieve(
             query,
             index_name=index_name,
@@ -110,7 +112,7 @@ class ChatBot:
                  language: Optional[str] = None,
                  persist: bool = True,
                  include_session_history: bool = False,
-                 retrieval_k: int = 15) -> Dict[str, Any]:
+                 retrieval_k: int = 20) -> Dict[str, Any]:
         import time
 
         # Update language if provided in this call
@@ -183,7 +185,7 @@ class ChatBot:
             }
         }
 
-    def memory_confirmation(self, user_input: str, language: Optional[str] = None, retrieval_k: int = 2) -> Dict[str, Any]:
+    def memory_confirmation(self, user_input: str, language: Optional[str] = None, retrieval_k: int = 20) -> Dict[str, Any]:
         import time
 
         if language:
@@ -191,7 +193,7 @@ class ChatBot:
 
         t1 = time.time()
         source_data = self.retrieve_docs(user_input, self.source_index_name, k=max(1, retrieval_k))
-        formatted_source_data = self.format_context(source_data[:2])
+        formatted_source_data = self.format_context(source_data)
         retrieval_ms = (time.time() - t1) * 1000
 
         if not source_data:
@@ -212,7 +214,7 @@ class ChatBot:
             "language": self.language,
             "user_input": user_input,
             "retrieval_k": retrieval_k,
-            "retrieved_documents": source_data[:2],
+            "retrieved_documents": source_data,
             "formatted_retrieval_context": formatted_source_data,
             "prompt": prompt,
             "raw_model_output": resp,
@@ -225,7 +227,7 @@ class ChatBot:
 
         return {
             "ai_output": ai_output,
-            "source_data": source_data[:2],
+            "source_data": source_data,
             "timings": {
                 "retrieval_ms": round(retrieval_ms, 2),
                 "llm_ms": round(llm_ms, 2),

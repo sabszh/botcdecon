@@ -67,7 +67,7 @@ export default function ChatComposer ({
       <label htmlFor='message' className='sr-only'>Message</label>
       <div className='surface-card relative rounded-[2rem] px-4 py-3'>
         <div className='relative flex items-end gap-3'>
-          <div className='relative flex min-w-0 flex-1 items-end'>
+          <div className='relative flex min-w-0 flex-1 items-end gap-2'>
             <textarea
               ref={inputRef}
               id='message'
@@ -76,7 +76,7 @@ export default function ChatComposer ({
               value={draft}
               onChange={e => onDraftChange(e.target.value, e.currentTarget)}
               placeholder={inputPlaceholder}
-              className='w-full resize-none bg-transparent pr-12 pl-1 py-[0.95rem] text-2xl leading-[1.1] text-black placeholder:text-black/45 focus:outline-none focus:shadow-none focus-visible:shadow-none disabled:cursor-not-allowed disabled:opacity-60'
+              className='w-full resize-none bg-transparent pr-2 pl-1 py-[0.95rem] text-2xl leading-[1.1] text-black placeholder:text-black/45 focus:outline-none focus:shadow-none focus-visible:shadow-none disabled:cursor-not-allowed disabled:opacity-60'
               style={{ overflowY: 'hidden', maxHeight: '40vh' }}
               disabled={isLoading}
               autoComplete='off'
@@ -94,7 +94,7 @@ export default function ChatComposer ({
               onPointerLeave={onStopDeleteHold}
               onContextMenu={(e) => e.preventDefault()}
               disabled={!hasDraftContent}
-              className='surface-delete-action absolute right-1 top-1/2 -translate-y-1/2 select-none rounded-full px-7 py-4 text-2xl font-medium transition disabled:cursor-not-allowed disabled:opacity-0'
+              className='surface-delete-action shrink-0 select-none rounded-full h-14 w-14 grid place-items-center text-[1.5rem] leading-none font-medium transition duration-150 hover:scale-[1.04] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100'
               style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
               aria-label={language === 'da' ? 'Slet ord' : 'Delete word'}
             >

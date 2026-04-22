@@ -54,6 +54,9 @@ Backend:
 - `ARCHIVE_DB_RETRY_DELAY_SEC` optional, default `0.25`.
 - `PROMPT_TRACE_ENABLED` optional, default `false`. When `true`, writes prompt trace JSON files for local prompt tuning.
 - `PROMPT_TRACE_DIR` optional, default `output/prompt_traces`.
+- `RETRIEVAL_USE_EMBEDDINGS` optional, default `true`.
+- `RETRIEVAL_EMBEDDING_MODEL` optional, default `intfloat/multilingual-e5-small`.
+- `RETRIEVAL_CACHE_DIR` optional, default `output/vector_store`.
 
 ## Repository Structure
 
@@ -117,6 +120,8 @@ Notes:
 - generated audio is asynchronous and fetched through the audio polling endpoint
 - archive/admin persistence is disabled by default in local dev; enable it only if you have a reachable Postgres database
 - prompt tuning traces can be enabled locally with `PROMPT_TRACE_ENABLED=true`; each turn writes a JSON file into `output/prompt_traces`
+- retrieval defaults to a hybrid local retriever (dense + lexical) over `data/all.json` and caches vectors under `output/vector_store`
+- if embedding dependencies are missing, retrieval automatically falls back to lexical scoring only
 
 ## Docker
 

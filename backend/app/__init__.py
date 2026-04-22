@@ -11,6 +11,7 @@ from .services.admin_auth import require_admin
 from .services.archive_db import init_archive_db
 from .services.chat import get_chat_service
 from .services.entries_sync import sync_entries_dataset
+from .services.local_retrieval import get_local_corpus
 
 
 logger = logging.getLogger(__name__)
@@ -44,24 +45,30 @@ def create_app() -> FastAPI:
         result = sync_entries_dataset()
         if not result.attempted:
             logger.info('Entries startup sync skipped (enabled=%s, url=%s)', settings.sync_entries_on_startup, settings.entries_source_url)
-            return
-
-        if result.success:
+        elif result.success:
             get_chat_service.cache_clear()
+            get_local_corpus.cache_clear()
             logger.info(
                 'Entries startup sync completed from %s into %s (%d entries)',
                 result.source_url,
                 result.data_path,
                 result.entries_count
             )
-            return
+        else:
+            logger.warning(
+                'Entries startup sync failed from %s: %s. Falling back to existing %s',
+                result.source_url,
+                result.error,
+                result.data_path
+            )
 
-        logger.warning(
-            'Entries startup sync failed from %s: %s. Falling back to existing %s',
-            result.source_url,
-            result.error,
-            result.data_path
-        )
+        try:
+            # Pre-warm chat dependencies (LLM client, retriever, TTS wiring) so
+            # the first visitor turn does not pay cold-start latency.
+            get_chat_service()
+            logger.info('Chat service pre-warmed during startup')
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning('Chat service pre-warm failed: %s', exc)
 
     # ✅ serve frontend build
     dist_dir = Path(__file__).resolve().parent.parent.parent / "dist"

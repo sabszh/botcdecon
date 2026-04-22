@@ -17,6 +17,70 @@ from .tts import get_tts_service, TTSService
 logger = logging.getLogger(__name__)
 
 
+def _strip_memory_acknowledgement(text: str, language: str) -> str:
+  cleaned = (text or '').strip()
+  if not cleaned:
+    return cleaned
+
+  prefixes = {
+    'en': [
+      'Thank you for sharing.',
+      'Thank you for sharing',
+    ],
+    'da': [
+      'Tak fordi du delte.',
+      'Tak fordi du delte',
+    ],
+  }
+
+  for prefix in prefixes.get((language or '').lower(), []):
+    if cleaned.lower().startswith(prefix.lower()):
+      cleaned = cleaned[len(prefix):].lstrip(' .,:;!-–—')
+      break
+
+  return cleaned.strip()
+
+
+def _excerpt(value: str, max_words: int = 8) -> str:
+  words = [w for w in (value or '').strip().split() if w]
+  if not words:
+    return ''
+  if len(words) <= max_words:
+    return ' '.join(words)
+  return ' '.join(words[:max_words]) + '...'
+
+
+def _build_memory_confirmation_fallback(
+  language: str,
+  user_memory: str,
+  retrieved_memory: Optional[str] = None,
+) -> str:
+  lang = (language or '').lower()
+  user_excerpt = _excerpt(user_memory, max_words=8)
+  retrieved_excerpt = _excerpt(retrieved_memory or '', max_words=10)
+
+  if lang == 'da':
+    if retrieved_excerpt:
+      return (
+        f'Dit minde om "{user_excerpt}" minder mig om en anden, der skrev "{retrieved_excerpt}". '
+        'De deler en personlig omsorg, som andre også kan genkende. Nu er dit minde en del af continuOnus-landskabet.'
+      )
+    return (
+      f'Dit minde om "{user_excerpt}" minder mig om andres håb om omsorg og nærhed. '
+      'Det føles personligt og genkendeligt. Nu er dit minde en del af continuOnus-landskabet.'
+    )
+
+  if retrieved_excerpt:
+    return (
+      f'Your memory about "{user_excerpt}" reminds me of another person who wrote "{retrieved_excerpt}". '
+      'They share a personal form of care that others can recognize. Your memory is now part of the continuOnus landscape.'
+    )
+  return (
+    f'Your memory about "{user_excerpt}" reminds me of others who hope for care and closeness. '
+    'It feels personal and recognizable. Your memory is now part of the continuOnus landscape.'
+  )
+
+
 @dataclass
 class ChatResult:
   message: str
@@ -152,15 +216,35 @@ class ChatService:
       try:
         if mode == 'memory':
           logger.info('[CHAT] MEMORY mode: generating confirmation reply')
-          response = await asyncio.to_thread(
-            self._bot.memory_confirmation,
-            message,
-            language,
-            2
-          )
+          response: Dict[str, Any] = {}
+          try:
+            response = await asyncio.to_thread(
+              self._bot.memory_confirmation,
+              message,
+              language,
+              20
+            )
+          except Exception as exc:
+            logger.exception('Memory confirmation generation failed; using fallback: %s', exc)
+
           ai_output = sanitize_model_text((response.get('ai_output') or '').strip())
+          ai_output = _strip_memory_acknowledgement(ai_output, language)
           if not ai_output:
-            raise RuntimeError('empty_memory_confirmation')
+            retrieved_memory: Optional[str] = None
+            source_docs = response.get('source_data') if isinstance(response, dict) else None
+            if isinstance(source_docs, list) and source_docs:
+              first_text = (source_docs[0].get('text') or '').strip() if isinstance(source_docs[0], dict) else ''
+              retrieved_memory = first_text or None
+
+            if not retrieved_memory:
+              try:
+                docs = await asyncio.to_thread(self._bot.retrieve_docs, message, self._bot.source_index_name, None, 1)
+                if docs and isinstance(docs[0], dict):
+                  retrieved_memory = (docs[0].get('text') or '').strip() or None
+              except Exception as exc:
+                logger.info('Fallback retrieval for memory confirmation failed: %s', exc)
+
+            ai_output = _build_memory_confirmation_fallback(language, message, retrieved_memory)
           timings = response.get('timings', {}) or {}
           audio_turn_id = await self._audio_jobs.queue(ai_output, language)
           self._schedule_background(
@@ -211,7 +295,7 @@ class ChatService:
           language,
           False,  # persist off critical path
           include_history,
-          15
+          20
         )
         ai_output = sanitize_model_text(response.get('ai_output', ''))
         if not ai_output:

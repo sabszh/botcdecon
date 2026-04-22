@@ -23,6 +23,7 @@ services:
     environment:
       DATA_JSON_PATH: ${DATA_JSON_PATH:-data/all.json}
       TTS_PROVIDER: ${TTS_PROVIDER:-elevenlabs}
+      ARCHIVE_DB_ENABLED: ${ARCHIVE_DB_ENABLED:-true}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://continuonus:continuonus@db:5432/continuonus}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}

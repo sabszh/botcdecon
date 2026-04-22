@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { preloadAudio, getCached, clearCache } from '../lib/audioCache'
 import { persistSystemTurn, requestChatTurn as requestChatTurnRequest, resolveAudioTurn as resolveAudioTurnRequest } from './chat/backend'
 import { BROWSER_TTS_RATE, GENERATED_SPEECH_RATE, INTRO_MIN_DELAY_MS, INTRO_START_MAX_WAIT_MS, scripts, THANK_YOU_TEXTS } from './chat/config'
+import { buildCombinedReturnPrompt, buildReturnAnswerData, getManualReturnAction, isReturnIntentText, resolveMemoryReplyMessage, selectTurnMode } from './chat/flow'
 import ChatComposer from './chat/ChatComposer'
 import ChatTranscript from './chat/ChatTranscript'
 import { buildHistoryPayload, buildSessionId } from './chat/helpers'
@@ -9,12 +10,11 @@ import type { ChatMessage, Language } from './chat/types'
 import { getSpeechRecognitionCtor, getSpeechSynthesisApi, requestMicrophonePermission } from '../lib/browserApis'
 import {
   getSpeechErrorMessage,
-  isLikelyQuestionInput,
   normalizeInputStreamText,
+  sanitizeAssistantText,
   normalizeMessageLineBreaks,
   normalizeSpeechText,
-  resolveAudioSrc,
-  sanitizeAssistantText
+  resolveAudioSrc
 } from './chat/runtime'
 
 type Props = {
@@ -75,7 +75,7 @@ export default function ChatPanel ({
   onManualReturnAvailabilityChange
 }: Props) {
   const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
-  type Phase = 'intro' | 'await_memory' | 'await_question' | 'confirm_more'
+  type Phase = 'intro' | 'await_memory' | 'await_question' | 'confirm_more' | 'await_return'
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [sttBuffer, setSttBuffer] = useState('')
@@ -90,6 +90,7 @@ export default function ChatPanel ({
   const [hasSharedMemory, setHasSharedMemory] = useState(false)
   const [hasReachedQuestionPrompt, setHasReachedQuestionPrompt] = useState(false)
   const [hasReachedFinalPrompt, setHasReachedFinalPrompt] = useState(false)
+  const [isFarewellPlaying, setIsFarewellPlaying] = useState(false)
   const [introAssetsReady, setIntroAssetsReady] = useState(false)
   // No UI or persistence for speech rate; use a fixed constant for generated audio only
   const [micError, setMicError] = useState<string | null>(null)
@@ -158,6 +159,7 @@ export default function ChatPanel ({
     setHasSpeechReplay(false)
     setHasReachedQuestionPrompt(false)
     setHasReachedFinalPrompt(false)
+    setIsFarewellPlaying(false)
   }, [language])
   useEffect(() => () => {
     requestAbortRef.current?.abort()
@@ -354,7 +356,38 @@ export default function ChatPanel ({
     try { el.load?.() } catch {}
     el.playbackRate = rate || 1
     el.volume = 0
-    el.onplay = () => fade(0, 1, 400)
+    el.onplay = () => {
+      fade(0, 1, 400)
+      if (typeof autoScrollMsgId === 'number') {
+        // For audio-led experiences (e.g., iPad kiosk), force follow when narration starts.
+        autoFollowRef.current = true
+        setShowFollow(false)
+      }
+    }
+    el.onloadedmetadata = () => {
+      if (typeof autoScrollMsgId !== 'number') return
+      if (!autoFollowRef.current) return
+      const list = chatListRef.current
+      if (!list) return
+      const messageEl = list.querySelector(`[data-msg-id="${autoScrollMsgId}"]`) as HTMLElement | null
+      if (!messageEl) return
+      const nextTop = Math.max(0, messageEl.offsetTop - 8)
+      list.scrollTo({ top: nextTop, behavior: 'auto' })
+    }
+    el.ontimeupdate = () => {
+      if (typeof autoScrollMsgId !== 'number') return
+      if (!autoFollowRef.current) return
+      const list = chatListRef.current
+      if (!list) return
+      const messageEl = list.querySelector(`[data-msg-id="${autoScrollMsgId}"]`) as HTMLElement | null
+      if (!messageEl) return
+      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0
+      if (!duration) return
+      const ratio = Math.max(0, Math.min(1, el.currentTime / duration))
+      const total = Math.max(0, messageEl.scrollHeight - list.clientHeight * 0.9)
+      const target = messageEl.offsetTop + (total * ratio)
+      list.scrollTo({ top: target, behavior: 'auto' })
+    }
     el.onpause = () => {
       setIsAudioPlaying(false)
     }
@@ -373,7 +406,7 @@ export default function ChatPanel ({
       if (onError) onError()
     }
     el.play().catch(err => {
-      console.warn('[Audio play rejected]', err)
+      dlog('audio play rejected', err)
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
       activeNarrationAdvanceRef.current = null
@@ -747,7 +780,7 @@ export default function ChatPanel ({
       setDraft(committedMicRef.current)
       draftRef.current = committedMicRef.current
     }
-    rec.onstart = () => {
+    ;(rec as SpeechRecognition & { onstart?: () => void }).onstart = () => {
       if (awaitingFreshRecognitionStartRef.current) {
         ignoreRecognitionResultsRef.current = false
         awaitingFreshRecognitionStartRef.current = false
@@ -903,12 +936,16 @@ export default function ChatPanel ({
     return await resolveAudioTurnRequest(turnId, controller.signal)
   }, [])
 
-  const persistArchiveSystemTurn = useCallback(async (botMessage: string, clearSessionMemory: boolean = false) => {
+  const persistArchiveSystemTurn = useCallback(async (
+    botMessage: string,
+    options: { clearSessionMemory?: boolean, userMessage?: string, continuousData?: Record<string, unknown> } = {}
+  ) => {
     await persistSystemTurn({
       sessionId: sessionIdRef.current,
-      message: '',
+      message: options.userMessage || '',
       botMessage,
-      clearSessionMemory,
+      clearSessionMemory: options.clearSessionMemory ?? false,
+      continuousData: options.continuousData,
       language,
       userName: 'Visitor',
       userLocation: 'Museum',
@@ -945,29 +982,55 @@ export default function ChatPanel ({
 
     const conf = scripts[language]
     const playFarewell = () => {
+      setPhase('intro')
+      setIsFarewellPlaying(true)
       const farewellId = addMessage('bot', conf.farewell)
-      void persistArchiveSystemTurn(conf.farewell, true).catch((err) => {
+      void persistArchiveSystemTurn(conf.farewell, { clearSessionMemory: true }).catch((err) => {
         dlog('system farewell persist failed', err)
       })
       playAudio(
         `/audio/${language}_FAREWELL.mp3`,
-        onExitSession,
-        () => { speakBrowserTTS(conf.farewell, language, onExitSession, farewellId ?? undefined) },
+        () => {
+          setIsFarewellPlaying(false)
+          onExitSession()
+        },
+        () => {
+          speakBrowserTTS(conf.farewell, language, () => {
+            setIsFarewellPlaying(false)
+            onExitSession()
+          }, farewellId ?? undefined)
+        },
         GENERATED_SPEECH_RATE,
         farewellId ?? undefined,
         false
       )
     }
 
-    if (hasReachedFinalPrompt) {
-      const returnPromptId = addMessage('bot', conf.returnPrompt)
-      void persistArchiveSystemTurn(conf.returnPrompt).catch((err) => {
+    const returnAction = getManualReturnAction(phase, hasSharedMemory)
+    if (returnAction === 'ask_for_destination') {
+      const combinedReturnPrompt = buildCombinedReturnPrompt(conf.returnPrompt, conf.returnExitHint)
+      const returnPromptId = addMessage('bot', combinedReturnPrompt)
+      void persistArchiveSystemTurn(combinedReturnPrompt, {
+        continuousData: { returnPromptStage: 'asked' }
+      }).catch((err) => {
         dlog('system return prompt persist failed', err)
       })
       playAudio(
         `/audio/${language}_RETURN_PROMPT.mp3`,
-        playFarewell,
-        () => { speakBrowserTTS(conf.returnPrompt, language, playFarewell, returnPromptId ?? undefined) },
+        () => {
+          setPhase('await_return')
+          setMicDesired(true)
+          scrollToMessageTop(returnPromptId)
+          manualReturnInFlightRef.current = false
+        },
+        () => {
+          speakBrowserTTS(combinedReturnPrompt, language, () => {
+            setPhase('await_return')
+            setMicDesired(true)
+            scrollToMessageTop(returnPromptId)
+            manualReturnInFlightRef.current = false
+          }, returnPromptId ?? undefined)
+        },
         GENERATED_SPEECH_RATE,
         returnPromptId ?? undefined,
         false
@@ -976,7 +1039,7 @@ export default function ChatPanel ({
     }
 
     playFarewell()
-  }, [addMessage, hasReachedFinalPrompt, language, onExitSession, persistArchiveSystemTurn, playAudio, speakBrowserTTS, stopMic])
+  }, [addMessage, hasSharedMemory, language, onExitSession, persistArchiveSystemTurn, phase, playAudio, speakBrowserTTS, stopMic, scrollToMessageTop])
 
   useEffect(() => {
     if (!manualReturnRequestId) return
@@ -1003,18 +1066,55 @@ export default function ChatPanel ({
     setDraft('')
     setSttBuffer('')
     committedMicRef.current = ''
+
+    if (phase === 'await_return') {
+      const conf = scripts[language]
+      setPhase('intro')
+      setIsFarewellPlaying(true)
+      void persistArchiveSystemTurn(conf.returnPrompt, {
+        userMessage: text,
+        continuousData: buildReturnAnswerData(text)
+      }).catch((err) => {
+        dlog('system return answer persist failed', err)
+      })
+      const farewellId = addMessage('bot', conf.farewell)
+      void persistArchiveSystemTurn(conf.farewell, { clearSessionMemory: true }).catch((err) => {
+        dlog('system farewell persist failed', err)
+      })
+      playAudio(
+        `/audio/${language}_FAREWELL.mp3`,
+        () => {
+          setIsFarewellPlaying(false)
+          onExitSession()
+        },
+        () => {
+          speakBrowserTTS(conf.farewell, language, () => {
+            setIsFarewellPlaying(false)
+            onExitSession()
+          }, farewellId ?? undefined)
+        },
+        GENERATED_SPEECH_RATE,
+        farewellId ?? undefined,
+        false
+      )
+      return
+    }
+
+    if (phase === 'confirm_more' && isReturnIntentText(text, language)) {
+      startManualReturn()
+      return
+    }
+
     setIsLoading(true)
     let activePendingMessageId: number | null = null
     try {
       const conf = scripts[language]
-      let inputMode: 'memory' | 'question' = (phase === 'await_memory' || !hasSharedMemory) ? 'memory' : 'question'
-
-      if (phase === 'confirm_more') {
-        inputMode = isLikelyQuestionInput(text, language) ? 'question' : 'memory'
-      }
+      const inputMode = selectTurnMode(phase, hasSharedMemory, text, language)
 
       const isMemoryTurn = inputMode === 'memory'
       if (isMemoryTurn) {
+        const isFirstMemoryTurn = !hasSharedMemory
+        const memoryRequestTimeoutMs = isFirstMemoryTurn ? 30000 : 12000
         const thankYouText = THANK_YOU_TEXTS[language]
         const startQuestionPrompt = () => {
           markQuestionPromptReached()
@@ -1024,10 +1124,18 @@ export default function ChatPanel ({
             setMicDesired(true)
           }, undefined, GENERATED_SPEECH_RATE)
         }
+        const completeMemoryFallback = (memoryReplyId: number | null, reason: unknown) => {
+          dlog('memory turn using scripted fallback', reason)
+          const fallback = resolveMemoryReplyMessage(null, language)
+          updateMessage(memoryReplyId, fallback.text, { pending: false })
+          scrollToMessageTop(memoryReplyId)
+          speakBrowserTTS(fallback.text, language, startQuestionPrompt, memoryReplyId ?? undefined)
+        }
         setHasSharedMemory(true)
         const thankYouMessageId = addMessage('bot', thankYouText)
         scrollToMessageTop(thankYouMessageId)
 
+        let memoryTimedOut = false
         const memoryRequest = requestChatTurn({
           sessionId: sessionIdRef.current,
           message: text,
@@ -1046,21 +1154,32 @@ export default function ChatPanel ({
         activePendingMessageId = memoryReplyId
         scrollToMessageTop(memoryReplyId)
 
-        let data
+        let data: Awaited<ReturnType<typeof requestChatTurn>> | null = null
+        let memoryTimeoutId: number | null = null
         try {
-          data = await memoryRequest
+          data = await Promise.race<Awaited<ReturnType<typeof requestChatTurn>> | never>([
+            memoryRequest,
+            new Promise<never>((_, reject) => {
+              memoryTimeoutId = window.setTimeout(() => {
+                memoryTimedOut = true
+                requestAbortRef.current?.abort()
+                reject(new Error('memory_confirmation_timeout'))
+              }, memoryRequestTimeoutMs)
+            })
+          ])
         } catch (err) {
-          dlog('memory turn request failed; continuing with scripted fallback', err)
-          startQuestionPrompt()
+          if (memoryTimeoutId != null) window.clearTimeout(memoryTimeoutId)
+          completeMemoryFallback(memoryReplyId, err)
           return
         }
+        if (memoryTimeoutId != null) window.clearTimeout(memoryTimeoutId)
 
-        const replyText = sanitizeAssistantText((data.message || '').trim())
-        if (!replyText) {
-          dlog('memory turn returned empty reply; continuing with scripted fallback')
-          startQuestionPrompt()
+        const memoryReply = resolveMemoryReplyMessage(data, language)
+        if (memoryReply.usedFallback) {
+          completeMemoryFallback(memoryReplyId, 'empty_memory_confirmation')
           return
         }
+        const replyText = memoryReply.text
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
         const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
 
@@ -1080,7 +1199,7 @@ export default function ChatPanel ({
           if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
         }
 
-        if (resolved) {
+        if (resolved && !memoryTimedOut) {
           playAudio(
             resolved,
             () => { cleanupTurnAudio(); startQuestionPrompt() },
@@ -1089,6 +1208,7 @@ export default function ChatPanel ({
             memoryReplyId ?? undefined
           )
         } else {
+          cleanupTurnAudio()
           speakBrowserTTS(replyText, language, startQuestionPrompt, memoryReplyId ?? undefined)
         }
         return
@@ -1169,10 +1289,11 @@ export default function ChatPanel ({
     } finally {
       setIsLoading(false)
     }
-  }, [addMessage, addPendingMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, speakBrowserTTS, resolveAudioTurn, requestChatTurn, updateMessage, scrollToMessageTop, markQuestionPromptReached])
+  }, [addMessage, addPendingMessage, draft, isLoading, language, messages, playAudio, stopMic, phase, hasSharedMemory, sttBuffer, speakBrowserTTS, resolveAudioTurn, requestChatTurn, updateMessage, scrollToMessageTop, markQuestionPromptReached, persistArchiveSystemTurn, onExitSession, startManualReturn])
 
   const skip = useCallback(() => {
     if (!language) return
+    if (isFarewellPlaying) return
     if (isAudioPlayingRef.current && activeNarrationAdvanceRef.current) {
       advanceCurrentNarration()
       return
@@ -1198,20 +1319,12 @@ export default function ChatPanel ({
       }
       return
     }
-    // If awaiting memory, skip to question prompt
-    if (phase === 'await_memory') {
-      markQuestionPromptReached()
-      addMessage('bot', conf.question1)
-      setPhase('await_question')
-      setMicDesired(true)
-      return
-    }
-  }, [language, phase, messages, addMessage, playAudio, advanceCurrentNarration, markQuestionPromptReached])
+  }, [language, phase, messages, addMessage, playAudio, advanceCurrentNarration, isFarewellPlaying])
 
-  const canSkipAhead = phase === 'intro' || phase === 'await_memory' || isAudioPlaying
-  const canType = phase === 'await_memory' || phase === 'await_question' || phase === 'confirm_more'
+  const canSkipAhead = (phase === 'intro' || isAudioPlaying) && !isFarewellPlaying
+  const canType = phase === 'await_memory' || phase === 'await_question' || phase === 'confirm_more' || phase === 'await_return'
   const hasDraftContent = draft.length > 0
-  const showPlaybackControl = isAudioPlaying || Boolean(lastAudioSrcRef.current) || hasSpeechReplay
+  const showPlaybackControl = (isAudioPlaying || Boolean(lastAudioSrcRef.current) || hasSpeechReplay) && !isFarewellPlaying
   const showSecondaryRow = canSkipAhead || showPlaybackControl
   const inputPlaceholder = language === 'da'
     ? 'Tal eller skriv her...'

@@ -41,7 +41,7 @@ def shorten(value: str, max_chars: int = 160) -> str:
 
 
 def format_context(documents: List[Dict[str, Any]], *, chat: bool = False) -> str:
-  documents = list(documents)[:15]
+  documents = list(documents)[:20]
   parts = []
   for idx, doc in enumerate(documents, start=1):
     md = doc["metadata"]

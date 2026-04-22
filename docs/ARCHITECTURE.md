@@ -28,7 +28,8 @@ FastAPI backend
   -> ChatService
     -> ChatBot
       -> local corpus retrieval from data/all.json
-      -> optional Pinecone retrieval
+      -> hybrid dense + lexical ranking
+      -> on-disk embedding cache under output/vector_store
       -> LLM provider
     -> TTS service
     -> archive store
@@ -114,16 +115,17 @@ Important constraint:
 
 ## Retrieval Model
 
-The default retriever is `local`.
+The default retriever is `local` and hybrid.
 
 In local mode:
 
 - `backend/chatbot.py` loads `data/all.json`
-- corpus entries are tokenized and deduplicated
-- retrieval uses lightweight token scoring
-- chat interaction documents also stay in process memory unless Pinecone is enabled
+- corpus entries are tokenized, normalized, and deduplicated
+- retrieval blends lexical scoring with multilingual dense embeddings
+- dense vectors are cached on disk and reused across process restarts
+- FAISS is used when available; otherwise dense similarity falls back to numpy dot-product
 
-Optional Pinecone mode exists, but the repository is currently optimized to run without it.
+Prompt construction currently sends up to 20 retrieved memories to the LLM, and the LLM is instructed to choose only the most relevant subset in its response.
 
 ## Data and Persistence
 

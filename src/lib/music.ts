@@ -21,8 +21,9 @@ class BackgroundMusicController {
     this.src = src
     this.original = clamp01(originalVolume)
 
-    const startOnGesture = async () => {
-      await this.unlockNow()
+    const startOnGesture = () => {
+      // Defer the heavier unlock work outside the input handler to keep gesture handling snappy.
+      window.setTimeout(() => { void this.unlockNow() }, 0)
       window.removeEventListener('pointerdown', startOnGesture)
       window.removeEventListener('click', startOnGesture)
       window.removeEventListener('touchstart', startOnGesture)

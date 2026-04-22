@@ -40,12 +40,14 @@ The backend is responsible for:
 - `await_memory`
 - `await_question`
 - `confirm_more`
+- `await_return`
 
 In practice, the normal flow uses:
 - `intro`
 - `await_memory`
 - `await_question`
 - `confirm_more`
+- `await_return` only when the visitor presses Return after reaching the final reprompt
 
 The frontend also tracks these important runtime flags:
 
@@ -171,53 +173,42 @@ Frontend sends:
 - language
 - recent history
 
-### 2. Thank-you audio starts immediately
-While the backend request is already running, the frontend plays:
-- `/audio/{language}_THANK_YOU.mp3`
+### 2. Thank-you bubble and audio start immediately
+While the backend request is already running, the frontend:
+- adds a bot bubble with `THANK_YOU_TEXTS[language]`
+- plays `/audio/{language}_THANK_YOU.mp3`
 
 During this period:
 - `isLoading` stays `true`
-- the typing indicator remains visible
-- no bot message has been added yet
+- the typing indicator remains visible until the thank-you bubble is followed by a pending confirmation bubble
+- the thank-you line is spoken only by the scripted MP3
 
 ### 3. Frontend waits for backend confirmation
-After the thank-you audio finishes, the frontend waits on the memory request result.
+After the thank-you audio finishes, the frontend adds a pending bot bubble and waits on the memory request result.
 
 There is a hard timeout of 12 seconds.
-If the backend does not respond in time, the frontend falls back to a local sentence:
+If the backend does not respond in time, or returns no usable text, the frontend falls back to a local sentence:
 - English: `Your memory now becomes part of the continuOnus landscape.`
 - Danish: `Dit minde bliver nu en del af continuOnus-landskabet.`
 
-### 4. Frontend creates one final combined bot message
-The frontend adds one bot bubble only, with this exact structure:
+### 4. Frontend uses two bot bubbles, not one combined bubble
+The memory confirmation is intentionally split into:
+1. a fixed thank-you bubble
+2. a second generated or fallback confirmation bubble
 
-English:
-```text
-Thank you for sharing.
-
-Your memory ...
-```
-
-Danish:
-```text
-Tak fordi du delte.
-
-Dit minde ...
-```
-
-This is intentionally a single combined message, not two separate bubbles.
+This matches `APP_SCRIPT_DA_EN.md` and the spoken sequencing in the app.
 
 ### 5. Generated confirmation audio plays
 If the backend returned generated TTS audio:
 - frontend polls `GET /api/chat/audio/{turnId}` until audio is ready
 - when ready, it plays that generated audio
 
-If generated audio is unavailable:
-- frontend uses browser TTS for the generated confirmation sentence only
+If generated audio is unavailable, or the frontend used the local fallback text:
+- frontend uses browser TTS for the generated/fallback confirmation sentence only
 
 Important detail:
 - the thank-you line is spoken by the scripted `THANK_YOU.mp3`
-- the generated similarity/confirmation sentence is spoken by generated TTS or browser TTS
+- the generated or fallback confirmation sentence is spoken by generated TTS or browser TTS
 
 ### 6. Question Prompt 1 begins
 After the generated confirmation audio ends:
@@ -248,19 +239,19 @@ This is handled by `ChatService.chat(..., mode='memory')` in `backend/app/servic
 
 ### Prompting rules
 The memory-confirmation prompt requires:
-- 2 to 3 sentences
-- clear, plain language
-- 1 to 2 references only
-- no names
-- required prefix style
+- 3 to 4 sentences
+- a short connective opening phrase
+- 1 to 2 contributor references only
+- exact retrieved quotes for any contributor that is mentioned
+- no repeated acknowledgment phrase because the frontend has already shown `Thank you for sharing.` / `Tak fordi du delte.`
 
-Prefix rules currently enforced:
-- English: starts with `Your memory reminds us of` or `Your memory is similar to`
-- Danish: starts with `Dit minde minder os om` or `Dit minde ligner`
+Prefix style currently guided by the prompt:
+- English: phrasing like `This reminds us of` or `It also connects to`
+- Danish: phrasing like `Det minder os om` or `Det forbinder sig også med`
 
 ### Fallbacks
-If retrieval returns nothing, the backend returns a generic memory-confirmation sentence.
-If the generated text is empty after sanitization, the backend falls back to a quote-based reply from the first retrieved document.
+If retrieval returns nothing, the backend currently raises an error and the frontend uses the scripted local fallback sentence.
+If the generated text is empty after sanitization, the frontend also uses that same scripted fallback sentence.
 
 ## Question Turn Flow
 
@@ -334,10 +325,15 @@ Before the visitor has shared their first memory, the top-right Return/Tilbage b
 ### 2. Return button after first shared memory
 After the visitor has shared at least one memory, the top-right Return/Tilbage button triggers the scripted exit path inside `ChatPanel.tsx`:
 1. stop any current mic/audio/backend turn work
-2. add the farewell text bubble
-3. play `/audio/{language}_FAREWELL.mp3`
-4. call `onExitSession()`
-5. parent transitions back to language selection
+2. if the visitor has not yet reached the final post-answer reprompt, go directly to farewell
+3. if the visitor has reached the final post-answer reprompt, add the return prompt bubble and play `/audio/{language}_RETURN_PROMPT.mp3`
+4. add a second on-screen hint bubble telling the visitor they can press Return/Tilbage again to leave
+5. set phase to `await_return` and re-enable input
+6. if the visitor answers, persist that answer in archive `continuous_data.returnPromptAnswer`, then play farewell
+7. if the visitor presses Return/Tilbage again instead of answering, skip straight to farewell
+8. when farewell starts, clear session memory in the archive/system turn path
+9. call `onExitSession()` when farewell completes
+10. parent transitions back to language selection
 
 ## Audio Behavior
 
@@ -428,35 +424,36 @@ If backend TTS never resolves or fails:
 10. App starts backend `memory` request and sets typing indicator.
 11. App plays scripted thank-you MP3.
 12. Backend generates memory confirmation and queues TTS.
-13. App adds one combined bot bubble:
-    - thank-you line
-    - blank line
-    - generated memory confirmation
-14. App plays generated confirmation audio or browser TTS.
-15. App adds Question Prompt 1 bubble.
-16. App plays Question Prompt 1 MP3.
-17. App enters `await_question` and enables input.
-18. User asks a question.
-19. User bubble is added.
-20. App sends backend `question` request and shows typing indicator.
-21. Backend returns answer text and queued audio.
-22. App adds answer bubble.
-23. App plays generated answer audio or browser TTS.
-24. App adds Question Prompt 2 bubble.
-25. App plays Question Prompt 2 MP3.
-26. App enters `confirm_more`.
-27. User either:
+13. App adds the fixed thank-you bubble.
+14. App adds a second bot bubble with the generated or fallback memory confirmation.
+15. App plays generated confirmation audio or browser TTS for that second bubble.
+16. App adds Question Prompt 1 bubble.
+17. App plays Question Prompt 1 MP3.
+18. App enters `await_question` and enables input.
+19. User asks a question.
+20. User bubble is added.
+21. App sends backend `question` request and shows typing indicator.
+22. Backend returns answer text and queued audio.
+23. App adds answer bubble.
+24. App plays generated answer audio or browser TTS.
+25. App adds Question Prompt 2 bubble.
+26. App plays Question Prompt 2 MP3.
+27. App enters `confirm_more`.
+28. User either:
     - asks another question
     - shares another memory
     - or uses the Return/Tilbage button to end manually
-28. If Return/Tilbage is pressed after the visitor has shared their first memory, the farewell MP3 plays.
-29. Session resets back to language selection after the farewell completes.
+29. If Return/Tilbage is pressed after the visitor has shared their first memory but before the final prompt, the farewell MP3 plays.
+30. If Return/Tilbage is pressed after the full flow has reached the final reprompt, the return prompt plays and the app enters `await_return`.
+31. In `await_return`, the visitor can either answer where they think we are going or press Return/Tilbage again to leave.
+32. If they answer, that answer is stored in archive `continuous_data.returnPromptAnswer` and then the farewell MP3 plays.
+33. Session resets back to language selection after the farewell completes.
 
 ## Current Implementation Notes
 
 These are important for future maintenance:
 
-- `updateMessage()` still exists in `ChatPanel.tsx`, but the current memory flow now adds one final combined message directly instead of progressively updating an earlier placeholder.
+- `updateMessage()` is still used for pending generated replies, including the second memory-confirmation bubble and fallback replacement.
 - `isLoading` is the only thing driving the typing indicator right now.
 - The backend memory-confirmation audio job store is in memory, so horizontal scaling or serverless deployment would break the current polling model.
 - Scripted MP3 text must be regenerated manually if `src/components/chat/config.ts` changes and you want spoken prompts to match the on-screen script.
