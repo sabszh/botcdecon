@@ -63,15 +63,15 @@ export default function AdminPage() {
       setSessions((current) => replace ? data.items : [...current, ...data.items])
       setTotal(data.total)
       setOffset(nextOffset)
-      if (!selectedId && data.items[0]) {
-        setSelectedId(data.items[0].sessionId)
+      if (data.items[0]) {
+        setSelectedId((current) => current || data.items[0].sessionId)
       }
     } catch (err) {
       setListError((err as Error)?.message || 'Failed to load sessions.')
     } finally {
       setIsLoadingList(false)
     }
-  }, [language, limit, query, selectedId])
+  }, [language, limit, query])
 
   const loadDetail = React.useCallback(async (sessionId: string) => {
     setIsLoadingDetail(true)
