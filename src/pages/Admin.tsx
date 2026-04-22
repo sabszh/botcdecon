@@ -41,6 +41,8 @@ export default function AdminPage() {
   const [detail, setDetail] = React.useState<SessionDetail | null>(null)
   const [query, setQuery] = React.useState('')
   const [language, setLanguage] = React.useState<'all' | 'da' | 'en'>('all')
+  const [appliedQuery, setAppliedQuery] = React.useState('')
+  const [appliedLanguage, setAppliedLanguage] = React.useState<'all' | 'da' | 'en'>('all')
   const [limit] = React.useState(50)
   const [offset, setOffset] = React.useState(0)
   const [total, setTotal] = React.useState(0)
@@ -49,7 +51,12 @@ export default function AdminPage() {
   const [listError, setListError] = React.useState<string | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
 
-  const loadSessions = React.useCallback(async (nextOffset: number, replace: boolean) => {
+  const loadSessions = React.useCallback(async (
+    nextOffset: number,
+    replace: boolean,
+    nextQuery: string = appliedQuery,
+    nextLanguage: 'all' | 'da' | 'en' = appliedLanguage
+  ) => {
     setIsLoadingList(true)
     setListError(null)
     try {
@@ -57,8 +64,8 @@ export default function AdminPage() {
         limit: String(limit),
         offset: String(nextOffset)
       })
-      if (query.trim()) params.set('q', query.trim())
-      if (language !== 'all') params.set('language', language)
+      if (nextQuery.trim()) params.set('q', nextQuery.trim())
+      if (nextLanguage !== 'all') params.set('language', nextLanguage)
       const data = await fetchJson<{ items: SessionSummary[]; total: number }>(`/api/admin/chat-sessions?${params.toString()}`)
       setSessions((current) => replace ? data.items : [...current, ...data.items])
       setTotal(data.total)
@@ -71,7 +78,7 @@ export default function AdminPage() {
     } finally {
       setIsLoadingList(false)
     }
-  }, [language, limit, query])
+  }, [appliedLanguage, appliedQuery, limit])
 
   const loadDetail = React.useCallback(async (sessionId: string) => {
     setIsLoadingDetail(true)
@@ -88,11 +95,8 @@ export default function AdminPage() {
   }, [])
 
   React.useEffect(() => {
-    setSessions([])
-    setDetail(null)
-    setSelectedId(null)
     loadSessions(0, true)
-  }, [language, query, loadSessions])
+  }, [loadSessions])
 
   React.useEffect(() => {
     if (!selectedId) return
@@ -134,7 +138,16 @@ export default function AdminPage() {
               </select>
               <button
                 type='button'
-                onClick={() => loadSessions(0, true)}
+                onClick={() => {
+                  const nextQuery = query
+                  const nextLanguage = language
+                  setAppliedQuery(nextQuery)
+                  setAppliedLanguage(nextLanguage)
+                  setSessions([])
+                  setDetail(null)
+                  setSelectedId(null)
+                  loadSessions(0, true, nextQuery, nextLanguage)
+                }}
                 className='surface-pill rounded-full px-4 py-3 text-sm transition hover:bg-white'
               >
                 Refresh
