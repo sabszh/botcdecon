@@ -25,6 +25,15 @@ export default defineConfig({
   server: {
     host: true,
     https: httpsOptions,
+    watch: {
+      ignored: [
+        '**/dist/**',
+        '**/output/**',
+        '**/snapshots/**',
+        '**/backend/tests/**',
+        '**/data/all.json'
+      ]
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
