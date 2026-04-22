@@ -56,6 +56,33 @@ class AdminSessionDetailResponse(BaseModel):
   turns: List[AdminTurn]
 
 
+def _to_admin_session_summary(item: Any) -> AdminSessionSummary:
+  return AdminSessionSummary(
+    sessionId=item.session_id,
+    startedAt=item.started_at,
+    lastActivityAt=item.last_activity_at,
+    language=item.language,
+    userName=item.user_name,
+    userLocation=item.user_location,
+    turnCount=item.turn_count,
+    lastUserMessage=item.last_user_message,
+    lastBotMessage=item.last_bot_message,
+  )
+
+
+def _to_admin_turn(item: Any) -> AdminTurn:
+  return AdminTurn(
+    id=item.id,
+    createdAt=item.created_at,
+    mode=item.mode,
+    language=item.language,
+    userMessage=item.user_message,
+    botMessage=item.bot_message,
+    error=item.error,
+    continuousData=item.continuous_data,
+  )
+
+
 @router.get('/chat-sessions', response_model=AdminSessionListResponse, dependencies=[Depends(require_admin)])
 def list_chat_sessions(
   limit: int = Query(50, ge=1, le=200),
@@ -66,7 +93,8 @@ def list_chat_sessions(
   _require_archive()
   store = get_archive_store()
   items, total = store.list_sessions(limit=limit, offset=offset, q=q, language=language)
-  return AdminSessionListResponse(items=items, total=total, limit=limit, offset=offset)
+  admin_items = [_to_admin_session_summary(item) for item in items]
+  return AdminSessionListResponse(items=admin_items, total=total, limit=limit, offset=offset)
 
 
 @router.get('/chat-sessions/{session_id}', response_model=AdminSessionDetailResponse, dependencies=[Depends(require_admin)])
@@ -77,4 +105,6 @@ def get_chat_session(session_id: str) -> AdminSessionDetailResponse:
   if not detail:
     raise HTTPException(status_code=404, detail='chat_session_not_found')
   session, turns = detail
-  return AdminSessionDetailResponse(session=session, turns=turns)
+  admin_session = _to_admin_session_summary(session)
+  admin_turns = [_to_admin_turn(turn) for turn in turns]
+  return AdminSessionDetailResponse(session=admin_session, turns=admin_turns)
