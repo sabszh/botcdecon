@@ -107,8 +107,8 @@ export default function AdminPage() {
 
   return (
     <div className='min-h-screen bg-black/10 text-black'>
-      <div className='mx-auto flex min-h-screen max-w-[1500px] gap-6 p-6'>
-        <aside className='surface-card flex w-[420px] shrink-0 flex-col rounded-[2rem] p-5'>
+      <div className='mx-auto flex max-w-[1500px] gap-6 p-6' style={{ height: '100vh' }}>
+        <aside className='surface-card flex w-[420px] shrink-0 flex-col rounded-[2rem] p-5 overflow-hidden'>
           <div className='mb-4 flex items-center justify-between gap-3'>
             <div>
               <h1 className='text-3xl font-medium tracking-[0.08em]'>Admin</h1>
@@ -203,7 +203,7 @@ export default function AdminPage() {
           </div>
         </aside>
 
-        <main className='surface-card flex min-h-[calc(100vh-3rem)] min-w-0 flex-1 flex-col rounded-[2rem] p-6'>
+        <main className='surface-card flex min-h-0 min-w-0 flex-1 flex-col rounded-[2rem] p-6 overflow-hidden'>
           {!selectedId && !isLoadingList && (
             <div className='m-auto text-center text-black/60'>Select a session to inspect the transcript.</div>
           )}

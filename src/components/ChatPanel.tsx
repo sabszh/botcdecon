@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { preloadAudio, getCached, clearCache } from '../lib/audioCache'
+import { bgm } from '../lib/music'
 import { persistSystemTurn, requestChatTurn as requestChatTurnRequest, resolveAudioTurn as resolveAudioTurnRequest } from './chat/backend'
 import { BROWSER_TTS_RATE, GENERATED_SPEECH_RATE, INTRO_MIN_DELAY_MS, INTRO_START_MAX_WAIT_MS, scripts, THANK_YOU_TEXTS } from './chat/config'
 import { buildCombinedReturnPrompt, buildReturnAnswerData, getManualReturnAction, isReturnIntentText, resolveMemoryReplyMessage, selectTurnMode } from './chat/flow'
@@ -358,6 +359,7 @@ export default function ChatPanel ({
     el.volume = 0
     el.onplay = () => {
       fade(0, 1, 400)
+      bgm.duckForSpeech(300, 0.08)
       if (typeof autoScrollMsgId === 'number') {
         // For audio-led experiences (e.g., iPad kiosk), force follow when narration starts.
         autoFollowRef.current = true
@@ -394,6 +396,7 @@ export default function ChatPanel ({
     el.onended = () => {
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
+      bgm.restoreFromDuck(500)
       const after = activeNarrationAdvanceRef.current
       activeNarrationAdvanceRef.current = null
       if (enableMicAfter) setMicDesired(true)
@@ -402,11 +405,13 @@ export default function ChatPanel ({
     el.onerror = () => {
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
+      bgm.restoreFromDuck(500)
       activeNarrationAdvanceRef.current = null
       if (onError) onError()
     }
     el.play().catch(err => {
       dlog('audio play rejected', err)
+      bgm.restoreFromDuck(500)
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
       activeNarrationAdvanceRef.current = null
@@ -629,6 +634,7 @@ export default function ChatPanel ({
     try { recognitionRef.current?.stop?.() } catch {}
     setIsMicOn(false)
     setIsAudioPlaying(true)
+    bgm.duckForSpeech(300, 0.08)
     if (typeof autoScrollMsgId === 'number') {
       scrollToMessageTop(autoScrollMsgId)
     }
@@ -653,6 +659,7 @@ export default function ChatPanel ({
     utter.onend = () => {
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
+      bgm.restoreFromDuck(500)
       if (suppressSpeechOnEndRef.current) {
         suppressSpeechOnEndRef.current = false
         return
@@ -668,6 +675,7 @@ export default function ChatPanel ({
     utter.onerror = () => {
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
+      bgm.restoreFromDuck(500)
       if (suppressSpeechOnEndRef.current) {
         suppressSpeechOnEndRef.current = false
         return

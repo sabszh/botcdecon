@@ -152,6 +152,16 @@ class BackgroundMusicController {
   fadeUp(duration = 600) {
     this.rampTo(this.original, duration)
   }
+
+  /** Duck volume for TTS/speech; more aggressive than fadeDown */
+  duckForSpeech(duration = 300, to = 0.08) {
+    this.rampTo(to, duration)
+  }
+
+  /** Restore volume after speech ducks */
+  restoreFromDuck(duration = 500) {
+    this.rampTo(this.original, duration)
+  }
 }
 
 function clamp01(x: number) {
