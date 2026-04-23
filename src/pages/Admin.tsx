@@ -52,6 +52,19 @@ function getInteractionLabel(turn: SessionTurn): string {
   return mode ? `${mode.charAt(0).toUpperCase()}${mode.slice(1)}` : 'Interaction'
 }
 
+function getInteractionBadgeClasses(turn: SessionTurn): string {
+  const mode = (turn.mode || '').toLowerCase()
+  const stage = turn.continuousData && typeof turn.continuousData === 'object'
+    ? (turn.continuousData.returnPromptStage as string | undefined)
+    : undefined
+
+  if (mode === 'memory') return 'bg-sky-100 text-sky-800'
+  if (mode === 'question') return 'bg-emerald-100 text-emerald-800'
+  if (mode === 'system' && (stage === 'asked' || stage === 'answered')) return 'bg-amber-100 text-amber-800'
+  if (mode === 'system') return 'bg-slate-200 text-slate-700'
+  return 'bg-zinc-200 text-zinc-700'
+}
+
 export default function AdminPage() {
   const [sessions, setSessions] = React.useState<SessionSummary[]>([])
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
@@ -285,7 +298,14 @@ export default function AdminPage() {
                   {displayedTurns.map((turn) => (
                     <section key={turn.id} className='surface-bubble rounded-[1.5rem] p-5'>
                       <div className='mb-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.14em] text-black/55'>
-                        <span>{getInteractionLabel(turn)} · Turn #{turn.id}</span>
+                        <div className='flex items-center gap-2'>
+                          <span className={`rounded-full px-2.5 py-1 font-semibold tracking-[0.08em] ${getInteractionBadgeClasses(turn)}`}>
+                            {getInteractionLabel(turn)}
+                          </span>
+                          <span className='rounded-full bg-black/5 px-2.5 py-1 text-black/65'>
+                            Turn #{turn.id}
+                          </span>
+                        </div>
                         <span>{fmtDate(turn.createdAt)}</span>
                       </div>
                       <div className='grid gap-4 lg:grid-cols-2'>
