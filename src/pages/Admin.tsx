@@ -302,9 +302,6 @@ export default function AdminPage() {
                           <span className={`rounded-full px-2.5 py-1 font-semibold tracking-[0.08em] ${getInteractionBadgeClasses(turn)}`}>
                             {getInteractionLabel(turn)}
                           </span>
-                          <span className='rounded-full bg-black/5 px-2.5 py-1 text-black/65'>
-                            Turn #{turn.id}
-                          </span>
                         </div>
                         <span>{fmtDate(turn.createdAt)}</span>
                       </div>
