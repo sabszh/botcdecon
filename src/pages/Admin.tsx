@@ -35,6 +35,23 @@ function fmtDate(value: string) {
   return d.toLocaleString()
 }
 
+function getInteractionLabel(turn: SessionTurn): string {
+  const mode = (turn.mode || '').toLowerCase()
+  const stage = turn.continuousData && typeof turn.continuousData === 'object'
+    ? (turn.continuousData.returnPromptStage as string | undefined)
+    : undefined
+
+  if (mode === 'memory') return 'Memory'
+  if (mode === 'question') return 'Question'
+
+  if (mode === 'system') {
+    if (stage === 'asked' || stage === 'answered') return 'Where We Are Going'
+    return 'System'
+  }
+
+  return mode ? `${mode.charAt(0).toUpperCase()}${mode.slice(1)}` : 'Interaction'
+}
+
 export default function AdminPage() {
   const [sessions, setSessions] = React.useState<SessionSummary[]>([])
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
@@ -50,6 +67,7 @@ export default function AdminPage() {
   const [isLoadingDetail, setIsLoadingDetail] = React.useState(false)
   const [listError, setListError] = React.useState<string | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
+  const [turnOrder, setTurnOrder] = React.useState<'newest' | 'oldest'>('newest')
 
   const loadSessions = React.useCallback(async (
     nextOffset: number,
@@ -104,6 +122,16 @@ export default function AdminPage() {
   }, [selectedId, loadDetail])
 
   const canLoadMore = sessions.length < total
+  const displayedTurns = React.useMemo(() => {
+    if (!detail?.turns) return []
+    const turns = [...detail.turns]
+    if (turnOrder === 'newest') {
+      turns.sort((a, b) => b.id - a.id)
+    } else {
+      turns.sort((a, b) => a.id - b.id)
+    }
+    return turns
+  }, [detail?.turns, turnOrder])
 
   return (
     <div className='min-h-screen bg-black/10 text-black'>
@@ -157,6 +185,10 @@ export default function AdminPage() {
 
           <div className='mb-3 text-sm text-black/60'>
             {total} session{total === 1 ? '' : 's'}
+          </div>
+
+          <div className='mb-3 text-xs text-black/50'>
+            Ordered by last activity (newest first)
           </div>
 
           <div className='flex-1 overflow-y-auto pr-1'>
@@ -223,6 +255,17 @@ export default function AdminPage() {
                   <div className='text-right text-sm text-black/60'>
                     <div>{detail.session.userName}</div>
                     <div>{detail.session.userLocation || 'Unknown location'}</div>
+                    <div className='mt-2 flex items-center justify-end gap-2'>
+                      <span className='text-xs uppercase tracking-[0.12em] text-black/55'>Turns</span>
+                      <select
+                        value={turnOrder}
+                        onChange={(e) => setTurnOrder(e.target.value as 'newest' | 'oldest')}
+                        className='surface-pill rounded-full px-3 py-1.5 text-xs outline-none'
+                      >
+                        <option value='newest'>Newest first</option>
+                        <option value='oldest'>Oldest first</option>
+                      </select>
+                    </div>
                   </div>
                 )}
               </div>
@@ -239,10 +282,10 @@ export default function AdminPage() {
                 )}
 
                 <div className='flex flex-col gap-4'>
-                  {detail?.turns.map((turn) => (
+                  {displayedTurns.map((turn) => (
                     <section key={turn.id} className='surface-bubble rounded-[1.5rem] p-5'>
                       <div className='mb-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.14em] text-black/55'>
-                        <span>{turn.mode}</span>
+                        <span>{getInteractionLabel(turn)} · Turn #{turn.id}</span>
                         <span>{fmtDate(turn.createdAt)}</span>
                       </div>
                       <div className='grid gap-4 lg:grid-cols-2'>
