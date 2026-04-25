@@ -773,6 +773,15 @@ export default function ChatPanel ({
       setSttBuffer(committedMicRef.current)
       setDraft(committedMicRef.current)
       draftRef.current = committedMicRef.current
+
+      // Simpler: concat committed + final + interim, dedupe, avoid appendWithTokenOverlap complexity
+      const simpleDisplay = normalizeSpeechText([committed, sessionFinal, sessionInterim].filter(Boolean).join(' '))
+      const dedupedDisplay = removeAdjacentDuplicateWordsRegex(simpleDisplay)
+      const normalizedDraftDisplay = normalizeInputStreamText(dedupedDisplay)
+      committedMicRef.current = normalizedDraftDisplay
+      setSttBuffer(normalizedDraftDisplay)
+      setDraft(normalizedDraftDisplay)
+      draftRef.current = normalizedDraftDisplay
     }
     ;(rec as SpeechRecognition & { onstart?: () => void }).onstart = () => {
       if (awaitingFreshRecognitionStartRef.current) {
