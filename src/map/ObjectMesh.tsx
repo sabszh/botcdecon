@@ -5,10 +5,10 @@ import type { ThreeElements } from '@react-three/fiber'
 import { useHippocampusModel } from './hippocampusModel'
 
 export default function ObjectMesh(
-  props: ThreeElements['mesh'] & { onObjLoaded: () => void, reducedPerformance?: boolean }
+  props: ThreeElements['group'] & { onObjLoaded: () => void, reducedPerformance?: boolean }
 ) {
   const hippo = useRef<Group>(null!)
-  const { reducedPerformance = false, ...meshProps } = props
+  const { onObjLoaded, reducedPerformance = false, ...groupProps } = props
   const { model, ready } = useHippocampusModel()
 
   useFrame((_state, delta) => {
@@ -18,9 +18,9 @@ export default function ObjectMesh(
 
   useEffect(() => {
     if (ready) {
-      props.onObjLoaded()
+      onObjLoaded()
     }
-  }, [props, ready])
+  }, [onObjLoaded, ready])
 
   if (!ready || !model) return null
 
@@ -30,7 +30,7 @@ export default function ObjectMesh(
       position={[0, -50, 3600]}
       scale={13}
       frustumCulled
-      {...meshProps}
+      {...groupProps}
     >
       <primitive object={model} />
     </group>

@@ -2,7 +2,7 @@ import type { Language } from './types'
 
 export const INTRO_START_MAX_WAIT_MS = 1500
 export const INTRO_MIN_DELAY_MS = 300
-export const GENERATED_SPEECH_RATE = 0.9
+export const GENERATED_SPEECH_RATE = 1.08
 export const BROWSER_TTS_RATE = Math.min(2, GENERATED_SPEECH_RATE * 1.05)
 
 export const THANK_YOU_TEXTS: Record<Language, string> = {
@@ -24,8 +24,10 @@ Welcome to our vehicle. What a long strange trip we’ve been on, but there’s 
 We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice of the artist Helene Nymann.
 
 We may have her voice, but we’re speaking through a data set of the experiences of people who were here before you. All of whom have shared what they remember that they want the future to remember.`,
-    memory1: `Please feel free to share your own memory. Something you’d like others in the future to remember to remember. Press the Share button when you’re done.`,
-    question1: `You are welcome to now further explore what others before you have shared. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done.`,
+    memory1: `What do you remember that you want the future to remember?
+
+Please feel free to share your own memory. Something you’d like others in the future to remember to remember. Press the Share button when you’re done.`,
+    question1: `You can journey along and ask what others before you have shared. Feel free to ask about emotions, or topics, or something you’ve been wondering about. Is there something you would like to know or ask about?`,
     question2: `Would you like to ask something else or share another memory. Please do so now.
 Press the Share button when you’re done. If you want to end this session, press return.`,
     returnPrompt: `Thank you for sharing. Before you go, may we ask you, where do you think we are going?`,
@@ -40,8 +42,10 @@ Velkommen til vores køretøj. Sikke en lang og mærkelig rejse vi har været p�
 Vi er Bot de ContinuOnus, en AI-genereret chatbot, der taler med den klonede stemme fra kunstneren Helene Nymann.
 
 Vi har måske hendes stemme, men vi taler gennem et datasæt af oplevelser fra mennesker, der var her før dig. Alle har de delt det, de husker, og det de ønsker, at fremtiden skal huske.`,
-    memory1: `Du er meget velkommen til at dele dit eget minde. Noget du gerne vil have, at andre i fremtiden skal huske. Tryk på Del-knappen, når du er færdig.`,
-    question1: `Du er velkommen til nu at udforske, hvad andre før dig har delt. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del-knappen, når du er færdig.`,
+    memory1: `Hvad husker du, som du ønsker, at fremtiden skal huske?
+
+Du er velkommen til at dele dit eget minde. Noget, du gerne vil have, at andre i fremtiden husker. Tryk på Del-knappen, når du er færdig.`,
+    question1: `Du kan fortsætte rejsen og spørge, hvad andre før dig har delt. Du er velkommen til at spørge om følelser, emner eller noget, du har undret dig over. Er der noget, du gerne vil vide eller spørge om?`,
     question2: `Vil du stille et andet spørgsmål eller dele endnu et minde? Gør det nu. Tryk på Del-knappen, når du er færdig. Hvis du vil afslutte sessionen, tryk på Tilbage.`,
     returnPrompt: `Tak fordi du delte. Inden du går, må vi spørge dig, hvor tror du, vi er på vej hen?`,
     returnExitHint: `Hvis du hellere vil gå nu, så tryk på Tilbage igen.`,

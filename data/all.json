@@ -26591,36 +26591,36 @@
     "date": "2023-07-21T13:45:13+00:00",
     "points": [
       {
-        "x": -615,
-        "y": 236,
-        "emotion": "Hope",
-        "distance": "15.52417469626",
         "angle": "-1.18793839611",
-        "id": "0"
+        "distance": "15.52417469626",
+        "emotion": "Hope",
+        "id": "0",
+        "x": -615,
+        "y": 236
       },
       {
-        "x": -648,
-        "y": 232,
-        "emotion": "Hope",
-        "distance": "19.697715603592",
         "angle": "-1.1378438889688",
-        "id": "1"
+        "distance": "19.697715603592",
+        "emotion": "Hope",
+        "id": "1",
+        "x": -648,
+        "y": 232
       },
       {
-        "x": -632,
-        "y": 217,
-        "emotion": "Hope",
-        "distance": "23.08679276123",
         "angle": "-1.1511002075997",
-        "id": "2"
+        "distance": "23.08679276123",
+        "emotion": "Hope",
+        "id": "2",
+        "x": -632,
+        "y": 217
       },
       {
-        "x": -652,
-        "y": 218,
-        "emotion": "Hope",
-        "distance": "31.112698372208",
         "angle": "-1.1227613596942",
-        "id": "3"
+        "distance": "31.112698372208",
+        "emotion": "Hope",
+        "id": "3",
+        "x": -652,
+        "y": 218
       }
     ],
     "index": 1062
@@ -67357,12 +67357,12 @@
     "date": "2023-11-07T13:43:08+00:00",
     "points": [
       {
-        "x": -79,
-        "y": 154,
-        "emotion": "Joy",
-        "distance": "9.2195444572929",
         "angle": "-2.1077070695349",
-        "id": "0"
+        "distance": "9.2195444572929",
+        "emotion": "Joy",
+        "id": "0",
+        "x": -79,
+        "y": 154
       }
     ],
     "index": 2648
@@ -83164,11 +83164,11 @@
     "title": "3426 • qVZU1PGaYAAJ",
     "name": "Andreas",
     "location": "Kbh",
-    "text": "We havde lapper på knæene i 1980’erne",
+    "text": "Vi havde lapper på knæene i 1980’erne",
     "date": "2025-11-07T06:30:54+00:00",
     "points": [
       {
-        "angle": -2.6867856787032736,
+        "angle": "-2.6867856787033",
         "distance": 18,
         "emotion": "Indifference",
         "id": "0",
@@ -83348,7 +83348,7 @@
     "title": "3434 • fRzO7iRPTZak",
     "name": "Sara",
     "location": "Riget",
-    "text": "Snevejrs-gåtur med min baby tryg i barnevognen imens sneen fyger",
+    "text": "Snevejrs-gåtur med min baby, som sover trygt i barnevognen imens sneen fyger",
     "date": "2025-11-26T12:34:30+00:00",
     "points": [
       {

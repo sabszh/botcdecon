@@ -61,7 +61,7 @@ function CustomCamera ({ freezeMotion = false, reducedPerformance = false }: { f
   const { appState, setAppState } = useContext(AppContext)
   const controls = useRef<OrbitControlsImpl>(null)
   const zoomingRef = useRef(false)
-  const zoomTimerRef = useRef<number>()
+  const zoomTimerRef = useRef<number | null>(null)
   const angleRef = useRef(0)
   const zoomPosition = useRef(new Vector3(0, 0, 1200))
   const zoomTarget = useRef(new Vector3(0, 0, 0))

@@ -8,6 +8,7 @@ We are Bot de ContinuOnus an AI generated chatbot speaking in the cloned voice o
 We may have her voice, but we’re speaking through a data set of the experiences of people who were here before you. All of whom have shared what they remember that they want the future to remember.
 
 ### Memory Prompt
+What do you remember that you want the future to remember? 
 Please feel free to share your own memory. Something you’d like others in the future to remember to remember. Press the Share button when you’re done.
 
 ### Thank You (memory confirmation)
@@ -25,7 +26,7 @@ Thank you for sharing.
 Your memory is similar to / reminds us of ...
 
 ### Question Prompt 1
-You are welcome to now further explore what others before you have shared. You can ask about emotions, or topics, or something you’ve been wondering about. Press the Share button when you’re done.
+You can journey along and ask what others before you have shared. Feel free to ask about emotions, or topics, or something you’ve been wondering about. Is there something you would like to know or ask about?  
 
 ### Question Prompt 2
 Would you like to ask something else or share another memory. Please do so now.
@@ -61,7 +62,8 @@ Vi har måske hendes stemme, men vi taler gennem et datasæt af oplevelser fra m
 
 ### Memory Prompt
 
-Du er meget velkommen til at dele dit eget minde. Noget du gerne vil have, at andre i fremtiden skal huske. Tryk på Del-knappen, når du er færdig.
+Hvad husker du, som du ønsker, at fremtiden skal huske?  
+Du er velkommen til at dele dit eget minde. Noget, du gerne vil have, at andre i fremtiden husker. Tryk på Del-knappen, når du er færdig.
 
 ### Tak (bekræftelse af minde)
 
@@ -81,7 +83,7 @@ Dit minde ligner / minder os om ...
 
 ### Spørgsmål Prompt 1
 
-Du er velkommen til nu at udforske, hvad andre før dig har delt. Du kan spørge om følelser, emner eller noget, du har undret dig over. Tryk på Del-knappen, når du er færdig.
+Du kan fortsætte rejsen og spørge, hvad andre før dig har delt. Du er velkommen til at spørge om følelser, emner eller noget, du har undret dig over. Er der noget, du gerne vil vide eller spørge om?
 
 ### Spørgsmål Prompt 2
 

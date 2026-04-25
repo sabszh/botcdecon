@@ -6,7 +6,7 @@ import { Group } from 'three'
 import { useHippocampusModel } from './hippocampusModel'
 import WebGLContextGuard from './WebGLContextGuard'
 
-function SplashHippoMesh ({ reducedPerformance = false, ...props }: ThreeElements['mesh'] & { reducedPerformance?: boolean }) {
+function SplashHippoMesh ({ reducedPerformance = false, ...props }: ThreeElements['group'] & { reducedPerformance?: boolean }) {
   const hippo = useRef<Group>(null!)
   const { model, ready } = useHippocampusModel()
 

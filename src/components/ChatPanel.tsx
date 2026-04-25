@@ -1,9 +1,10 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { preloadAudio, getCached, clearCache } from '../lib/audioCache'
 import { bgm } from '../lib/music'
+import { getScriptedAudioElement, hasPendingScriptedAudioUnlock, isScriptedAudioUnlocked, scriptedAudioSrc, stopScriptedAudio, unlockScriptedAudio, waitForScriptedAudioUnlock } from '../lib/scriptedAudio'
 import { persistSystemTurn, requestChatTurn as requestChatTurnRequest, resolveAudioTurn as resolveAudioTurnRequest } from './chat/backend'
 import { BROWSER_TTS_RATE, GENERATED_SPEECH_RATE, INTRO_MIN_DELAY_MS, INTRO_START_MAX_WAIT_MS, scripts, THANK_YOU_TEXTS } from './chat/config'
-import { buildCombinedReturnPrompt, buildReturnAnswerData, getManualReturnAction, isReturnIntentText, resolveMemoryReplyMessage, selectTurnMode } from './chat/flow'
+import { buildReturnAnswerData, getManualReturnAction, isReturnIntentText, resolveMemoryReplyMessage, selectTurnMode } from './chat/flow'
 import ChatComposer from './chat/ChatComposer'
 import ChatTranscript from './chat/ChatTranscript'
 import { buildHistoryPayload, buildSessionId } from './chat/helpers'
@@ -100,14 +101,14 @@ export default function ChatPanel ({
   const introTimerRef = useRef<number | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const chatListRef = useRef<HTMLDivElement | null>(null)
-  const audioElRef = useRef<HTMLAudioElement | null>(null) // Keep audio element reference
+  const audioElRef = useRef<HTMLAudioElement | null>(getScriptedAudioElement()) // Keep audio element reference
   const messageIdRef = useRef(0) // Message ID reference
   const lastAudioSrcRef = useRef<string | null>(null) // Last audio source reference
   const lastAudioRateRef = useRef<number>(1) // Last audio rate reference
   const activeNarrationAdvanceRef = useRef<(() => void) | null>(null)
   const activePlaybackKindRef = useRef<'media' | 'speech' | null>(null)
   const suppressSpeechOnEndRef = useRef(false)
-  const speechReplayRef = useRef<{ text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number } | null>(null)
+  const speechReplayRef = useRef<{ text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number, enableMicAfter?: boolean } | null>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null) // Speech recognition reference
   const isMicOnRef = useRef(false) // Microphone state reference
   const isAudioPlayingRef = useRef(false) // Audio playing state reference
@@ -135,6 +136,7 @@ export default function ChatPanel ({
   const manualReturnInFlightRef = useRef(false)
   const pendingManualReturnRef = useRef(false)
   const lastHandledReturnRequestRef = useRef(0)
+  const isMountedRef = useRef(true)
 
   useEffect(() => { isMicOnRef.current = isMicOn }, [isMicOn])
   useEffect(() => { isAudioPlayingRef.current = isAudioPlaying }, [isAudioPlaying])
@@ -163,8 +165,11 @@ export default function ChatPanel ({
     setIsFarewellPlaying(false)
   }, [language])
   useEffect(() => () => {
+    isMountedRef.current = false
     requestAbortRef.current?.abort()
     audioFetchAbortRef.current?.abort()
+    stopScriptedAudio()
+    bgm.restoreFromDuck(250)
   }, [])
 
   useEffect(() => {
@@ -280,13 +285,14 @@ export default function ChatPanel ({
     let cancelled = false
     setIntroAssetsReady(false)
     const clips = [
-      `/audio/${language}_WELCOME.mp3`,
-      `/audio/${language}_MEMORY_1.mp3`,
-      `/audio/${language}_QUESTION_1.mp3`,
-      `/audio/${language}_QUESTION_2.mp3`,
-      `/audio/${language}_RETURN_PROMPT.mp3`,
-      `/audio/${language}_FAREWELL.mp3`,
-      `/audio/${language}_THANK_YOU.mp3`,
+      scriptedAudioSrc(language, 'WELCOME'),
+      scriptedAudioSrc(language, 'MEMORY_1'),
+      scriptedAudioSrc(language, 'QUESTION_1'),
+      scriptedAudioSrc(language, 'QUESTION_2'),
+      scriptedAudioSrc(language, 'RETURN_PROMPT'),
+      scriptedAudioSrc(language, 'RETURN_EXIT_HINT'),
+      scriptedAudioSrc(language, 'FAREWELL'),
+      scriptedAudioSrc(language, 'THANK_YOU'),
     ]
     const [welcomeClip, memoryClip] = clips
     Promise.all([
@@ -317,9 +323,11 @@ export default function ChatPanel ({
     enableMicAfter: boolean = true
   ) => {
     if (!src) {
-      if (onError) onError()
-      return
+      if (onError && isMountedRef.current) onError()
+      return false
     }
+    await waitForScriptedAudioUnlock().catch(() => {})
+    if (!isMountedRef.current) return false
     // Swap to cached blob URL if preloaded (removes network/decode lag)
     const cached = getCached(src)
     const chosenSrc = cached || src
@@ -329,12 +337,13 @@ export default function ChatPanel ({
     activeNarrationAdvanceRef.current = onEnded || null
     speechReplayRef.current = null
     setHasSpeechReplay(false)
-    const el = audioElRef.current
+    const el = audioElRef.current || getScriptedAudioElement()
+    audioElRef.current = el
     if (!el) {
       activePlaybackKindRef.current = null
       setIsAudioPlaying(false)
-      if (onError) onError()
-      return
+      if (onError && isMountedRef.current) onError()
+      return false
     }
 
     try { recognitionRef.current?.stop?.() } catch {}
@@ -394,6 +403,7 @@ export default function ChatPanel ({
       setIsAudioPlaying(false)
     }
     el.onended = () => {
+      if (!isMountedRef.current) return
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
       bgm.restoreFromDuck(500)
@@ -403,19 +413,22 @@ export default function ChatPanel ({
       if (after) after()
     }
     el.onerror = () => {
+      if (!isMountedRef.current) return
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
       bgm.restoreFromDuck(500)
       activeNarrationAdvanceRef.current = null
       if (onError) onError()
     }
-    el.play().catch(err => {
+    return el.play().then(() => true).catch(err => {
       dlog('audio play rejected', err)
+      if (!isMountedRef.current) return false
       bgm.restoreFromDuck(500)
       setIsAudioPlaying(false)
       activePlaybackKindRef.current = null
       activeNarrationAdvanceRef.current = null
       if (onError) onError()
+      return false
     })
   }, [])
 
@@ -425,16 +438,23 @@ export default function ChatPanel ({
     if (introStartedRef.current) return
     introStartedRef.current = true
     const conf = scripts[language]
-    addMessage('bot', conf.welcome)
-    playAudio(`/audio/${language}_WELCOME.mp3`, () => {
+    const welcomeId = addMessage('bot', conf.welcome)
+    const startMemoryPrompt = () => {
       // chain Memory 1 prompt
       const idM1 = addMessage('bot', conf.memory1)
       // After the prompt audio finishes, enable mic automatically
-      playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
+      playAudio(scriptedAudioSrc(language, 'MEMORY_1'), () => {
         setPhase('await_memory')
         setMicDesired(true)
-      }, undefined, GENERATED_SPEECH_RATE, idM1 ?? undefined, true)
-    }, undefined, GENERATED_SPEECH_RATE, undefined, false)
+      }, () => {
+        setPhase('await_memory')
+        setMicDesired(true)
+      }, GENERATED_SPEECH_RATE, idM1 ?? undefined, true)
+    }
+    void playAudio(scriptedAudioSrc(language, 'WELCOME'), startMemoryPrompt, () => {
+      introStartedRef.current = false
+      startMemoryPrompt()
+    }, GENERATED_SPEECH_RATE, undefined, false)
   }, [language, addMessage, playAudio])
 
   useEffect(() => {
@@ -451,8 +471,7 @@ export default function ChatPanel ({
   useEffect(() => {
     if (!language) return
 
-    let audioAllowed = false
-    try { audioAllowed = localStorage.getItem('audioAllowed') === '1' } catch {}
+    const audioAllowed = isScriptedAudioUnlocked()
 
     const cleanupTimers = (fallbackTimer?: number) => {
       if (introTimerRef.current) {
@@ -476,11 +495,22 @@ export default function ChatPanel ({
       return () => cleanupTimers(fallbackTimer)
     }
 
+    if (hasPendingScriptedAudioUnlock()) {
+      let cancelled = false
+      waitForScriptedAudioUnlock()
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) window.setTimeout(() => startIntro(), INTRO_MIN_DELAY_MS)
+        })
+      return () => { cancelled = true }
+    }
+
     // iOS and not yet allowed: wait for first user gesture to both unlock and start
     const onFirstGesture = () => {
       dlog('intro: first gesture received; starting intro')
-      // Give the unlock handler a tick to run first.
-      window.setTimeout(() => startIntro(), INTRO_MIN_DELAY_MS)
+      unlockScriptedAudio(scriptedAudioSrc(language, 'THANK_YOU'))
+        .catch(() => {})
+        .finally(() => window.setTimeout(() => startIntro(), INTRO_MIN_DELAY_MS))
       cleanup()
     }
     const cleanup = () => {
@@ -548,64 +578,6 @@ export default function ChatPanel ({
     list.scrollTo({ top: target, behavior: 'auto' })
   }, [])
 
-  // iOS/iPadOS: unlock the <audio> element on first user gesture
-  useEffect(() => {
-    const unlock = () => {
-      const el = audioElRef.current
-      if (!el) return cleanup()
-      try {
-        // Load and briefly play a tiny existing mp3 muted to satisfy iOS gesture policy
-        // Use a small, bundled file to keep latency low
-        const unlockSrc = '/audio/en_THANK_YOU.mp3'
-        const prevSrc = el.src
-        el.muted = true
-        // Only swap in the unlock clip if there is no current src
-        if (!prevSrc) {
-          el.src = unlockSrc
-          try { el.load?.() } catch {}
-        }
-        const p = el.play()
-        if (p && typeof p.then === 'function') {
-          p.then(() => {
-            try { el.pause() } catch {}
-            try { el.currentTime = 0 } catch {}
-            el.muted = false
-            // Restore previous src if we changed it just for unlock
-            if (!prevSrc) {
-              try { el.removeAttribute('src') } catch {}
-              try { el.load?.() } catch {}
-            }
-            // Persist that audio was successfully unlocked
-            try { localStorage.setItem('audioAllowed', '1') } catch {}
-          }).catch(() => {
-            // ignore
-          })
-        } else {
-          try { el.pause() } catch {}
-          try { el.currentTime = 0 } catch {}
-          el.muted = false
-          if (!prevSrc) {
-            try { el.removeAttribute('src') } catch {}
-            try { el.load?.() } catch {}
-          }
-          try { localStorage.setItem('audioAllowed', '1') } catch {}
-        }
-      } catch {}
-      cleanup()
-    }
-    const cleanup = () => {
-      window.removeEventListener('pointerdown', unlock)
-      window.removeEventListener('click', unlock)
-      window.removeEventListener('touchend', unlock)
-      window.removeEventListener('keydown', unlock)
-    }
-    window.addEventListener('pointerdown', unlock, { once: true, passive: true })
-    window.addEventListener('click', unlock, { once: true })
-    window.addEventListener('touchend', unlock, { once: true })
-    window.addEventListener('keydown', unlock, { once: true })
-    return cleanup
-  }, [])
-
   // Track user scroll position and toggle auto-follow accordingly
   useEffect(() => {
     const list = chatListRef.current
@@ -620,7 +592,7 @@ export default function ChatPanel ({
   }, [])
 
   // Fallback TTS using the browser's SpeechSynthesis
-  const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number) => {
+  const speakBrowserTTS = useCallback((text: string, lang: Language, onEnded?: () => void, autoScrollMsgId?: number, enableMicAfter: boolean = true) => {
     const safeText = sanitizeAssistantText(text)
     // Estimate how long a message would take to read aloud (~180 ms/word, 1–6 s).
     // Used when no audio engine is available so the next message is still gated by a
@@ -640,7 +612,7 @@ export default function ChatPanel ({
     }
     activePlaybackKindRef.current = 'speech'
     activeNarrationAdvanceRef.current = onEnded || null
-    speechReplayRef.current = { text: safeText, lang, onEnded, autoScrollMsgId }
+    speechReplayRef.current = { text: safeText, lang, onEnded, autoScrollMsgId, enableMicAfter }
     setHasSpeechReplay(true)
     const utter = new SpeechSynthesisUtterance(safeText)
     utter.lang = lang === 'da' ? 'da-DK' : 'en-US'
@@ -670,7 +642,7 @@ export default function ChatPanel ({
       // before the audio has actually played. Enforce a minimum reading-time delay.
       const elapsed = Date.now() - ttsStartedAt
       const remaining = Math.max(0, minimumMs - elapsed)
-      window.setTimeout(() => { setMicDesired(true); if (after) after() }, remaining)
+      window.setTimeout(() => { if (enableMicAfter) setMicDesired(true); if (after) after() }, remaining)
     }
     utter.onerror = () => {
       setIsAudioPlaying(false)
@@ -997,7 +969,7 @@ export default function ChatPanel ({
         dlog('system farewell persist failed', err)
       })
       playAudio(
-        `/audio/${language}_FAREWELL.mp3`,
+        scriptedAudioSrc(language, 'FAREWELL'),
         () => {
           setIsFarewellPlaying(false)
           onExitSession()
@@ -1006,7 +978,7 @@ export default function ChatPanel ({
           speakBrowserTTS(conf.farewell, language, () => {
             setIsFarewellPlaying(false)
             onExitSession()
-          }, farewellId ?? undefined)
+          }, farewellId ?? undefined, false)
         },
         GENERATED_SPEECH_RATE,
         farewellId ?? undefined,
@@ -1016,28 +988,39 @@ export default function ChatPanel ({
 
     const returnAction = getManualReturnAction(phase, hasSharedMemory)
     if (returnAction === 'ask_for_destination') {
-      const combinedReturnPrompt = buildCombinedReturnPrompt(conf.returnPrompt, conf.returnExitHint)
-      const returnPromptId = addMessage('bot', combinedReturnPrompt)
-      void persistArchiveSystemTurn(combinedReturnPrompt, {
+      const returnPromptId = addMessage('bot', conf.returnPrompt)
+      const playReturnExitHint = () => {
+        if (!isMountedRef.current) return
+        const returnExitHintId = addMessage('bot', conf.returnExitHint)
+        setPhase('await_return')
+        setMicDesired(true)
+        scrollToMessageTop(returnExitHintId ?? returnPromptId)
+        void playAudio(
+          scriptedAudioSrc(language, 'RETURN_EXIT_HINT'),
+          undefined,
+          () => {
+            manualReturnInFlightRef.current = false
+            speakBrowserTTS(conf.returnExitHint, language, undefined, returnExitHintId ?? undefined)
+          },
+          GENERATED_SPEECH_RATE,
+          returnExitHintId ?? undefined,
+          true
+        ).then((started) => {
+          if (started && isMountedRef.current) manualReturnInFlightRef.current = false
+        })
+      }
+      void persistArchiveSystemTurn(conf.returnPrompt, {
         continuousData: { returnPromptStage: 'asked' }
       }).catch((err) => {
         dlog('system return prompt persist failed', err)
       })
       playAudio(
-        `/audio/${language}_RETURN_PROMPT.mp3`,
+        scriptedAudioSrc(language, 'RETURN_PROMPT'),
         () => {
-          setPhase('await_return')
-          setMicDesired(true)
-          scrollToMessageTop(returnPromptId)
-          manualReturnInFlightRef.current = false
+          playReturnExitHint()
         },
         () => {
-          speakBrowserTTS(combinedReturnPrompt, language, () => {
-            setPhase('await_return')
-            setMicDesired(true)
-            scrollToMessageTop(returnPromptId)
-            manualReturnInFlightRef.current = false
-          }, returnPromptId ?? undefined)
+          speakBrowserTTS(conf.returnPrompt, language, playReturnExitHint, returnPromptId ?? undefined, false)
         },
         GENERATED_SPEECH_RATE,
         returnPromptId ?? undefined,
@@ -1090,7 +1073,7 @@ export default function ChatPanel ({
         dlog('system farewell persist failed', err)
       })
       playAudio(
-        `/audio/${language}_FAREWELL.mp3`,
+        scriptedAudioSrc(language, 'FAREWELL'),
         () => {
           setIsFarewellPlaying(false)
           onExitSession()
@@ -1099,7 +1082,7 @@ export default function ChatPanel ({
           speakBrowserTTS(conf.farewell, language, () => {
             setIsFarewellPlaying(false)
             onExitSession()
-          }, farewellId ?? undefined)
+          }, farewellId ?? undefined, false)
         },
         GENERATED_SPEECH_RATE,
         farewellId ?? undefined,
@@ -1117,7 +1100,7 @@ export default function ChatPanel ({
     let activePendingMessageId: number | null = null
     try {
       const conf = scripts[language]
-      const inputMode = selectTurnMode(phase, hasSharedMemory, text, language)
+      const inputMode = selectTurnMode(phase, hasSharedMemory, text, language, hasReachedQuestionPrompt)
 
       const isMemoryTurn = inputMode === 'memory'
       if (isMemoryTurn) {
@@ -1127,10 +1110,13 @@ export default function ChatPanel ({
         const startQuestionPrompt = () => {
           markQuestionPromptReached()
           addMessage('bot', conf.question1)
-          playAudio(`/audio/${language}_QUESTION_1.mp3`, () => {
+          playAudio(scriptedAudioSrc(language, 'QUESTION_1'), () => {
             setPhase('await_question')
             setMicDesired(true)
-          }, undefined, GENERATED_SPEECH_RATE)
+          }, () => {
+            setPhase('await_question')
+            setMicDesired(true)
+          }, GENERATED_SPEECH_RATE)
         }
         const completeMemoryFallback = (memoryReplyId: number | null, reason: unknown) => {
           dlog('memory turn using scripted fallback', reason)
@@ -1155,7 +1141,7 @@ export default function ChatPanel ({
         })
 
         await new Promise<void>(resolve => {
-          playAudio(`/audio/${language}_THANK_YOU.mp3`, resolve, resolve, GENERATED_SPEECH_RATE, thankYouMessageId ?? undefined, false)
+          playAudio(scriptedAudioSrc(language, 'THANK_YOU'), resolve, resolve, GENERATED_SPEECH_RATE, thankYouMessageId ?? undefined, false)
         })
 
         const memoryReplyId = addPendingMessage()
@@ -1191,9 +1177,6 @@ export default function ChatPanel ({
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
         const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
 
-        updateMessage(memoryReplyId, replyText, { pending: false })
-        scrollToMessageTop(memoryReplyId)
-
         let turnAudioBlobUrl: string | null = null
         if (audioTurnId) {
           try {
@@ -1206,6 +1189,8 @@ export default function ChatPanel ({
         const cleanupTurnAudio = () => {
           if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
         }
+        updateMessage(memoryReplyId, replyText, { pending: false })
+        scrollToMessageTop(memoryReplyId)
 
         if (resolved && !memoryTimedOut) {
           playAudio(
@@ -1242,14 +1227,15 @@ export default function ChatPanel ({
       const afterAnswerSpoken = () => {
         setHasReachedFinalPrompt(true)
         addMessage('bot', conf.question2)
-        playAudio(`/audio/${language}_QUESTION_2.mp3`, () => {
+        playAudio(scriptedAudioSrc(language, 'QUESTION_2'), () => {
           setPhase('confirm_more')
           setMicDesired(true)
-        }, undefined, GENERATED_SPEECH_RATE)
+        }, () => {
+          setPhase('confirm_more')
+          setMicDesired(true)
+        }, GENERATED_SPEECH_RATE)
       }
       if (replyText) {
-        updateMessage(questionPlaceholderId, replyText, { pending: false })
-        scrollToMessageTop(questionPlaceholderId)
         let turnAudioBlobUrl: string | null = null
         if (audioTurnId) {
           try {
@@ -1263,6 +1249,8 @@ export default function ChatPanel ({
         const cleanupTurnAudio = () => {
           if (turnAudioBlobUrl) URL.revokeObjectURL(turnAudioBlobUrl)
         }
+        updateMessage(questionPlaceholderId, replyText, { pending: false })
+        scrollToMessageTop(questionPlaceholderId)
         if (resolved) {
           playAudio(
             resolved,
@@ -1278,7 +1266,7 @@ export default function ChatPanel ({
         // No answer received; keep the session open and prompt to try again
         updateMessage(
           questionPlaceholderId,
-          language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv venligst igen.' : 'I could not fetch an answer right now. Please try again.',
+          language === 'da' ? 'Jeg kunne ikke hente et svar lige nu. Prøv igen.' : 'I could not fetch an answer right now. Please try again.',
           { pending: false }
         )
         setPhase('await_question')
@@ -1316,10 +1304,13 @@ export default function ChatPanel ({
       if (!hasMemoryPrompt) {
         // Skip welcome: show memory prompt and start its audio
         addMessage('bot', conf.memory1)
-        playAudio(`/audio/${language}_MEMORY_1.mp3`, () => {
+        playAudio(scriptedAudioSrc(language, 'MEMORY_1'), () => {
           setPhase('await_memory')
           setMicDesired(true)
-        }, undefined, GENERATED_SPEECH_RATE)
+        }, () => {
+          setPhase('await_memory')
+          setMicDesired(true)
+        }, GENERATED_SPEECH_RATE)
       } else {
         // Memory prompt already shown; finish it
         setPhase('await_memory')
@@ -1424,7 +1415,7 @@ export default function ChatPanel ({
     }
     if (hasSpeechReplay && speechReplayRef.current) {
       const speech = speechReplayRef.current
-      speakBrowserTTS(speech.text, speech.lang, speech.onEnded, speech.autoScrollMsgId)
+      speakBrowserTTS(speech.text, speech.lang, speech.onEnded, speech.autoScrollMsgId, speech.enableMicAfter ?? true)
       return
     }
     if (!lastAudioSrcRef.current) return
@@ -1448,8 +1439,6 @@ export default function ChatPanel ({
 
   return (
     <div className='relative z-10 box-border w-[1100px] max-w-[95vw] overflow-x-hidden px-6 pb-6 pt-3 text-xl origin-top flex flex-col h-[90vh] max-h-[90vh]'>
-      <audio ref={audioElRef} preload='auto' playsInline />
-
       <ChatTranscript
         chatListRef={chatListRef}
         isIOS={isIOS}

@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AppContext } from '../context/AppContext'
 import { bgm } from '../lib/music'
+import { scriptedAudioSrc, stopScriptedAudio, unlockScriptedAudio } from '../lib/scriptedAudio'
 import MapCanvas from '../map/Canvas'
 import SplashHippoCanvas from '../map/SplashHippoCanvas'
 import { getDevicePerformanceProfile } from '../lib/deviceProfile'
@@ -15,6 +16,7 @@ type ScreenPhase = 'splash' | 'chat' | 'returning'
 export default function Home() {
   const performanceProfile = useMemo(() => getDevicePerformanceProfile(), [])
   const [language, setLanguage] = useState<'en' | 'da' | null>(null)
+  const [chatSessionNonce, setChatSessionNonce] = useState(0)
   const [screenPhase, setScreenPhase] = useState<ScreenPhase>('splash')
   const [showLanguageCard, setShowLanguageCard] = useState(true)
   const [manualReturnAvailable, setManualReturnAvailable] = useState(false)
@@ -30,7 +32,10 @@ export default function Home() {
   const lastActivityRef = useRef(0)
 
   const resetToLanguageSelect = useCallback(() => {
+    // Treat Return as a hard reset so every re-entry starts from a clean audio/chat state.
+    stopScriptedAudio()
     setLanguage(null)
+    setChatSessionNonce((cur) => cur + 1)
     setScreenPhase('splash')
     setShowLanguageCard(false)
     setManualReturnAvailable(false)
@@ -40,10 +45,12 @@ export default function Home() {
       setShowLanguageCard(true)
     }, LANGUAGE_CARD_DELAY_MS)
     setAppState((s) => ({ ...s, viewMode: 'empty', zoomIn: false }))
+    window.location.reload()
   }, [setAppState])
 
   const beginReturnToSplash = useCallback(() => {
     if (screenPhase !== 'chat') return
+    stopScriptedAudio()
     bgm.fadeUp(800)
     setScreenPhase('returning')
     if (returnTimer.current) window.clearTimeout(returnTimer.current)
@@ -65,6 +72,7 @@ export default function Home() {
   const unlockAndPlay = async () => {
     try {
       // Fire-and-forget to stay within gesture handling call stack
+      unlockScriptedAudio().catch(() => {})
       bgm.resumeCtx().catch(() => {})
       bgm.unlockNow().catch(() => {})
       await bgm.play().catch(() => {})
@@ -113,7 +121,10 @@ export default function Home() {
   const pick = async (lang: 'en' | 'da') => {
     if (returnTimer.current) window.clearTimeout(returnTimer.current)
     if (languageCardTimer.current) window.clearTimeout(languageCardTimer.current)
+    stopScriptedAudio()
+    unlockScriptedAudio(scriptedAudioSrc(lang, 'THANK_YOU')).catch(() => {})
     setShowLanguageCard(true)
+    setChatSessionNonce((cur) => cur + 1)
     setLanguage(lang)
     setScreenPhase('chat')
     setManualReturnAvailable(false)
@@ -253,6 +264,7 @@ export default function Home() {
           <div className={`absolute inset-0 z-20 flex items-end justify-center pb-6 transition-all duration-[280ms] ease-out ${screenPhase === 'returning' ? 'translate-y-4 opacity-0' : 'translate-y-0 opacity-100'}`}>
             <Suspense fallback={null}>
               <ChatPanel
+                key={`${language}-${chatSessionNonce}`}
                 language={language}
                 onExitSession={beginReturnToSplash}
                 manualReturnRequestId={manualReturnRequestId}
