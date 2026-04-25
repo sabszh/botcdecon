@@ -72,7 +72,7 @@ function collapseAdjacentDuplicateWords (value: string): string {
 
 function removeAdjacentDuplicateWordsRegex(value: string): string {
   if (!value) return ''
-  // Replace runs of the same word repeated adjacently (case-insensitive) with a single instance..
+  // Replace runs of the same word repeated adjacently (case-insensitive) with a single instance.
   // e.g. "want want want" -> "want"; preserves surrounding spacing normalization performed elsewhere.
   try {
     return value.replace(/\b([^\s]+)(?:\s+\1\b)+/gi, '$1')
