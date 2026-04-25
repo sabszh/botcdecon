@@ -70,6 +70,17 @@ function collapseAdjacentDuplicateWords (value: string): string {
   return compact.join(' ')
 }
 
+function removeAdjacentDuplicateWordsRegex(value: string): string {
+  if (!value) return ''
+  // Replace runs of the same word repeated adjacently (case-insensitive) with a single instance.
+  // e.g. "want want want" -> "want"; preserves surrounding spacing normalization performed elsewhere.
+  try {
+    return value.replace(/\b([^\s]+)(?:\s+\1\b)+/gi, '$1')
+  } catch {
+    return value
+  }
+}
+
 export default function ChatPanel ({
   language,
   onExitSession,
@@ -736,7 +747,10 @@ export default function ChatPanel ({
       const committed = normalizeInputStreamText(speechSessionBaseRef.current)
       const sessionRecognized = normalizeSpeechText([sessionFinal, sessionInterim].filter(Boolean).join(' '))
       const nextVisibleDraft = appendWithTokenOverlap(committed, sessionRecognized)
-      const normalizedVisibleDraft = normalizeInputStreamText(collapseAdjacentDuplicateWords(nextVisibleDraft))
+      // Apply aggressive adjacent-word dedupe (regex) then a conservative collapse for token-equality
+      const deduped = removeAdjacentDuplicateWordsRegex(nextVisibleDraft)
+      const collapsed = collapseAdjacentDuplicateWords(deduped)
+      const normalizedVisibleDraft = normalizeInputStreamText(collapsed)
 
       mlog('result', {
         resultIndex: event.resultIndex,
@@ -768,14 +782,18 @@ export default function ChatPanel ({
       setIsMicOn(true)
     }
     rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
-      setIsMicOn(false)
       const err = (ev?.error || '').toString()
       mlog('error', { error: err, language, isIOS })
+      if (err === 'no-speech' || err === 'aborted') {
+        // benign; will auto-restart via onend — do NOT setIsMicOn(false) here or
+        // the mic-controller effect fires and tries to restart while onend is also
+        // about to restart, clearing segments and causing duplicate words.
+        return
+      }
+      setIsMicOn(false)
       if (err === 'not-allowed' || err === 'service-not-allowed') {
         setMicError(getSpeechErrorMessage(err, language))
         setMicDesired(false)
-      } else if (err === 'no-speech' || err === 'aborted') {
-        // benign; will auto-restart via onend
       } else if (err) {
         setMicError(getSpeechErrorMessage(err, language))
         setMicDesired(false)
@@ -784,14 +802,15 @@ export default function ChatPanel ({
     rec.onend = () => {
       // Keep listening while desired and it's the user's turn
       const shouldListen = micDesiredRef.current && !isAudioPlayingRef.current && !isLoadingRef.current
-      const mergedSessionBase = normalizeInputStreamText(
-        appendWithTokenOverlap(
-          speechSessionBaseRef.current,
-          normalizeSpeechText([speechSessionFinalRef.current, speechSessionCurrentRef.current].filter(Boolean).join(' '))
-        )
+      const mergedSessionBase = appendWithTokenOverlap(
+        speechSessionBaseRef.current,
+        normalizeSpeechText([speechSessionFinalRef.current, speechSessionCurrentRef.current].filter(Boolean).join(' '))
       )
-      const visibleDraft = normalizeInputStreamText(draftRef.current)
-      const nextBase = normalizeInputStreamText(visibleDraft || mergedSessionBase)
+      const visibleDraft = draftRef.current
+      // Prefer visible draft when present, otherwise use merged base. Apply dedupe before normalizing.
+      const rawNextBase = (visibleDraft && visibleDraft.length) ? visibleDraft : mergedSessionBase
+      const dedupedNextBase = removeAdjacentDuplicateWordsRegex(rawNextBase)
+      const nextBase = normalizeInputStreamText(dedupedNextBase)
       speechSessionBaseRef.current = nextBase
       committedMicRef.current = nextBase
       setSttBuffer(nextBase)
@@ -831,8 +850,8 @@ export default function ChatPanel ({
     setMicError(null)
     try {
       if (isSpeechSupported && recognitionRef.current && !isAudioPlayingRef.current && !isLoadingRef.current) {
-        // Capture current input as base for interim/final appends
-        const base = normalizeInputStreamText(committedMicRef.current || draftRef.current || sttBuffer || draft || '')
+        // Capture current input as base for interim/final appends (use refs only)
+        const base = normalizeInputStreamText(committedMicRef.current || draftRef.current || '')
         committedMicRef.current = base
         speechSessionBaseRef.current = base
         speechSessionFinalRef.current = ''
@@ -840,11 +859,11 @@ export default function ChatPanel ({
         speechResultSegmentsRef.current = []
         awaitingFreshRecognitionStartRef.current = true
         setSttBuffer(base)
-        mlog('startMic immediate', { base, draft, sttBuffer })
+        mlog('startMic immediate', { base })
         recognitionRef.current.start()
       }
     } catch {}
-  }, [draft, isSpeechSupported, sttBuffer])
+  }, [isSpeechSupported])
 
   const stopMic = useCallback(() => {
     // external toggle: mark undesired, controller effect will stop
@@ -882,8 +901,9 @@ export default function ChatPanel ({
     const shouldListen = micDesired && !isAudioPlaying && !isLoading
     if (shouldListen && !isMicOn) {
       try {
-        // Capture current input as base for interim/final appends
-        const base = normalizeInputStreamText(committedMicRef.current || draftRef.current || sttBuffer || draft || '')
+        // Capture current input as base for interim/final appends.
+        // Use refs only so this effect doesn't re-run on every speech result.
+        const base = normalizeInputStreamText(committedMicRef.current || draftRef.current || '')
         committedMicRef.current = base
         speechSessionBaseRef.current = base
         speechSessionFinalRef.current = ''
@@ -891,7 +911,7 @@ export default function ChatPanel ({
         speechResultSegmentsRef.current = []
         awaitingFreshRecognitionStartRef.current = true
         setSttBuffer(base)
-        mlog('startMic effect', { base, draft, sttBuffer, shouldListen })
+        mlog('startMic effect', { base, shouldListen })
         recognitionRef.current.start()
       } catch {}
     } else if (!shouldListen && isMicOn) {
@@ -899,7 +919,7 @@ export default function ChatPanel ({
       try { recognitionRef.current.stop() } catch {}
       setIsMicOn(false)
     }
-  }, [language, micDesired, isAudioPlaying, isLoading, isSpeechSupported, isMicOn, draft, sttBuffer])
+  }, [language, micDesired, isAudioPlaying, isLoading, isSpeechSupported, isMicOn])
 
   const requestChatTurn = useCallback(async (payload: Record<string, unknown>) => {
     requestAbortRef.current?.abort()
