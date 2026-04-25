@@ -81,6 +81,35 @@ function removeAdjacentDuplicateWordsRegex(value: string): string {
   }
 }
 
+function pushOrReplaceFinalSpeechSegment (
+  segments: Array<{ text: string, isFinal: boolean }>,
+  text: string
+): Array<{ text: string, isFinal: boolean }> {
+  const normalized = normalizeInputStreamText(text)
+  if (!normalized) return segments
+
+  const next = segments.slice()
+  const lastIndex = next.length - 1
+  const last = next[lastIndex]
+
+  // Web Speech engines often emit cumulative final hypotheses
+  // ("jeg", then "jeg håber", then "jeg håber at", ...). Replace an earlier
+  // tail segment when the new one is a strict extension, and ignore shorter
+  // regressions to avoid phrase inflation.
+  if (last?.isFinal && last.text) {
+    if (normalized.startsWith(last.text)) {
+      next[lastIndex] = { text: normalized, isFinal: true }
+      return next
+    }
+    if (last.text.startsWith(normalized)) {
+      return next
+    }
+  }
+
+  next.push({ text: normalized, isFinal: true })
+  return next
+}
+
 export default function ChatPanel ({
   language,
   onExitSession,
@@ -723,7 +752,7 @@ export default function ChatPanel ({
 
       const finalParts: string[] = []
       let latestInterim = ''
-      const nextSegments = speechResultSegmentsRef.current.slice(0, event.resultIndex)
+      let nextSegments = speechResultSegmentsRef.current.slice(0, event.resultIndex)
 
       // Interim results are temporary hypotheses. Keep only the latest interim text;
       // do not accumulate older interim phrases into the transcript.
@@ -733,7 +762,7 @@ export default function ChatPanel ({
         if (!transcript) continue
 
         if (result?.isFinal) {
-          nextSegments.push({ text: transcript, isFinal: true })
+          nextSegments = pushOrReplaceFinalSpeechSegment(nextSegments, transcript)
         } else {
           latestInterim = transcript
         }
@@ -750,7 +779,7 @@ export default function ChatPanel ({
       const sessionFinal = normalizeSpeechText(finalParts.join(' '))
       const sessionInterim = normalizeSpeechText(latestInterim)
       const committed = normalizeInputStreamText(speechSessionBaseRef.current)
-      const sessionRecognized = normalizeSpeechText([sessionFinal, sessionInterim].filter(Boolean).join(' '))
+      const sessionRecognized = appendWithTokenOverlap(sessionFinal, sessionInterim)
       const nextVisibleDraft = appendWithTokenOverlap(committed, sessionRecognized)
       const nextDraft = collapseAdjacentDuplicateWords(
         removeAdjacentDuplicateWordsRegex(nextVisibleDraft)
