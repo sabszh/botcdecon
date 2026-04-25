@@ -705,7 +705,7 @@ export default function ChatPanel ({
     rec.interimResults = true
     rec.maxAlternatives = 1
     rec.onresult = (event: SpeechRecognitionEvent) => {
-      // Ignore stale results if it's not user's turn or mic not desired
+      // Ignore stale results if it's not user's turn or mic not desired.
       if (!micDesiredRef.current || isAudioPlayingRef.current || isLoadingRef.current) {
         mlog('result ignored', {
           reason: {
@@ -720,42 +720,46 @@ export default function ChatPanel ({
         mlog('result ignored', { reason: 'awaiting-fresh-session-start' })
         return
       }
+
       const finalParts: string[] = []
-      const interimParts: string[] = []
+      let latestInterim = ''
       const nextSegments = speechResultSegmentsRef.current.slice(0, event.resultIndex)
 
+      // Interim results are temporary hypotheses. Keep only the latest interim text;
+      // do not accumulate older interim phrases into the transcript.
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i]
         const transcript = normalizeInputStreamText(result?.[0]?.transcript || '')
         if (!transcript) continue
-        nextSegments.push({ text: transcript, isFinal: !!result?.isFinal })
+
+        if (result?.isFinal) {
+          nextSegments.push({ text: transcript, isFinal: true })
+        } else {
+          latestInterim = transcript
+        }
       }
 
       speechResultSegmentsRef.current = nextSegments
 
       for (const segment of nextSegments) {
-        if (!segment.text) continue
-        if (segment.isFinal) finalParts.push(segment.text)
-        else interimParts.push(segment.text)
+        if (segment.isFinal && segment.text) {
+          finalParts.push(segment.text)
+        }
       }
 
       const sessionFinal = normalizeSpeechText(finalParts.join(' '))
-      const sessionInterim = normalizeSpeechText(interimParts.join(' '))
-
-      speechSessionFinalRef.current = sessionFinal
-      speechSessionCurrentRef.current = sessionInterim
+      const sessionInterim = normalizeSpeechText(latestInterim)
       const committed = normalizeInputStreamText(speechSessionBaseRef.current)
       const sessionRecognized = normalizeSpeechText([sessionFinal, sessionInterim].filter(Boolean).join(' '))
       const nextVisibleDraft = appendWithTokenOverlap(committed, sessionRecognized)
-      // Apply aggressive adjacent-word dedupe (regex) then a conservative collapse for token-equality
-      const deduped = removeAdjacentDuplicateWordsRegex(nextVisibleDraft)
-      const collapsed = collapseAdjacentDuplicateWords(deduped)
-      const normalizedVisibleDraft = normalizeInputStreamText(collapsed)
+      const nextDraft = collapseAdjacentDuplicateWords(
+        removeAdjacentDuplicateWordsRegex(nextVisibleDraft)
+      )
 
       mlog('result', {
         resultIndex: event.resultIndex,
         sessionBase: speechSessionBaseRef.current,
-        sessionFinal: speechSessionFinalRef.current,
+        sessionFinal,
         interim: sessionInterim,
         committed,
         visibleDraft: nextVisibleDraft,
@@ -769,19 +773,12 @@ export default function ChatPanel ({
         })
       })
 
-      committedMicRef.current = normalizedVisibleDraft || committed || speechSessionBaseRef.current
+      speechSessionFinalRef.current = sessionFinal
+      speechSessionCurrentRef.current = sessionInterim
+      committedMicRef.current = nextDraft || committed || speechSessionBaseRef.current
       setSttBuffer(committedMicRef.current)
       setDraft(committedMicRef.current)
       draftRef.current = committedMicRef.current
-
-      // Simpler: concat committed + final + interim, dedupe, avoid appendWithTokenOverlap complexity
-      const simpleDisplay = normalizeSpeechText([committed, sessionFinal, sessionInterim].filter(Boolean).join(' '))
-      const dedupedDisplay = removeAdjacentDuplicateWordsRegex(simpleDisplay)
-      const normalizedDraftDisplay = normalizeInputStreamText(dedupedDisplay)
-      committedMicRef.current = normalizedDraftDisplay
-      setSttBuffer(normalizedDraftDisplay)
-      setDraft(normalizedDraftDisplay)
-      draftRef.current = normalizedDraftDisplay
     }
     ;(rec as SpeechRecognition & { onstart?: () => void }).onstart = () => {
       if (awaitingFreshRecognitionStartRef.current) {
@@ -809,28 +806,29 @@ export default function ChatPanel ({
       }
     }
     rec.onend = () => {
-      // Keep listening while desired and it's the user's turn
+      // On pause/end, commit only finalized speech. Interim text is temporary and must not
+      // be folded into the base, otherwise repeated hypotheses come back after restarts.
       const shouldListen = micDesiredRef.current && !isAudioPlayingRef.current && !isLoadingRef.current
-      const mergedSessionBase = appendWithTokenOverlap(
-        speechSessionBaseRef.current,
-        normalizeSpeechText([speechSessionFinalRef.current, speechSessionCurrentRef.current].filter(Boolean).join(' '))
-      )
-      const visibleDraft = draftRef.current
-      // Prefer visible draft when present, otherwise use merged base. Apply dedupe before normalizing.
-      const rawNextBase = (visibleDraft && visibleDraft.length) ? visibleDraft : mergedSessionBase
-      const dedupedNextBase = removeAdjacentDuplicateWordsRegex(rawNextBase)
-      const nextBase = normalizeInputStreamText(dedupedNextBase)
-      speechSessionBaseRef.current = nextBase
-      committedMicRef.current = nextBase
-      setSttBuffer(nextBase)
-      setDraft(nextBase)
-      draftRef.current = nextBase
+      const committedBase = normalizeInputStreamText(speechSessionBaseRef.current)
+      const finalParts = speechResultSegmentsRef.current
+        .filter(segment => segment.isFinal && segment.text)
+        .map(segment => segment.text)
+      const sessionFinal = normalizeSpeechText(finalParts.join(' '))
+      const nextBase = sessionFinal ? [committedBase, sessionFinal].filter(Boolean).join(' ') : committedBase
+      const nextBaseNorm = normalizeInputStreamText(nextBase)
+
+      speechSessionBaseRef.current = nextBaseNorm
+      committedMicRef.current = nextBaseNorm
+      setSttBuffer(nextBaseNorm)
+      setDraft(nextBaseNorm)
+      draftRef.current = nextBaseNorm
       speechSessionFinalRef.current = ''
       speechSessionCurrentRef.current = ''
       speechResultSegmentsRef.current = []
+
       mlog('end', {
         shouldListen,
-        nextBase,
+        nextBase: nextBaseNorm,
         micDesired: micDesiredRef.current,
         audioPlaying: isAudioPlayingRef.current,
         loading: isLoadingRef.current
