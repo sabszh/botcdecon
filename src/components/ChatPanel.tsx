@@ -87,12 +87,15 @@ function pushOrReplaceFinalSpeechSegment (
 ): Array<{ text: string, isFinal: boolean }> {
   const normalized = normalizeInputStreamText(text)
   if (!normalized) return segments
-  if (!segments.length) return [{ text: normalized, isFinal: true }]
 
   const next = segments.slice()
   const lastIndex = next.length - 1
   const last = next[lastIndex]
 
+  // Web Speech engines often emit cumulative final hypotheses
+  // ("jeg", then "jeg håber", then "jeg håber at", ...). Replace an earlier
+  // tail segment when the new one is a strict extension, and ignore shorter
+  // regressions to avoid phrase inflation.
   if (last?.isFinal && last.text) {
     if (normalized.startsWith(last.text)) {
       next[lastIndex] = { text: normalized, isFinal: true }
