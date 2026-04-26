@@ -57,57 +57,19 @@ function appendWithTokenOverlap (baseText: string, recognizedText: string): stri
   return normalizeSpeechText(`${base} ${recognized}`)
 }
 
-function collapseAdjacentDuplicateWords (value: string): string {
-  const normalized = normalizeSpeechText(value)
-  if (!normalized) return ''
-  const tokens = normalized.split(' ')
-  const compact: string[] = []
-  for (const token of tokens) {
-    const prev = compact[compact.length - 1]
-    if (prev && prev === token) continue
-    compact.push(token)
-  }
-  return compact.join(' ')
+function composeSpeechDraft (baseText: string, finalText: string, interimText: string): string {
+  const base = normalizeInputStreamText(baseText)
+  const final = normalizeSpeechText(finalText)
+  const interim = normalizeSpeechText(interimText)
+  const committed = appendWithTokenOverlap(base, final)
+  return appendWithTokenOverlap(committed, interim)
 }
 
-function removeAdjacentDuplicateWordsRegex(value: string): string {
-  if (!value) return ''
-  // Replace runs of the same word repeated adjacently (case-insensitive) with a single instance.
-  // e.g. "want want want" -> "want"; preserves surrounding spacing normalization performed elsewhere.
-  try {
-    return value.replace(/\b([^\s]+)(?:\s+\1\b)+/gi, '$1')
-  } catch {
-    return value
-  }
-}
-
-function pushOrReplaceFinalSpeechSegment (
-  segments: Array<{ text: string, isFinal: boolean }>,
-  text: string
-): Array<{ text: string, isFinal: boolean }> {
-  const normalized = normalizeInputStreamText(text)
-  if (!normalized) return segments
-
-  const next = segments.slice()
-  const lastIndex = next.length - 1
-  const last = next[lastIndex]
-
-  // Web Speech engines often emit cumulative final hypotheses
-  // ("jeg", then "jeg håber", then "jeg håber at", ...). Replace an earlier
-  // tail segment when the new one is a strict extension, and ignore shorter
-  // regressions to avoid phrase inflation.
-  if (last?.isFinal && last.text) {
-    if (normalized.startsWith(last.text)) {
-      next[lastIndex] = { text: normalized, isFinal: true }
-      return next
-    }
-    if (last.text.startsWith(normalized)) {
-      return next
-    }
-  }
-
-  next.push({ text: normalized, isFinal: true })
-  return next
+function composeFinalSpeech (finalByIndex: Record<number, string>): string {
+  return Object.keys(finalByIndex)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .reduce((merged, index) => appendWithTokenOverlap(merged, finalByIndex[index] || ''), '')
 }
 
 export default function ChatPanel ({
@@ -158,9 +120,10 @@ export default function ChatPanel ({
   const speechSessionBaseRef = useRef('')
   const speechSessionFinalRef = useRef('')
   const speechSessionCurrentRef = useRef('')
-  const speechResultSegmentsRef = useRef<Array<{ text: string, isFinal: boolean }>>([])
+  const speechSessionFinalByIndexRef = useRef<Record<number, string>>({})
   const ignoreRecognitionResultsRef = useRef(false)
   const awaitingFreshRecognitionStartRef = useRef(false)
+  const recognitionRunStartedAtRef = useRef(0)
   const draftRef = useRef('')
   const sessionIdRef = useRef(buildSessionId())
   const requestAbortRef = useRef<AbortController | null>(null)
@@ -193,9 +156,10 @@ export default function ChatPanel ({
     speechSessionBaseRef.current = ''
     speechSessionFinalRef.current = ''
     speechSessionCurrentRef.current = ''
-    speechResultSegmentsRef.current = []
+    speechSessionFinalByIndexRef.current = {}
     ignoreRecognitionResultsRef.current = false
     awaitingFreshRecognitionStartRef.current = false
+    recognitionRunStartedAtRef.current = 0
     manualReturnInFlightRef.current = false
     pendingManualReturnRef.current = false
     lastHandledReturnRequestRef.current = 0
@@ -252,10 +216,14 @@ export default function ChatPanel ({
     speechSessionBaseRef.current = normalized
     speechSessionFinalRef.current = ''
     speechSessionCurrentRef.current = ''
-    speechResultSegmentsRef.current = []
+    speechSessionFinalByIndexRef.current = {}
     // Ignore late results from the previous recognition run until a new session starts.
     ignoreRecognitionResultsRef.current = true
     awaitingFreshRecognitionStartRef.current = true
+    if (isMicOnRef.current) {
+      try { recognitionRef.current?.stop?.() } catch {}
+      setIsMicOn(false)
+    }
   }, [])
 
   const deleteOneWord = useCallback(() => {
@@ -734,7 +702,7 @@ export default function ChatPanel ({
     rec.interimResults = true
     rec.maxAlternatives = 1
     rec.onresult = (event: SpeechRecognitionEvent) => {
-      // Ignore stale results if it's not user's turn or mic not desired.
+      // Ignore stale results if it's not the user's turn or this run is not fresh.
       if (!micDesiredRef.current || isAudioPlayingRef.current || isLoadingRef.current) {
         mlog('result ignored', {
           reason: {
@@ -749,48 +717,44 @@ export default function ChatPanel ({
         mlog('result ignored', { reason: 'awaiting-fresh-session-start' })
         return
       }
+      if (event.timeStamp > 0 && event.timeStamp < recognitionRunStartedAtRef.current) {
+        mlog('result ignored', {
+          reason: 'stale-event',
+          eventTimeStamp: event.timeStamp,
+          runStartedAt: recognitionRunStartedAtRef.current
+        })
+        return
+      }
 
-      const finalParts: string[] = []
+      const finalByIndex: Record<number, string> = {}
       let latestInterim = ''
-      let nextSegments = speechResultSegmentsRef.current.slice(0, event.resultIndex)
 
-      // Interim results are temporary hypotheses. Keep only the latest interim text;
-      // do not accumulate older interim phrases into the transcript.
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Rebuild the active run from this event snapshot. Interim text is only a
+      // live hypothesis; it replaces the previous interim and is never committed.
+      for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i]
         const transcript = normalizeInputStreamText(result?.[0]?.transcript || '')
         if (!transcript) continue
 
         if (result?.isFinal) {
-          nextSegments = pushOrReplaceFinalSpeechSegment(nextSegments, transcript)
+          finalByIndex[i] = transcript
         } else {
           latestInterim = transcript
         }
       }
 
-      speechResultSegmentsRef.current = nextSegments
-
-      for (const segment of nextSegments) {
-        if (segment.isFinal && segment.text) {
-          finalParts.push(segment.text)
-        }
-      }
-
-      const sessionFinal = normalizeSpeechText(finalParts.join(' '))
+      const sessionFinal = composeFinalSpeech(finalByIndex)
       const sessionInterim = normalizeSpeechText(latestInterim)
-      const committed = normalizeInputStreamText(speechSessionBaseRef.current)
-      const sessionRecognized = appendWithTokenOverlap(sessionFinal, sessionInterim)
-      const nextVisibleDraft = appendWithTokenOverlap(committed, sessionRecognized)
-      const nextDraft = collapseAdjacentDuplicateWords(
-        removeAdjacentDuplicateWordsRegex(nextVisibleDraft)
-      )
+      const sessionBase = normalizeInputStreamText(speechSessionBaseRef.current)
+      const nextVisibleDraft = composeSpeechDraft(sessionBase, sessionFinal, sessionInterim)
+      const nextCommittedDraft = composeSpeechDraft(sessionBase, sessionFinal, '')
 
       mlog('result', {
         resultIndex: event.resultIndex,
         sessionBase: speechSessionBaseRef.current,
         sessionFinal,
         interim: sessionInterim,
-        committed,
+        committed: nextCommittedDraft,
         visibleDraft: nextVisibleDraft,
         results: Array.from({ length: event.results.length }, (_, idx) => {
           const res = event.results[idx]
@@ -802,18 +766,20 @@ export default function ChatPanel ({
         })
       })
 
+      speechSessionFinalByIndexRef.current = finalByIndex
       speechSessionFinalRef.current = sessionFinal
       speechSessionCurrentRef.current = sessionInterim
-      committedMicRef.current = nextDraft || committed || speechSessionBaseRef.current
-      setSttBuffer(committedMicRef.current)
-      setDraft(committedMicRef.current)
-      draftRef.current = committedMicRef.current
+      committedMicRef.current = nextCommittedDraft || sessionBase
+      setSttBuffer(nextVisibleDraft)
+      setDraft(nextVisibleDraft)
+      draftRef.current = nextVisibleDraft
     }
     ;(rec as SpeechRecognition & { onstart?: () => void }).onstart = () => {
       if (awaitingFreshRecognitionStartRef.current) {
         ignoreRecognitionResultsRef.current = false
         awaitingFreshRecognitionStartRef.current = false
       }
+      recognitionRunStartedAtRef.current = performance.now()
       setIsMicOn(true)
     }
     rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
@@ -839,12 +805,8 @@ export default function ChatPanel ({
       // be folded into the base, otherwise repeated hypotheses come back after restarts.
       const shouldListen = micDesiredRef.current && !isAudioPlayingRef.current && !isLoadingRef.current
       const committedBase = normalizeInputStreamText(speechSessionBaseRef.current)
-      const finalParts = speechResultSegmentsRef.current
-        .filter(segment => segment.isFinal && segment.text)
-        .map(segment => segment.text)
-      const sessionFinal = normalizeSpeechText(finalParts.join(' '))
-      const nextBase = sessionFinal ? [committedBase, sessionFinal].filter(Boolean).join(' ') : committedBase
-      const nextBaseNorm = normalizeInputStreamText(nextBase)
+      const sessionFinal = speechSessionFinalRef.current
+      const nextBaseNorm = composeSpeechDraft(committedBase, sessionFinal, '')
 
       speechSessionBaseRef.current = nextBaseNorm
       committedMicRef.current = nextBaseNorm
@@ -853,7 +815,7 @@ export default function ChatPanel ({
       draftRef.current = nextBaseNorm
       speechSessionFinalRef.current = ''
       speechSessionCurrentRef.current = ''
-      speechResultSegmentsRef.current = []
+      speechSessionFinalByIndexRef.current = {}
 
       mlog('end', {
         shouldListen,
@@ -869,6 +831,7 @@ export default function ChatPanel ({
         setIsMicOn(false)
         ignoreRecognitionResultsRef.current = false
         awaitingFreshRecognitionStartRef.current = false
+        recognitionRunStartedAtRef.current = 0
       }
     }
     recognitionRef.current = rec
@@ -892,13 +855,16 @@ export default function ChatPanel ({
         speechSessionBaseRef.current = base
         speechSessionFinalRef.current = ''
         speechSessionCurrentRef.current = ''
-        speechResultSegmentsRef.current = []
+        speechSessionFinalByIndexRef.current = {}
         awaitingFreshRecognitionStartRef.current = true
         setSttBuffer(base)
         mlog('startMic immediate', { base })
         recognitionRef.current.start()
       }
-    } catch {}
+    } catch {
+      ignoreRecognitionResultsRef.current = false
+      awaitingFreshRecognitionStartRef.current = false
+    }
   }, [isSpeechSupported])
 
   const stopMic = useCallback(() => {
@@ -944,12 +910,15 @@ export default function ChatPanel ({
         speechSessionBaseRef.current = base
         speechSessionFinalRef.current = ''
         speechSessionCurrentRef.current = ''
-        speechResultSegmentsRef.current = []
+        speechSessionFinalByIndexRef.current = {}
         awaitingFreshRecognitionStartRef.current = true
         setSttBuffer(base)
         mlog('startMic effect', { base, shouldListen })
         recognitionRef.current.start()
-      } catch {}
+      } catch {
+        ignoreRecognitionResultsRef.current = false
+        awaitingFreshRecognitionStartRef.current = false
+      }
     } else if (!shouldListen && isMicOn) {
       mlog('stopMic effect', { shouldListen, isMicOn })
       try { recognitionRef.current.stop() } catch {}
@@ -1113,6 +1082,10 @@ export default function ChatPanel ({
     setDraft('')
     setSttBuffer('')
     committedMicRef.current = ''
+    speechSessionBaseRef.current = ''
+    speechSessionFinalRef.current = ''
+    speechSessionCurrentRef.current = ''
+    speechSessionFinalByIndexRef.current = {}
 
     if (phase === 'await_return') {
       const conf = scripts[language]
