@@ -2,8 +2,8 @@ import { getAudioContextCtor } from './browserApis'
 
 export const BGM_LEVELS = {
   idle: 0.16,
-  chat: 0.06,
-  active: 0.06,
+  chat: 0.1,
+  active: 0.1,
 } as const
 
 type BgmMode = keyof typeof BGM_LEVELS

@@ -1376,7 +1376,7 @@ export default function ChatPanel ({
 
   useEffect(() => {
     if (shouldDuckBgm) {
-      bgm.duckForSpeech(200, 0.025, 'chat-active')
+      bgm.duckForSpeech(200, undefined, 'chat-active')
     } else {
       bgm.restoreFromDuck(350, 'chat-active')
     }
