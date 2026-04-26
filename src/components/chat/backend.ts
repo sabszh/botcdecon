@@ -97,7 +97,7 @@ export async function resolveAudioTurn (
 
     const contentType = (res.headers.get('content-type') || '').toLowerCase()
     if (contentType.includes('application/json')) {
-      const payload = await res.json().catch(() => null) as { status?: string } | null
+      const payload = await res.json().catch(() => null) as { status?: string, error?: string } | null
       if (payload?.status === 'error') {
         return null
       }
@@ -109,7 +109,9 @@ export async function resolveAudioTurn (
     }
 
     const blob = await res.blob()
-    if (!blob.size) return null
+    if (!blob.size) {
+      return null
+    }
     return URL.createObjectURL(blob)
   }
   return null

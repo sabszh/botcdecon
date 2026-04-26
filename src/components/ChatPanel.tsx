@@ -1208,6 +1208,7 @@ export default function ChatPanel ({
         const replyText = memoryReply.text
         const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
         const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
+        const audioStatus = data?.audioStatus || data?.audio_status || null
 
         let turnAudioBlobUrl: string | null = null
         if (audioTurnId) {
@@ -1216,6 +1217,8 @@ export default function ChatPanel ({
           } catch (err) {
             dlog('memory turn audio polling failed; using browser TTS fallback', err)
           }
+        } else {
+          dlog('memory response has no audioTurnId', { audioStatus, audioUrl })
         }
         const resolved = turnAudioBlobUrl || resolveAudioSrc(audioUrl)
         const cleanupTurnAudio = () => {
@@ -1228,7 +1231,11 @@ export default function ChatPanel ({
           playAudio(
             resolved,
             () => { cleanupTurnAudio(); startQuestionPrompt() },
-            () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, startQuestionPrompt, memoryReplyId ?? undefined) },
+            () => {
+              dlog('memory generated audio playback failed; using browser TTS fallback', { resolved })
+              cleanupTurnAudio()
+              speakBrowserTTS(replyText, language, startQuestionPrompt, memoryReplyId ?? undefined)
+            },
             GENERATED_SPEECH_RATE,
             memoryReplyId ?? undefined
           )
@@ -1254,6 +1261,7 @@ export default function ChatPanel ({
       const replyText = sanitizeAssistantText((data.message || '').trim())
       const audioUrl: string | null = data?.audioUrl || data?.audio_url || null
       const audioTurnId: string | null = data?.audioTurnId || data?.audio_turn_id || null
+      const audioStatus = data?.audioStatus || data?.audio_status || null
       dlog('api audioUrl', audioUrl)
       // Question mode: speak the answer, then prompt for more (Question 2)
       const afterAnswerSpoken = () => {
@@ -1275,6 +1283,8 @@ export default function ChatPanel ({
           } catch (err) {
             dlog('question turn audio polling failed; using browser TTS fallback', err)
           }
+        } else {
+          dlog('question response has no audioTurnId', { audioStatus, audioUrl })
         }
         const resolved = turnAudioBlobUrl || resolveAudioSrc(audioUrl)
         dlog('resolved audio', resolved)
@@ -1287,7 +1297,11 @@ export default function ChatPanel ({
           playAudio(
             resolved,
             () => { cleanupTurnAudio(); afterAnswerSpoken() },
-            () => { cleanupTurnAudio(); speakBrowserTTS(replyText, language, afterAnswerSpoken, questionPlaceholderId ?? undefined) },
+            () => {
+              dlog('question generated audio playback failed; using browser TTS fallback', { resolved })
+              cleanupTurnAudio()
+              speakBrowserTTS(replyText, language, afterAnswerSpoken, questionPlaceholderId ?? undefined)
+            },
             GENERATED_SPEECH_RATE,
             questionPlaceholderId ?? undefined
           )

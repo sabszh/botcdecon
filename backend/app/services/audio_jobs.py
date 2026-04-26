@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 from uuid import uuid4
 
 from .tts import TTSService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -31,9 +34,16 @@ class AudioJobStore:
 
   async def queue(self, text: str, language: str) -> Optional[str]:
     if not text or not self._tts:
+      logger.warning(
+        '[TTS] queue skipped text_len=%d has_tts=%s language=%s',
+        len(text or ''),
+        bool(self._tts),
+        language
+      )
       return None
     turn_id = uuid4().hex
     self._jobs[turn_id] = AudioJob(status='pending')
+    logger.info('[TTS] queued turn=%s text_len=%d language=%s', turn_id, len(text), language)
     asyncio.create_task(self._run(turn_id, text, language))
     return turn_id
 
@@ -43,18 +53,20 @@ class AudioJobStore:
       return
     t_start = time.perf_counter()
     try:
+      logger.info('[TTS] synthesis start turn=%s language=%s text_len=%d', turn_id, language, len(text))
       audio = await self._tts.synthesize_bytes(text, language=language)
       job.tts_ms = (time.perf_counter() - t_start) * 1000
       if not audio:
         job.status = 'error'
         job.error = 'tts_empty'
+        logger.error('[TTS] synthesis empty turn=%s tts_ms=%.2f', turn_id, job.tts_ms)
         return
       job.audio_bytes = audio
       job.status = 'ready'
       job.content_type = 'audio/mpeg'
+      logger.info('[TTS] synthesis ready turn=%s bytes=%d tts_ms=%.2f', turn_id, len(audio), job.tts_ms)
     except Exception as exc:
-      import logging
-      logging.getLogger(__name__).error('TTS synthesis failed for turn %s: %s', turn_id, exc)
+      logger.exception('[TTS] synthesis failed turn=%s: %s', turn_id, exc)
       job.status = 'error'
       job.error = str(exc)
 
