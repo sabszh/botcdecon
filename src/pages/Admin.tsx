@@ -35,6 +35,31 @@ function fmtDate(value: string) {
   return d.toLocaleString()
 }
 
+function toPrettyJson(value: unknown): string {
+  return JSON.stringify(value, null, 2)
+}
+
+async function copyTextToClipboard(value: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    document.execCommand('copy')
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
 function getInteractionLabel(turn: SessionTurn): string {
   const mode = (turn.mode || '').toLowerCase()
   const stage = turn.continuousData && typeof turn.continuousData === 'object'
@@ -81,6 +106,7 @@ export default function AdminPage() {
   const [listError, setListError] = React.useState<string | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
   const [turnOrder, setTurnOrder] = React.useState<'newest' | 'oldest'>('newest')
+  const [copyStatus, setCopyStatus] = React.useState<string | null>(null)
 
   const loadSessions = React.useCallback(async (
     nextOffset: number,
@@ -145,6 +171,19 @@ export default function AdminPage() {
     }
     return turns
   }, [detail?.turns, turnOrder])
+
+  const copyJson = React.useCallback(async (label: string, value: unknown) => {
+    setCopyStatus(null)
+    try {
+      await copyTextToClipboard(toPrettyJson(value))
+      setCopyStatus(`${label} copied`)
+      window.setTimeout(() => {
+        setCopyStatus((current) => current === `${label} copied` ? null : current)
+      }, 2500)
+    } catch (err) {
+      setCopyStatus((err as Error)?.message || 'Copy failed')
+    }
+  }, [])
 
   return (
     <div className='min-h-screen bg-black/10 text-black'>
@@ -268,7 +307,14 @@ export default function AdminPage() {
                   <div className='text-right text-sm text-black/60'>
                     <div>{detail.session.userName}</div>
                     <div>{detail.session.userLocation || 'Unknown location'}</div>
-                    <div className='mt-2 flex items-center justify-end gap-2'>
+                    <div className='mt-2 flex flex-wrap items-center justify-end gap-2'>
+                      <button
+                        type='button'
+                        onClick={() => copyJson('Session JSON', detail)}
+                        className='surface-pill rounded-full px-3 py-1.5 text-xs text-black transition hover:bg-white'
+                      >
+                        Copy session JSON
+                      </button>
                       <span className='text-xs uppercase tracking-[0.12em] text-black/55'>Turns</span>
                       <select
                         value={turnOrder}
@@ -279,6 +325,9 @@ export default function AdminPage() {
                         <option value='oldest'>Oldest first</option>
                       </select>
                     </div>
+                    {copyStatus && (
+                      <div className='mt-2 text-xs text-black/55'>{copyStatus}</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -303,7 +352,16 @@ export default function AdminPage() {
                             {getInteractionLabel(turn)}
                           </span>
                         </div>
-                        <span>{fmtDate(turn.createdAt)}</span>
+                        <div className='flex items-center gap-2'>
+                          <button
+                            type='button'
+                            onClick={() => copyJson(`Entry ${turn.id} JSON`, turn)}
+                            className='rounded-full bg-white/55 px-2.5 py-1 text-[0.65rem] font-semibold tracking-[0.08em] text-black transition hover:bg-white'
+                          >
+                            Copy JSON
+                          </button>
+                          <span>{fmtDate(turn.createdAt)}</span>
+                        </div>
                       </div>
                       <div className='grid gap-4 lg:grid-cols-2'>
                         <div>

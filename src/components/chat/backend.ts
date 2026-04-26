@@ -7,6 +7,8 @@ export type BackendChatResponse = {
   audio_url?: string | null
   audioTurnId?: string | null
   audio_turn_id?: string | null
+  audioStatus?: string | null
+  audio_status?: string | null
 }
 
 const CHAT_ENDPOINT = '/api/chat'
@@ -71,7 +73,7 @@ export async function resolveAudioTurn (
   signal: AbortSignal
 ): Promise<string | null> {
   if (!turnId) return null
-  const deadline = Date.now() + 8000
+  const deadline = Date.now() + 30000
 
   while (Date.now() < deadline) {
     const res = await fetch(resolveApiUrl(`${CHAT_AUDIO_ENDPOINT}/${encodeURIComponent(turnId)}`), {
@@ -80,7 +82,7 @@ export async function resolveAudioTurn (
       signal
     })
     if (res.status === 202) {
-      await new Promise(resolve => window.setTimeout(resolve, 250))
+      await new Promise(resolve => window.setTimeout(resolve, 500))
       continue
     }
     if (!res.ok) {

@@ -14,6 +14,7 @@ class BackgroundMusicController {
   private ctx: AudioContext | null = null
   private source: MediaElementAudioSourceNode | null = null
   private gain: GainNode | null = null
+  private ducks = new Map<string, number>()
 
   init(src: string = '/audio/backgroundmusic.mp3', originalVolume = 1) {
     if (this.initialized) return
@@ -153,14 +154,21 @@ class BackgroundMusicController {
     this.rampTo(this.original, duration)
   }
 
-  /** Duck volume for TTS/speech; more aggressive than fadeDown */
-  duckForSpeech(duration = 300, to = 0.08) {
+  private currentTargetVolume() {
+    if (!this.ducks.size) return this.original
+    return Math.min(...this.ducks.values())
+  }
+
+  /** Duck volume for TTS/speech or active user input. */
+  duckForSpeech(duration = 300, to = 0.08, reason = 'speech') {
+    this.ducks.set(reason, clamp01(to))
     this.rampTo(to, duration)
   }
 
-  /** Restore volume after speech ducks */
-  restoreFromDuck(duration = 500) {
-    this.rampTo(this.original, duration)
+  /** Restore volume after a specific ducking reason is no longer active. */
+  restoreFromDuck(duration = 500, reason = 'speech') {
+    this.ducks.delete(reason)
+    this.rampTo(this.currentTargetVolume(), duration)
   }
 }
 

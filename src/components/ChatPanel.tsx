@@ -98,6 +98,7 @@ export default function ChatPanel ({
   const [introAssetsReady, setIntroAssetsReady] = useState(false)
   // No UI or persistence for speech rate; use a fixed constant for generated audio only
   const [micError, setMicError] = useState<string | null>(null)
+  const [isDeletingDraft, setIsDeletingDraft] = useState(false)
   // Track whether we've started the intro flow (prevents double-start on iOS unlock)
   const introStartedRef = useRef(false)
   const introTimerRef = useRef<number | null>(null)
@@ -242,6 +243,7 @@ export default function ChatPanel ({
   }, [syncDraftFromManualEdit])
 
   const startDeleteHold = useCallback(() => {
+    setIsDeletingDraft(true)
     // Immediate delete, then start repeating after a short delay
     deleteOneWord()
     if (deleteHoldTimeoutRef.current) window.clearTimeout(deleteHoldTimeoutRef.current)
@@ -254,6 +256,7 @@ export default function ChatPanel ({
   }, [deleteOneWord])
 
   const stopDeleteHold = useCallback(() => {
+    setIsDeletingDraft(false)
     if (deleteHoldTimeoutRef.current) {
       window.clearTimeout(deleteHoldTimeoutRef.current)
       deleteHoldTimeoutRef.current = null
@@ -1358,11 +1361,29 @@ export default function ChatPanel ({
     ? 'Tal eller skriv her...'
     : 'Speak or type here...'
   const isVoiceActive = micDesired || isMicOn
+  const isUserInputActive = canType && !isAudioPlaying && (
+    isVoiceActive ||
+    keyboardEnabled ||
+    isDeletingDraft ||
+    hasDraftContent
+  )
   const voiceStatusLabel = (
     language === 'da'
       ? (isVoiceActive ? 'Lytter…' : 'Taleinput klar')
       : (isVoiceActive ? 'Listening…' : 'Voice input ready')
   )
+
+  useEffect(() => {
+    if (isUserInputActive) {
+      bgm.duckForSpeech(200, 0.08, 'user-input')
+    } else {
+      bgm.restoreFromDuck(350, 'user-input')
+    }
+  }, [isUserInputActive])
+
+  useEffect(() => () => {
+    bgm.restoreFromDuck(250, 'user-input')
+  }, [])
 
   useEffect(() => {
     if (!autoFollowRef.current) return

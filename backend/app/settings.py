@@ -63,11 +63,11 @@ class Settings:
 
   @property
   def has_mistral(self) -> bool:
-    return self.mistral_api_key is not None
+    return bool((self.mistral_api_key or '').strip())
 
   @property
   def has_elevenlabs(self) -> bool:
-    return self.elevenlabs_api_key is not None
+    return bool((self.elevenlabs_api_key or '').strip())
 
   @property
   def has_tts(self) -> bool:
