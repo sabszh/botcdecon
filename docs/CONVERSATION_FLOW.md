@@ -327,11 +327,10 @@ After the visitor has shared at least one memory, the top-right Return/Tilbage b
 1. stop any current mic/audio/backend turn work
 2. if the visitor has not yet reached the final post-answer reprompt, go directly to farewell
 3. if the visitor has reached the final post-answer reprompt, add the return prompt bubble and play `/audio/{language}_RETURN_PROMPT.mp3`
-4. add a second on-screen hint bubble telling the visitor they can press Return/Tilbage again to leave
-5. set phase to `await_return` and re-enable input
-6. if the visitor answers, persist that answer in archive `continuous_data.returnPromptAnswer`, then play farewell
-7. if the visitor presses Return/Tilbage again instead of answering, skip straight to farewell
-8. when farewell starts, clear session memory in the archive/system turn path
+4. set phase to `await_return` and re-enable input
+5. if the visitor answers, persist that answer in archive `continuous_data.returnPromptAnswer`, then play farewell
+6. if the visitor presses Return/Tilbage again instead of answering, skip straight to farewell
+7. when farewell starts, clear session memory in the archive/system turn path
 9. call `onExitSession()` when farewell completes
 10. parent transitions back to language selection
 

@@ -301,7 +301,6 @@ export default function ChatPanel ({
       scriptedAudioSrc(language, 'QUESTION_1'),
       scriptedAudioSrc(language, 'QUESTION_2'),
       scriptedAudioSrc(language, 'RETURN_PROMPT'),
-      scriptedAudioSrc(language, 'RETURN_EXIT_HINT'),
       scriptedAudioSrc(language, 'FAREWELL'),
       scriptedAudioSrc(language, 'THANK_YOU'),
     ]
@@ -379,7 +378,7 @@ export default function ChatPanel ({
     el.volume = 0
     el.onplay = () => {
       fade(0, 1, 400)
-      bgm.duckForSpeech(300, 0.08)
+      bgm.duckForSpeech(300)
       if (typeof autoScrollMsgId === 'number') {
         // For audio-led experiences (e.g., iPad kiosk), force follow when narration starts.
         autoFollowRef.current = true
@@ -617,7 +616,7 @@ export default function ChatPanel ({
     try { recognitionRef.current?.stop?.() } catch {}
     setIsMicOn(false)
     setIsAudioPlaying(true)
-    bgm.duckForSpeech(300, 0.08)
+    bgm.duckForSpeech(300)
     if (typeof autoScrollMsgId === 'number') {
       scrollToMessageTop(autoScrollMsgId)
     }
@@ -1017,25 +1016,12 @@ export default function ChatPanel ({
     const returnAction = getManualReturnAction(phase, hasSharedMemory)
     if (returnAction === 'ask_for_destination') {
       const returnPromptId = addMessage('bot', conf.returnPrompt)
-      const playReturnExitHint = () => {
+      const enableReturnAnswer = () => {
         if (!isMountedRef.current) return
-        const returnExitHintId = addMessage('bot', conf.returnExitHint)
         setPhase('await_return')
         setMicDesired(true)
-        scrollToMessageTop(returnExitHintId ?? returnPromptId)
-        void playAudio(
-          scriptedAudioSrc(language, 'RETURN_EXIT_HINT'),
-          undefined,
-          () => {
-            manualReturnInFlightRef.current = false
-            speakBrowserTTS(conf.returnExitHint, language, undefined, returnExitHintId ?? undefined)
-          },
-          GENERATED_SPEECH_RATE,
-          returnExitHintId ?? undefined,
-          true
-        ).then((started) => {
-          if (started && isMountedRef.current) manualReturnInFlightRef.current = false
-        })
+        manualReturnInFlightRef.current = false
+        scrollToMessageTop(returnPromptId)
       }
       void persistArchiveSystemTurn(conf.returnPrompt, {
         continuousData: { returnPromptStage: 'asked' }
@@ -1045,10 +1031,10 @@ export default function ChatPanel ({
       playAudio(
         scriptedAudioSrc(language, 'RETURN_PROMPT'),
         () => {
-          playReturnExitHint()
+          enableReturnAnswer()
         },
         () => {
-          speakBrowserTTS(conf.returnPrompt, language, playReturnExitHint, returnPromptId ?? undefined, false)
+          speakBrowserTTS(conf.returnPrompt, language, enableReturnAnswer, returnPromptId ?? undefined, false)
         },
         GENERATED_SPEECH_RATE,
         returnPromptId ?? undefined,
@@ -1381,6 +1367,7 @@ export default function ChatPanel ({
     isDeletingDraft ||
     hasDraftContent
   )
+  const shouldDuckBgm = isLoading || isAudioPlaying || isUserInputActive
   const voiceStatusLabel = (
     language === 'da'
       ? (isVoiceActive ? 'Lytter…' : 'Taleinput klar')
@@ -1388,15 +1375,15 @@ export default function ChatPanel ({
   )
 
   useEffect(() => {
-    if (isUserInputActive) {
-      bgm.duckForSpeech(200, 0.08, 'user-input')
+    if (shouldDuckBgm) {
+      bgm.duckForSpeech(200, 0.025, 'chat-active')
     } else {
-      bgm.restoreFromDuck(350, 'user-input')
+      bgm.restoreFromDuck(350, 'chat-active')
     }
-  }, [isUserInputActive])
+  }, [shouldDuckBgm])
 
   useEffect(() => () => {
-    bgm.restoreFromDuck(250, 'user-input')
+    bgm.restoreFromDuck(250, 'chat-active')
   }, [])
 
   useEffect(() => {

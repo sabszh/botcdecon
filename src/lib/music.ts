@@ -1,5 +1,13 @@
 import { getAudioContextCtor } from './browserApis'
 
+export const BGM_LEVELS = {
+  idle: 0.16,
+  chat: 0.045,
+  active: 0.025,
+} as const
+
+type BgmMode = keyof typeof BGM_LEVELS
+
 // Singleton background music controller.
 // Audio element creation is deferred until first real playback/unlock to avoid
 // downloading the full background track on initial page load.
@@ -15,12 +23,14 @@ class BackgroundMusicController {
   private source: MediaElementAudioSourceNode | null = null
   private gain: GainNode | null = null
   private ducks = new Map<string, number>()
+  private baseVolume = BGM_LEVELS.idle
 
   init(src: string = '/audio/backgroundmusic.mp3', originalVolume = 1) {
     if (this.initialized) return
     this.initialized = true
     this.src = src
     this.original = clamp01(originalVolume)
+    this.baseVolume = BGM_LEVELS.idle
 
     const startOnGesture = () => {
       // Defer the heavier unlock work outside the input handler to keep gesture handling snappy.
@@ -84,7 +94,7 @@ class BackgroundMusicController {
     if (this.audio) return
     const el = new Audio(this.src)
     el.loop = true
-    el.volume = this.original
+    el.volume = this.currentTargetVolume()
     // iOS requires both property and attribute for inline playback.
     ;(el as HTMLAudioElement & { playsInline?: boolean }).playsInline = true
     try { el.setAttribute('playsinline', 'true') } catch {}
@@ -110,7 +120,7 @@ class BackgroundMusicController {
     }
     if (this.ctx && !this.gain) {
       this.gain = this.ctx.createGain()
-      this.gain.gain.value = this.original
+      this.gain.gain.value = this.currentTargetVolume()
     }
     if (this.ctx && this.source && this.gain) {
       try { this.source.disconnect() } catch {}
@@ -147,20 +157,27 @@ class BackgroundMusicController {
   }
 
   fadeDown(duration = 600, to = 0.15) {
-    this.rampTo(to, duration)
+    this.baseVolume = clamp01(to)
+    this.rampTo(this.currentTargetVolume(), duration)
   }
 
   fadeUp(duration = 600) {
-    this.rampTo(this.original, duration)
+    this.baseVolume = BGM_LEVELS.idle
+    this.rampTo(this.currentTargetVolume(), duration)
+  }
+
+  setMode(mode: BgmMode, duration = 600) {
+    this.baseVolume = BGM_LEVELS[mode]
+    this.rampTo(this.currentTargetVolume(), duration)
   }
 
   private currentTargetVolume() {
-    if (!this.ducks.size) return this.original
-    return Math.min(...this.ducks.values())
+    if (!this.ducks.size) return this.baseVolume
+    return Math.min(this.baseVolume, ...this.ducks.values())
   }
 
   /** Duck volume for TTS/speech or active user input. */
-  duckForSpeech(duration = 300, to = 0.08, reason = 'speech') {
+  duckForSpeech(duration = 300, to = BGM_LEVELS.active, reason = 'speech') {
     this.ducks.set(reason, clamp01(to))
     this.rampTo(to, duration)
   }

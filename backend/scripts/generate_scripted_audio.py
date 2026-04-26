@@ -28,7 +28,6 @@ SCRIPTS = {
         "RETURN_PROMPT": (
             "Thank you for sharing. Before you go, may we ask you, where do you think we are going?"
         ),
-        "RETURN_EXIT_HINT": "If you would rather leave now, press Return again.",
         "FAREWELL": (
             "Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future."
         ),
@@ -54,7 +53,6 @@ SCRIPTS = {
         "RETURN_PROMPT": (
             "Tak fordi du delte. Inden du går, må vi spørge dig, hvor tror du, vi er på vej hen?"
         ),
-        "RETURN_EXIT_HINT": "Hvis du hellere vil gå nu, så tryk på Tilbage igen.",
         "FAREWELL": (
             "Tak fordi du tog denne del af rejsen med os. Du er nu også en del af continuOnus-landskabet. Vi håber at se dig igen i fremtiden."
         ),
@@ -101,7 +99,7 @@ def main() -> None:
     parser.add_argument(
         "targets",
         nargs="*",
-        help="Optional script ids to generate, e.g. RETURN_EXIT_HINT or en:RETURN_EXIT_HINT. Defaults to all.",
+        help="Optional script ids to generate, e.g. RETURN_PROMPT or en:RETURN_PROMPT. Defaults to all.",
     )
     args = parser.parse_args()
     targets = parse_targets(args.targets)

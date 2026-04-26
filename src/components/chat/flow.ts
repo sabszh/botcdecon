@@ -113,9 +113,3 @@ export function buildReturnAnswerData(answer: string): Record<string, unknown> {
     returnPromptStage: 'answered',
   }
 }
-
-export function buildCombinedReturnPrompt(returnPrompt: string, returnExitHint: string): string {
-  const head = (returnPrompt || '').trim()
-  const tail = (returnExitHint || '').trim()
-  return [head, tail].filter(Boolean).join(' ')
-}

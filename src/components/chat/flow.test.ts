@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildCombinedReturnPrompt, buildReturnAnswerData, getManualReturnAction, isReturnIntentText, resolveMemoryReplyMessage, selectTurnMode } from './flow'
+import { buildReturnAnswerData, getManualReturnAction, isReturnIntentText, resolveMemoryReplyMessage, selectTurnMode } from './flow'
 
 test('selectTurnMode uses memory during the first memory phase', () => {
   assert.equal(selectTurnMode('await_memory', false, 'A memory', 'en'), 'memory')
@@ -70,14 +70,4 @@ test('buildReturnAnswerData stores the return-answer key expected by the archive
     returnPromptAnswer: 'Towards each other.',
     returnPromptStage: 'answered',
   })
-})
-
-test('buildCombinedReturnPrompt merges the return question and exit hint into one message', () => {
-  assert.equal(
-    buildCombinedReturnPrompt(
-      'Tak fordi du delte. Inden du går, må vi spørge dig, hvor tror du, vi er på vej hen?',
-      'Hvis du hellere vil gå nu, så tryk på Tilbage igen.'
-    ),
-    'Tak fordi du delte. Inden du går, må vi spørge dig, hvor tror du, vi er på vej hen? Hvis du hellere vil gå nu, så tryk på Tilbage igen.'
-  )
 })

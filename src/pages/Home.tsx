@@ -51,7 +51,7 @@ export default function Home() {
   const beginReturnToSplash = useCallback(() => {
     if (screenPhase !== 'chat') return
     stopScriptedAudio()
-    bgm.fadeUp(800)
+    bgm.setMode('idle', 800)
     setScreenPhase('returning')
     if (returnTimer.current) window.clearTimeout(returnTimer.current)
     returnTimer.current = window.setTimeout(() => {
@@ -76,6 +76,7 @@ export default function Home() {
       bgm.resumeCtx().catch(() => {})
       bgm.unlockNow().catch(() => {})
       await bgm.play().catch(() => {})
+      bgm.setMode('idle', 600)
       try { localStorage.setItem('audioAllowed', '1') } catch {}
     } finally {
       setNeedsAudioUnlock(false)
@@ -135,10 +136,7 @@ export default function Home() {
       await bgm.resumeCtx().catch(() => {})
       await bgm.unlockNow().catch(() => {})
       await bgm.play().catch(() => {})
-
-      // Subtle but clearly audible background level during chat (~ -22 dB)
-      // Previously 0.0315 was too quiet on many devices
-      bgm.fadeDown(600, 0.08)
+      bgm.setMode('chat', 600)
     } catch (e) {
       console.warn('[BGM] Playback blocked or failed', e)
     }
@@ -153,6 +151,7 @@ export default function Home() {
         if (localStorage.getItem('audioAllowed') === '1') {
           bgm.resumeCtx().catch(() => {})
           bgm.play().catch(() => {})
+          bgm.setMode('idle', 600)
         }
       } catch {}
     }
