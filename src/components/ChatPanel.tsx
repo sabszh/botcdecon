@@ -301,6 +301,7 @@ export default function ChatPanel ({
       scriptedAudioSrc(language, 'QUESTION_1'),
       scriptedAudioSrc(language, 'QUESTION_2'),
       scriptedAudioSrc(language, 'RETURN_PROMPT'),
+      scriptedAudioSrc(language, 'RETURN_EXIT_HINT'),
       scriptedAudioSrc(language, 'FAREWELL'),
       scriptedAudioSrc(language, 'THANK_YOU'),
     ]
@@ -1016,12 +1017,25 @@ export default function ChatPanel ({
     const returnAction = getManualReturnAction(phase, hasSharedMemory)
     if (returnAction === 'ask_for_destination') {
       const returnPromptId = addMessage('bot', conf.returnPrompt)
-      const enableReturnAnswer = () => {
+      const playReturnExitHint = () => {
         if (!isMountedRef.current) return
+        const returnExitHintId = addMessage('bot', conf.returnExitHint)
         setPhase('await_return')
         setMicDesired(true)
-        manualReturnInFlightRef.current = false
-        scrollToMessageTop(returnPromptId)
+        scrollToMessageTop(returnExitHintId ?? returnPromptId)
+        void playAudio(
+          scriptedAudioSrc(language, 'RETURN_EXIT_HINT'),
+          undefined,
+          () => {
+            manualReturnInFlightRef.current = false
+            speakBrowserTTS(conf.returnExitHint, language, undefined, returnExitHintId ?? undefined)
+          },
+          GENERATED_SPEECH_RATE,
+          returnExitHintId ?? undefined,
+          true
+        ).then((started) => {
+          if (started && isMountedRef.current) manualReturnInFlightRef.current = false
+        })
       }
       void persistArchiveSystemTurn(conf.returnPrompt, {
         continuousData: { returnPromptStage: 'asked' }
@@ -1031,10 +1045,10 @@ export default function ChatPanel ({
       playAudio(
         scriptedAudioSrc(language, 'RETURN_PROMPT'),
         () => {
-          enableReturnAnswer()
+          playReturnExitHint()
         },
         () => {
-          speakBrowserTTS(conf.returnPrompt, language, enableReturnAnswer, returnPromptId ?? undefined, false)
+          speakBrowserTTS(conf.returnPrompt, language, playReturnExitHint, returnPromptId ?? undefined, false)
         },
         GENERATED_SPEECH_RATE,
         returnPromptId ?? undefined,
@@ -1367,24 +1381,11 @@ export default function ChatPanel ({
     isDeletingDraft ||
     hasDraftContent
   )
-  const shouldDuckBgm = isLoading || isAudioPlaying || isUserInputActive
   const voiceStatusLabel = (
     language === 'da'
       ? (isVoiceActive ? 'Lytter…' : 'Taleinput klar')
       : (isVoiceActive ? 'Listening…' : 'Voice input ready')
   )
-
-  useEffect(() => {
-    if (shouldDuckBgm) {
-      bgm.duckForSpeech(200, undefined, 'chat-active')
-    } else {
-      bgm.restoreFromDuck(350, 'chat-active')
-    }
-  }, [shouldDuckBgm])
-
-  useEffect(() => () => {
-    bgm.restoreFromDuck(250, 'chat-active')
-  }, [])
 
   useEffect(() => {
     if (!autoFollowRef.current) return

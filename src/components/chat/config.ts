@@ -31,6 +31,7 @@ Please feel free to share your own memory. Something you’d like others in the 
     question2: `Would you like to ask something else or share another memory. Please do so now.
 Press the Share button when you’re done. If you want to end this session, press return.`,
     returnPrompt: `Thank you for sharing. Before you go, may we ask you, where do you think we are going?`,
+    returnExitHint: `If you would rather leave now, press Return again.`,
     farewell: `Thank you for taking this part of the journey with us. You too are part of the continuOnus landscape now. Hoping to see you in the future.`
   },
   da: {
@@ -47,6 +48,7 @@ Du er velkommen til at dele dit eget minde. Noget, du gerne vil have, at andre i
     question1: `Du kan fortsætte rejsen og spørge, hvad andre før dig har delt. Du er velkommen til at spørge om følelser, emner eller noget, du har undret dig over. Er der noget, du gerne vil vide eller spørge om?`,
     question2: `Vil du stille et andet spørgsmål eller dele endnu et minde? Gør det nu. Tryk på Del-knappen, når du er færdig. Hvis du vil afslutte sessionen, tryk på Tilbage.`,
     returnPrompt: `Tak fordi du delte. Inden du går, må vi spørge dig, hvor tror du, vi er på vej hen?`,
+    returnExitHint: `Hvis du hellere vil gå nu, så tryk på Tilbage igen.`,
     farewell: `Tak fordi du tog denne del af rejsen med os. Du er nu også en del af continuOnus-landskabet. Vi håber at se dig igen i fremtiden.`
   }
 } as const
